@@ -134,6 +134,9 @@ commands.on('message', (_channel, raw) => {
     case 'block':
       server.setBlock(command.blockerId, command.blockedId, command.blocked);
       return;
+    case 'notify':
+      server.notify(command.characterId, command.about);
+      return;
   }
 });
 

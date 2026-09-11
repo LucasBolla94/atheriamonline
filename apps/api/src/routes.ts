@@ -27,6 +27,7 @@ import {
   blockedIds,
   blockedNames,
   dismissReport,
+  findCharacterByName,
   kickPlayer,
   mutePlayer,
   openReports,
@@ -42,6 +43,21 @@ import { formatAmount } from '@atheriam/economy';
 import { historyOf, purseOf } from './economy.js';
 import { inventoryOf } from './items.js';
 import { DAILY_CROWNS, grantDailyReward, grantWelcome } from './gifts.js';
+import {
+  cancel as cancelTrade,
+  cancelTradesOf,
+  confirm as confirmTrade,
+  expireStaleTrades,
+  offerItem,
+  offerMoney,
+  openTradeOf,
+  startTrade,
+  tradeById,
+  viewOf,
+  withdrawItem,
+  type TradeFailure,
+} from './trading.js';
+import { parseAmount } from '@atheriam/economy';
 import { emailSchema } from './auth/email.js';
 import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH } from './auth/password.js';
 import { SESSION_TTL_SECONDS, type SessionStore } from './auth/sessions.js';
@@ -74,10 +90,19 @@ const loginBody = z.object({
 
 /** What the player is told when something is refused. */
 const MESSAGES: Record<
-  RegisterFailure | LoginFailure | ModerationFailure | 'unknown-problem',
+  RegisterFailure | LoginFailure | ModerationFailure | TradeFailure | 'unknown-problem',
   string
 > = {
   'unknown-problem': 'Something went wrong. Please try again.',
+  'already-trading': 'One of you is already trading with somebody else.',
+  'no-such-trade': 'That trade is no longer open.',
+  'not-your-trade': 'That trade is not yours.',
+  'trade-is-over': 'That trade has already finished.',
+  'not-your-item': 'You are not holding that.',
+  'too-many-items': 'That is as much as you can put on the table at once.',
+  'not-enough-money': 'You do not have that much.',
+  'not-confirmed-by-both': 'You both have to agree first.',
+  'changed-since-you-confirmed': 'Something changed. Have another look before agreeing.',
   'no-such-character': 'Nobody in the city goes by that name.',
   'not-yourself': 'You cannot do that to yourself.',
   'not-a-moderator': 'Only a moderator may do that.',
@@ -228,6 +253,13 @@ export async function registerRoutes(app: FastifyInstance, options: RouteOptions
 
   app.post('/api/auth/logout', async (request, reply) => {
     const token = request.cookies[SESSION_COOKIE];
+    // Leaving must never cost anybody anything: whatever was on the table goes
+    // back before the session is thrown away.
+    const session = token === undefined ? null : await sessions.read(token);
+    if (session !== null) {
+      const character = await characterOf(db, session.accountId);
+      if (character !== null) await cancelTradesOf(db, character.id);
+    }
     if (token !== undefined) await sessions.destroy(token);
     return reply.clearCookie(SESSION_COOKIE, { path: '/' }).send({ ok: true });
   });
@@ -335,6 +367,194 @@ export async function registerRoutes(app: FastifyInstance, options: RouteOptions
       purse: formatAmount(balance),
     });
   });
+
+  // ---------------------------------------------------------------------
+  // Trading.
+  //
+  // Every one of these ends the same way: the other person is nudged, and
+  // both sides are sent the trade as they should now see it. The browser is
+  // never told what changed — it is told to look, and it asks.
+  // ---------------------------------------------------------------------
+
+  const tradeIdParams = z.object({ id: z.string().uuid() });
+  const itemBody = z.object({ itemId: z.string().uuid() });
+  const moneyBody = z.object({ amount: z.string().min(1).max(24) });
+
+  /** Send the trade back to whoever asked, and nudge the other side. */
+  async function afterTradeChange(
+    reply: FastifyReply,
+    tradeId: string,
+    meId: string,
+    themId: string,
+  ) {
+    await world.notify(themId, 'trade');
+    const trade = await tradeById(db, tradeId);
+    if (trade === null) return reply.send({ trade: null });
+    return reply.send({ trade: await viewOf(db, trade, meId) });
+  }
+
+  /** The trade you are in, or nothing. */
+  app.get('/api/trades/current', async (request, reply) => {
+    const who = await requirePlayer(request, reply);
+    if (who === null) return reply;
+
+    await expireStaleTrades(db);
+    const trade = await openTradeOf(db, who.character.id);
+    if (trade === null) return reply.send({ trade: null });
+    return reply.send({ trade: await viewOf(db, trade, who.character.id) });
+  });
+
+  /** Ask somebody to trade. Both of you are then in it. */
+  app.post('/api/trades', async (request, reply) => {
+    const who = await requirePlayer(request, reply);
+    if (who === null) return reply;
+
+    const parsed = nameBody.safeParse(request.body);
+    if (!parsed.success) {
+      return reply
+        .code(400)
+        .send({ error: 'invalid-request', message: MESSAGES['no-such-character'] });
+    }
+
+    const them = await findCharacterByName(db, parsed.data.name);
+    if (them === null) {
+      return reply
+        .code(404)
+        .send({ error: 'no-such-character', message: MESSAGES['no-such-character'] });
+    }
+
+    await expireStaleTrades(db);
+    const started = await startTrade(db, who.character.id, them.id);
+    if (!started.ok) {
+      return reply.code(409).send({ error: started.reason, message: MESSAGES[started.reason] });
+    }
+
+    return afterTradeChange(reply, started.data.id, who.character.id, them.id);
+  });
+
+  app.post('/api/trades/:id/offer-item', async (request, reply) => {
+    const who = await requirePlayer(request, reply);
+    if (who === null) return reply;
+
+    const id = tradeIdParams.safeParse(request.params);
+    const body = itemBody.safeParse(request.body);
+    if (!id.success || !body.success) return badTradeRequest(reply);
+
+    const result = await offerItem(db, id.data.id, who.character.id, body.data.itemId);
+    if (!result.ok) {
+      return reply.code(400).send({ error: result.reason, message: MESSAGES[result.reason] });
+    }
+
+    const them =
+      result.data.initiatorId === who.character.id
+        ? result.data.partnerId
+        : result.data.initiatorId;
+    return afterTradeChange(reply, id.data.id, who.character.id, them);
+  });
+
+  app.post('/api/trades/:id/withdraw-item', async (request, reply) => {
+    const who = await requirePlayer(request, reply);
+    if (who === null) return reply;
+
+    const id = tradeIdParams.safeParse(request.params);
+    const body = itemBody.safeParse(request.body);
+    if (!id.success || !body.success) return badTradeRequest(reply);
+
+    const result = await withdrawItem(db, id.data.id, who.character.id, body.data.itemId);
+    if (!result.ok) {
+      return reply.code(400).send({ error: result.reason, message: MESSAGES[result.reason] });
+    }
+
+    const them =
+      result.data.initiatorId === who.character.id
+        ? result.data.partnerId
+        : result.data.initiatorId;
+    return afterTradeChange(reply, id.data.id, who.character.id, them);
+  });
+
+  /** Say how much money is on your side of the table. A total, not a change. */
+  app.post('/api/trades/:id/money', async (request, reply) => {
+    const who = await requirePlayer(request, reply);
+    if (who === null) return reply;
+
+    const id = tradeIdParams.safeParse(request.params);
+    const body = moneyBody.safeParse(request.body);
+    if (!id.success || !body.success) return badTradeRequest(reply);
+
+    // Read by the economy package, which does not use floating point.
+    const amount = parseAmount(body.data.amount);
+    if (amount === null || amount < 0n) {
+      return reply
+        .code(400)
+        .send({ error: 'invalid-request', message: 'That is not an amount of Crowns.' });
+    }
+
+    const result = await offerMoney(db, id.data.id, who.character.id, amount);
+    if (!result.ok) {
+      return reply.code(400).send({ error: result.reason, message: MESSAGES[result.reason] });
+    }
+
+    const them =
+      result.data.initiatorId === who.character.id
+        ? result.data.partnerId
+        : result.data.initiatorId;
+    return afterTradeChange(reply, id.data.id, who.character.id, them);
+  });
+
+  /** "I am happy with this." When both have said it, the swap happens. */
+  app.post('/api/trades/:id/confirm', async (request, reply) => {
+    const who = await requirePlayer(request, reply);
+    if (who === null) return reply;
+
+    const id = tradeIdParams.safeParse(request.params);
+    if (!id.success) return badTradeRequest(reply);
+
+    const result = await confirmTrade(db, id.data.id, who.character.id);
+    if (!result.ok) {
+      return reply.code(400).send({ error: result.reason, message: MESSAGES[result.reason] });
+    }
+
+    const trade = result.data.trade;
+    const them = trade.initiatorId === who.character.id ? trade.partnerId : trade.initiatorId;
+    await world.notify(them, 'trade');
+
+    if (result.data.completed) {
+      return reply.send({ trade: null, completed: true });
+    }
+
+    const current = await tradeById(db, id.data.id);
+    return reply.send({
+      trade: current === null ? null : await viewOf(db, current, who.character.id),
+      completed: false,
+    });
+  });
+
+  /** Call it off. Everything goes back to whoever put it on the table. */
+  app.post('/api/trades/:id/cancel', async (request, reply) => {
+    const who = await requirePlayer(request, reply);
+    if (who === null) return reply;
+
+    const id = tradeIdParams.safeParse(request.params);
+    if (!id.success) return badTradeRequest(reply);
+
+    const result = await cancelTrade(db, id.data.id, who.character.id);
+    if (!result.ok) {
+      return reply.code(400).send({ error: result.reason, message: MESSAGES[result.reason] });
+    }
+
+    const them =
+      result.data.initiatorId === who.character.id
+        ? result.data.partnerId
+        : result.data.initiatorId;
+    await world.notify(them, 'trade');
+    return reply.send({ trade: null });
+  });
+
+  function badTradeRequest(reply: FastifyReply) {
+    return reply
+      .code(400)
+      .send({ error: 'invalid-request', message: 'That request did not make sense.' });
+  }
 
   // ---------------------------------------------------------------------
   // Keeping yourself safe: blocking and reporting.

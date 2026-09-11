@@ -56,6 +56,8 @@ export interface ConnectionHandlers {
   onWelcome?: (world: WorldInfo, playerId: string) => void;
   onSnapshot?: (you: PlayerView, others: PlayerView[]) => void;
   onChat?: (entry: ChatEntry) => void;
+  /** Something the player is part of changed. Go and ask the API about it. */
+  onNotice?: (about: 'trade') => void;
   onReject?: (reason: RejectReason) => void;
   onClosed?: (reason: string) => void;
 }
@@ -284,6 +286,10 @@ export class WorldConnection {
         if (this.chatLog.length > CHAT_HISTORY) this.chatLog.shift();
         this.chatRevision += 1;
         this.handlers.onChat?.(entry);
+        return;
+      }
+      case 'notice': {
+        this.handlers.onNotice?.(message.about);
         return;
       }
       case 'pong': {

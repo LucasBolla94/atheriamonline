@@ -10,6 +10,7 @@
  *  - a player's position is written rarely, not per step, so `x` and `y` live
  *    on the character row and are updated on logout and by a slow job.
  */
+import { sql } from 'drizzle-orm';
 import {
   bigint,
   boolean,
@@ -264,6 +265,9 @@ export const ledgerEntries = pgTable(
   ],
 );
 
+/** Where a trade has got to. */
+export const tradeStatus = pgEnum('trade_status', ['open', 'completed', 'cancelled']);
+
 /** Where an item instance can be. Exactly one of these, at any moment. */
 export const itemHolder = pgEnum('item_holder', ['character', 'house', 'escrow']);
 
@@ -314,6 +318,84 @@ export const itemInstances = pgTable(
   ],
 );
 
+/**
+ * Two people swapping things.
+ *
+ * While a trade is open, everything in it has already left its owner: items
+ * are held by the trade, and money sits in `escrow:trade:<id>` in the ledger.
+ * That is what makes a swap safe — nobody can spend or give away what they
+ * have already put on the table.
+ *
+ * Both sides must confirm, and any change to what is on the table takes both
+ * confirmations away again. Without that rule, the oldest trick in the book
+ * works: confirm, then swap the good item for a worthless one while the other
+ * person is reaching for the button.
+ */
+export const trades = pgTable(
+  'trades',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    initiatorId: uuid('initiator_id')
+      .notNull()
+      .references(() => characters.id, { onDelete: 'cascade' }),
+    partnerId: uuid('partner_id')
+      .notNull()
+      .references(() => characters.id, { onDelete: 'cascade' }),
+    status: tradeStatus('status').notNull().default('open'),
+    initiatorConfirmed: boolean('initiator_confirmed').notNull().default(false),
+    partnerConfirmed: boolean('partner_confirmed').notNull().default(false),
+    /**
+     * Money already moved into escrow by each side, in minor units.
+     *
+     * The default is written as raw SQL rather than as `0n`: the migration
+     * tool turns the schema into JSON to compare it, and JSON has no bigint.
+     */
+    initiatorMoney: bigint('initiator_money', { mode: 'bigint' })
+      .notNull()
+      .default(sql`0`),
+    partnerMoney: bigint('partner_money', { mode: 'bigint' })
+      .notNull()
+      .default(sql`0`),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+  },
+  (table) => [
+    index('trades_initiator_idx').on(table.initiatorId, table.status),
+    index('trades_partner_idx').on(table.partnerId, table.status),
+  ],
+);
+
+/**
+ * What each side has put on the table.
+ *
+ * The item itself has already moved: its holder is the trade. This row only
+ * remembers whose it was, so that cancelling gives everything back to the
+ * right person.
+ */
+export const tradeItems = pgTable(
+  'trade_items',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tradeId: uuid('trade_id')
+      .notNull()
+      .references(() => trades.id, { onDelete: 'cascade' }),
+    itemId: uuid('item_id')
+      .notNull()
+      .references(() => itemInstances.id, { onDelete: 'cascade' }),
+    offeredBy: uuid('offered_by')
+      .notNull()
+      .references(() => characters.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // One item cannot be on two tables at once. The item's own holder column
+    // says the same thing; this says it again where it is cheapest to enforce.
+    uniqueIndex('trade_items_item_key').on(table.itemId),
+    index('trade_items_trade_idx').on(table.tradeId),
+  ],
+);
+
 export type Account = typeof accounts.$inferSelect;
 export type NewAccount = typeof accounts.$inferInsert;
 export type Character = typeof characters.$inferSelect;
@@ -327,3 +409,5 @@ export type Transfer = typeof transfers.$inferSelect;
 export type LedgerEntry = typeof ledgerEntries.$inferSelect;
 export type ItemDefinition = typeof itemDefinitions.$inferSelect;
 export type ItemInstance = typeof itemInstances.$inferSelect;
+export type Trade = typeof trades.$inferSelect;
+export type TradeItem = typeof tradeItems.$inferSelect;

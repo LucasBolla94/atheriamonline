@@ -25,8 +25,9 @@ import { CHUNK_SIZE_TILES, MAX_CHAT_LENGTH } from '@atheriam/shared';
  * 4: players can talk to the people near them.
  * 5: a snapshot carries only what changed for this player, plus the people
  *    who have gone. A crowd standing still now costs nothing.
+ * 6: the server can nudge a player to go and look at something that changed.
  */
-export const PROTOCOL_VERSION = 5;
+export const PROTOCOL_VERSION = 6;
 
 /** The eight directions a player may step in. */
 export const directionSchema = z.enum(['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw']);
@@ -270,6 +271,18 @@ export const byeSchema = z.object({
   ]),
 });
 
+/**
+ * "Something you are part of has changed — go and look."
+ *
+ * Carries no detail on purpose. The browser asks the API, which is the only
+ * thing that knows what is true about a trade. A nudge that carried the state
+ * would be a second source of truth, and the two would disagree.
+ */
+export const noticeSchema = z.object({
+  t: z.literal('notice'),
+  about: z.enum(['trade']),
+});
+
 export const pongSchema = z.object({
   t: z.literal('pong'),
   ts: z.number().int(),
@@ -282,6 +295,7 @@ export const serverMessageSchema = z.discriminatedUnion('t', [
   chunkDropSchema,
   snapshotSchema,
   chatSchema,
+  noticeSchema,
   rejectSchema,
   byeSchema,
   pongSchema,

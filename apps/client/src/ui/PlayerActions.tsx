@@ -15,6 +15,7 @@ export interface PlayerActionsProps {
   readonly onBlock: (name: string) => void;
   readonly onUnblock: (name: string) => void;
   readonly onReport: (name: string, reason: string) => void;
+  readonly onTrade: (name: string) => void;
   readonly onClose: () => void;
 }
 
@@ -25,6 +26,7 @@ export function PlayerActions({
   onBlock,
   onUnblock,
   onReport,
+  onTrade,
   onClose,
 }: PlayerActionsProps): JSX.Element {
   const [reason, setReason] = useState('');
@@ -43,6 +45,11 @@ export function PlayerActions({
 
         {!reporting && (
           <>
+            <button type="button" className="button" disabled={busy} onClick={() => onTrade(name)}>
+              {strings.trade.offer}
+            </button>
+            <p className="notice notice--quiet">{strings.trade.explain}</p>
+
             <button
               type="button"
               className="button button--quiet"

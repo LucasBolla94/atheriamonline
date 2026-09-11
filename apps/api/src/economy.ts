@@ -78,8 +78,21 @@ export async function purseOf(db: Executor, characterId: string): Promise<Money>
 export async function move(db: Database, movement: Movement): Promise<TransferResult> {
   const check = checkMovement(movement);
   if (!check.ok) return { ok: false, reason: check.reason };
+  return db.transaction((tx) => moveWithin(tx, movement));
+}
 
-  return db.transaction(async (tx) => {
+/**
+ * The same, inside a transaction somebody else opened.
+ *
+ * A trade moves money and items together and must be all or nothing, so it
+ * opens one transaction and calls this. `move` above is the same operation for
+ * callers who have nothing else to do.
+ */
+export async function moveWithin(tx: Executor, movement: Movement): Promise<TransferResult> {
+  const check = checkMovement(movement);
+  if (!check.ok) return { ok: false, reason: check.reason };
+
+  return (async () => {
     // Has this exact request already been done? Asking first, inside the
     // transaction, means the answer cannot change under us.
     const existing = await tx
@@ -127,7 +140,7 @@ export async function move(db: Database, movement: Movement): Promise<TransferRe
     );
 
     return { ok: true as const, transferId: transfer.id, alreadyDone: false };
-  });
+  })();
 }
 
 /**

@@ -10,9 +10,8 @@ Last updated: 2026-09-11
 
 ## Current phase
 
-**Phase 5 — Items and the ledger** — done. **The game is live at
-https://atheriam.online.**
-Next up: **Phase 6 — Trading**, then **Phase 7 — Houses**.
+**Phase 6 — Trading** — done. **The game is live at https://atheriam.online.**
+Next up: **Phase 7 — Houses**, the last one on the list.
 
 ## Phase list
 
@@ -81,11 +80,16 @@ charge.
       and only one of them lands, and an item moved thirty times is still one
       item
 
-### Phase 6 — Trading
+### Phase 6 — Trading — DONE
 
-- [ ] Escrow-based trade, both sides confirm
-- [ ] One transaction for the whole swap, full rollback on failure
-- [ ] Trade UI
+- [x] Escrow-based trade: everything offered leaves its owner at once
+- [x] Both sides confirm, and any change takes both agreements away
+- [x] One transaction for the whole swap, inside the second confirmation, so
+      there is no moment where both have agreed and nothing has happened
+- [x] Everything comes back on cancel, on logout, or after ten idle minutes
+- [x] A trade window that shows both sides and who has agreed
+- [x] Tests that try the oldest trick there is — agree, then swap the good
+      item — and fail if it works
 
 ### Phase 7 — Houses
 
@@ -197,6 +201,11 @@ within about twelve tiles hear you, so walk closer to join a conversation.
 
 You start with **50 Crowns** and three things to your name. Click **Purse** in
 the readout to see them, and to collect ten Crowns once a day.
+
+To **trade**, click somebody's name in the chat and choose _Offer to trade_.
+Everything either of you puts on the table leaves your hands straight away,
+and comes back if the trade is called off. Nothing is swapped until you both
+agree — and if either of you changes anything, you both have to agree again.
 
 Click somebody's name in the chat to **stop hearing them** (they are never
 told) or to **report them** to a moderator.

@@ -348,6 +348,19 @@ export class WorldServer {
     this.world.mute(characterId, untilMs);
   }
 
+  /**
+   * Nudge a player to go and look at something.
+   *
+   * Returns whether they were here to be nudged. The API does not wait for an
+   * answer: a player who is offline will see the change when they come back.
+   */
+  notify(characterId: string, about: 'trade'): boolean {
+    const connection = this.byPlayer.get(characterId);
+    if (connection === undefined) return false;
+    this.send(connection, { t: 'notice', about });
+    return true;
+  }
+
   /** Apply a block, or lift one, for a player who is online right now. */
   setBlock(blockerId: string, blockedId: string, blocked: boolean): void {
     this.world.block(blockerId, blockedId, blocked);

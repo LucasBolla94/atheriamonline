@@ -100,6 +100,32 @@ export const strings = {
     close: 'Close',
   },
 
+  trade: {
+    title: (name: string): string => `Trading with ${name}`,
+    explain:
+      'Everything you put on the table leaves your hands straight away. Nothing is swapped until you both agree, and changing anything means agreeing again.',
+    yours: 'What you are giving',
+    theirs: (name: string): string => `What ${name} is giving`,
+    nothingYet: 'Nothing yet.',
+    putOn: 'Your things',
+    put: 'put on the table',
+    takeBack: 'take back',
+    moneyLabel: 'Crowns to put on the table',
+    moneyPlaceholder: '0.00',
+    setMoney: 'Set',
+    purse: (amount: string): string => `You have ${amount} left in your purse.`,
+    agree: 'I agree to this',
+    waiting: 'Waiting for them…',
+    youAgreed: 'You have agreed.',
+    youHaveNot: 'You have not agreed yet.',
+    theyAgreed: (name: string): string => `${name} has agreed.`,
+    theyHaveNot: (name: string): string => `${name} has not agreed yet.`,
+    callOff: 'Call it off',
+    done: 'The trade is done.',
+    ended: 'The trade ended.',
+    offer: 'Offer to trade',
+  },
+
   safety: {
     title: (name: string): string => `What to do about ${name}`,
     subtitle: 'Blocking is private. Reporting goes to a moderator.',

@@ -27,6 +27,7 @@ import { ChatPanel } from './ChatPanel.js';
 import { Hud } from './Hud.js';
 import { PlayerActions } from './PlayerActions.js';
 import { Pouch } from './Pouch.js';
+import { TradeWindow } from './TradeWindow.js';
 import { errorMessage, strings } from './strings.js';
 
 /** Where the world server is. In production Caddy serves it under /ws. */
@@ -56,8 +57,19 @@ export function App(): JSX.Element {
   const [items, setItems] = useState<readonly api.InventoryItem[]>([]);
   const [pouchNotice, setPouchNotice] = useState<string | null>(null);
   const [pouchBusy, setPouchBusy] = useState(false);
+  const [trade, setTrade] = useState<api.TradeView | null>(null);
+  const [tradeNotice, setTradeNotice] = useState<string | null>(null);
+  const [tradeBusy, setTradeBusy] = useState(false);
 
   const connectionRef = useRef<WorldConnection | null>(null);
+  /**
+   * How the connection reaches the newest trade-refresher.
+   *
+   * The connection is made once, with the handlers it was given then. Without
+   * this, a nudge arriving an hour later would call the first version of the
+   * function and its stale idea of the world.
+   */
+  const refreshTradeRef = useRef<(() => void) | null>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
 
@@ -80,6 +92,9 @@ export function App(): JSX.Element {
       },
       onWelcome: (info) => setWorld(info),
       onChat: (entry) => setChat((previous) => [...previous, entry]),
+      onNotice: (about) => {
+        if (about === 'trade') refreshTradeRef.current?.();
+      },
       onReject: (reason) => {
         // Most refusals are ordinary and the next snapshot corrects them. The
         // two about talking are the exception: the player needs to know why
@@ -107,6 +122,45 @@ export function App(): JSX.Element {
     })();
   }, []);
 
+  /**
+   * Ask the API what trade we are in.
+   *
+   * Called when the world server nudges us, and when the page loads. The nudge
+   * carries no detail on purpose: the API is the only thing that knows what is
+   * true about a trade, so there is exactly one place to ask.
+   */
+  const refreshTrade = useCallback(() => {
+    void (async () => {
+      const result = await api.currentTrade();
+      if (!result.ok) return;
+      setTrade((previous) => {
+        if (previous !== null && result.data.trade === null) {
+          setTradeNotice(strings.trade.ended);
+        }
+        return result.data.trade;
+      });
+    })();
+  }, []);
+
+  /** Every trade action ends the same way: take the answer, or show why not. */
+  const tradeAction = useCallback(
+    (action: () => Promise<api.ApiResult<{ trade: api.TradeView | null }>>) => {
+      setTradeBusy(true);
+      setTradeNotice(null);
+      void (async () => {
+        const result = await action();
+        setTradeBusy(false);
+        if (!result.ok) {
+          setTradeNotice(result.message);
+          return;
+        }
+        setTrade(result.data.trade);
+        refreshPouchRef.current?.();
+      })();
+    },
+    [],
+  );
+
   /** Ask the server what we own. The browser never works this out itself. */
   const refreshPouch = useCallback(() => {
     void (async () => {
@@ -115,6 +169,11 @@ export function App(): JSX.Element {
       if (carried.ok) setItems(carried.data.items);
     })();
   }, []);
+
+  // The trade actions need to refresh the purse, and the purse refresher is
+  // defined below them; a ref keeps the two from having to be one function.
+  const refreshPouchRef = useRef<(() => void) | null>(null);
+  refreshPouchRef.current = refreshPouch;
 
   const handleClaimDaily = useCallback(() => {
     setPouchBusy(true);
@@ -186,6 +245,8 @@ export function App(): JSX.Element {
     })();
   }, []);
 
+  refreshTradeRef.current = refreshTrade;
+
   /** If the browser is already logged in, walk straight back into the city. */
   useEffect(() => {
     let cancelled = false;
@@ -195,6 +256,7 @@ export function App(): JSX.Element {
       if (who.ok) {
         refreshBlocked();
         refreshPouch();
+        refreshTrade();
         await enterCity();
       } else {
         setBusy(false);
@@ -203,7 +265,7 @@ export function App(): JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, [enterCity, refreshBlocked, refreshPouch]);
+  }, [enterCity, refreshBlocked, refreshPouch, refreshTrade]);
 
   const handleCreate = useCallback(
     (input: { email: string; password: string; dateOfBirth: string; characterName: string }) => {
@@ -256,6 +318,7 @@ export function App(): JSX.Element {
       setPouchOpen(false);
       setPurse(null);
       setItems([]);
+      setTrade(null);
       setState('idle');
       setError(null);
       setBusy(false);
@@ -330,6 +393,22 @@ export function App(): JSX.Element {
           onClose={() => setPouchOpen(false)}
         />
       )}
+      {trade !== null && (
+        <TradeWindow
+          trade={trade}
+          inventory={items}
+          busy={tradeBusy}
+          notice={tradeNotice}
+          onOffer={(itemId) => tradeAction(() => api.offerItem(trade.id, itemId))}
+          onWithdraw={(itemId) => tradeAction(() => api.withdrawItem(trade.id, itemId))}
+          onMoney={(amount) => tradeAction(() => api.offerMoney(trade.id, amount))}
+          onConfirm={() => tradeAction(() => api.confirmTrade(trade.id))}
+          onCancel={() => tradeAction(() => api.cancelTrade(trade.id))}
+        />
+      )}
+      {trade === null && tradeNotice !== null && (
+        <p className="chat__notice trade__ended">{tradeNotice}</p>
+      )}
       {chosenPlayer !== null && (
         <PlayerActions
           name={chosenPlayer}
@@ -338,6 +417,10 @@ export function App(): JSX.Element {
           onBlock={handleBlock}
           onUnblock={handleUnblock}
           onReport={handleReport}
+          onTrade={(name) => {
+            setChosenPlayer(null);
+            tradeAction(() => api.startTrade(name));
+          }}
           onClose={() => setChosenPlayer(null)}
         />
       )}

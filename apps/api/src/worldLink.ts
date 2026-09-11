@@ -18,6 +18,8 @@ export interface WorldLink {
   kick(characterId: string, reason: 'kicked' | 'banned'): Promise<void>;
   mute(characterId: string, untilMs: number | null): Promise<void>;
   block(blockerId: string, blockedId: string, blocked: boolean): Promise<void>;
+  /** Nudge somebody to go and look at something that changed. */
+  notify(characterId: string, about: 'trade'): Promise<void>;
 }
 
 /** The real link: a Redis channel the world server listens on. */
@@ -38,6 +40,7 @@ export function redisWorldLink(redis: Redis, onError?: (error: unknown) => void)
     mute: (characterId, untilMs) => publish({ t: 'mute', characterId, untilMs }),
     block: (blockerId, blockedId, blocked) =>
       publish({ t: 'block', blockerId, blockedId, blocked }),
+    notify: (characterId, about) => publish({ t: 'notify', characterId, about }),
   };
 }
 
@@ -47,5 +50,6 @@ export function silentWorldLink(): WorldLink {
     kick: async () => Promise.resolve(),
     mute: async () => Promise.resolve(),
     block: async () => Promise.resolve(),
+    notify: async () => Promise.resolve(),
   };
 }

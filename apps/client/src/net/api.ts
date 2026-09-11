@@ -160,6 +160,68 @@ export async function reportPlayer(name: string, reason: string): Promise<ApiRes
   });
 }
 
+/** A trade, as one of the two people sees it. */
+export interface TradeView {
+  readonly id: string;
+  readonly them: { id: string; name: string };
+  readonly yourItems: Array<{ id: string; name: string }>;
+  readonly theirItems: Array<{ id: string; name: string }>;
+  readonly yourMoney: string;
+  readonly theirMoney: string;
+  readonly yourMoneyDisplay: string;
+  readonly theirMoneyDisplay: string;
+  readonly youConfirmed: boolean;
+  readonly theyConfirmed: boolean;
+  readonly status: string;
+  readonly purse: string;
+}
+
+type TradeAnswer = ApiResult<{ trade: TradeView | null; completed?: boolean }>;
+
+/** The trade you are in, or nothing. */
+export async function currentTrade(): Promise<TradeAnswer> {
+  return request('/api/trades/current');
+}
+
+/** Ask somebody to trade. */
+export async function startTrade(name: string): Promise<TradeAnswer> {
+  return request('/api/trades', { method: 'POST', body: JSON.stringify({ name }) });
+}
+
+/** Put one of your things on the table. */
+export async function offerItem(tradeId: string, itemId: string): Promise<TradeAnswer> {
+  return request(`/api/trades/${tradeId}/offer-item`, {
+    method: 'POST',
+    body: JSON.stringify({ itemId }),
+  });
+}
+
+/** Take one of your things back. */
+export async function withdrawItem(tradeId: string, itemId: string): Promise<TradeAnswer> {
+  return request(`/api/trades/${tradeId}/withdraw-item`, {
+    method: 'POST',
+    body: JSON.stringify({ itemId }),
+  });
+}
+
+/** Say how much money is on your side. A total, not a change. */
+export async function offerMoney(tradeId: string, amount: string): Promise<TradeAnswer> {
+  return request(`/api/trades/${tradeId}/money`, {
+    method: 'POST',
+    body: JSON.stringify({ amount }),
+  });
+}
+
+/** "I am happy with this." */
+export async function confirmTrade(tradeId: string): Promise<TradeAnswer> {
+  return request(`/api/trades/${tradeId}/confirm`, { method: 'POST' });
+}
+
+/** Call the whole thing off. */
+export async function cancelTrade(tradeId: string): Promise<TradeAnswer> {
+  return request(`/api/trades/${tradeId}/cancel`, { method: 'POST' });
+}
+
 /** Ask for a ticket to open the WebSocket with. */
 export async function worldTicket(): Promise<ApiResult<{ ticket: string }>> {
   return request('/api/world/ticket', { method: 'POST' });

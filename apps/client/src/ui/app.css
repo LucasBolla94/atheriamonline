@@ -527,3 +527,72 @@ body {
 .pouch__muted {
   color: var(--color-text-muted);
 }
+
+/* The trade window: two sides, side by side, so nothing is hidden. */
+.panel--wide {
+  max-width: 560px;
+  max-height: 88vh;
+  overflow-y: auto;
+}
+
+.trade__table {
+  display: flex;
+  gap: var(--space-md);
+}
+
+.trade__side {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-sm);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.trade__money {
+  margin: 0 0 var(--space-xs);
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+.trade__agreed {
+  margin: 0;
+  color: var(--color-accent);
+  font-size: var(--font-size-sm);
+}
+
+.trade__pick {
+  width: 100%;
+  padding: 0;
+  background: none;
+  color: var(--color-text);
+  border: none;
+  font-family: inherit;
+  font-size: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.trade__pick:hover {
+  color: var(--color-accent);
+}
+
+.trade__pick:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+/* On a phone the two sides stack, because side by side would be unreadable. */
+@media (max-width: 520px) {
+  .trade__table {
+    flex-direction: column;
+  }
+}
+
+/* What is left on screen after a trade ends. */
+.trade__ended {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}

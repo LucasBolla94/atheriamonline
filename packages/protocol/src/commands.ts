@@ -43,10 +43,24 @@ export const blockCommandSchema = z.object({
   blocked: z.boolean(),
 });
 
+/**
+ * Tell one player that something they are involved in has changed.
+ *
+ * The API knows a trade has moved on; only the world server has a socket open
+ * to the people in it. This is a nudge and carries no detail: the browser asks
+ * the API for the new state, which keeps one place in charge of what is true.
+ */
+export const notifyCommandSchema = z.object({
+  t: z.literal('notify'),
+  characterId: characterIdSchema,
+  about: z.enum(['trade']),
+});
+
 export const worldCommandSchema = z.discriminatedUnion('t', [
   kickCommandSchema,
   muteCommandSchema,
   blockCommandSchema,
+  notifyCommandSchema,
 ]);
 
 export type WorldCommand = z.infer<typeof worldCommandSchema>;

@@ -536,3 +536,65 @@ first refused to start because the port was taken — and the worse outcome was
 the one that nearly happened instead: the browser tests quietly driving the
 real servers and making test accounts in the real city.
 **Cost to change:** None.
+
+## D-047 — Everything on the trading table has already left its owner
+
+**Date:** 2026-09-11
+**Decision:** Offering an item moves it to the trade there and then; offering
+money moves it into `escrow:trade:<id>` in the ledger there and then. Taking
+an offer back, cancelling, or simply walking away moves it all back.
+**Why:** It is the only way a swap can be safe. If offers were only intentions,
+somebody could offer the same item to two people, or spend the money they had
+promised, and one of the two trades would fail at the last moment. With escrow
+the question "do they still have it?" cannot be asked, because they do not: it
+is on the table.
+**Cost to change:** High. It is the reason to trust a trade.
+
+## D-048 — Any change takes both agreements away
+
+**Date:** 2026-09-11
+**Decision:** Adding or removing anything, by either side, sets both
+confirmations back to false.
+**Why:** This is the oldest trick there is: agree, then swap the good item for
+a worthless one while the other person is reaching for the button. There is an
+integration test that performs exactly that trick and a browser test that does
+it in two real windows.
+**Cost to change:** None, and it must not be.
+
+## D-049 — The swap happens inside the second confirmation
+
+**Date:** 2026-09-11
+**Decision:** The whole swap — every item and both sides' money — happens in
+the same database transaction as the second person's confirmation.
+**Why:** Any other arrangement leaves a moment where both have agreed and
+nothing has happened, and that moment is where a crash costs somebody their
+things. In one transaction there is no such moment: either everybody has
+swapped or nobody has, and a failure anywhere leaves both people holding
+exactly what they started with.
+**Cost to change:** High.
+
+## D-050 — The API nudges; the browser asks
+
+**Date:** 2026-09-11
+**Decision:** When a trade changes, the API publishes a nudge that the world
+server passes to the other player over their existing socket. The nudge
+carries no detail: the browser then asks the API for the trade.
+**Why:** Polling was the alternative, and at one request every second or two
+per player it would have swamped both the rate limits and the server for
+something that happens rarely. Sending the trade itself down the socket was
+the other alternative, and it would have made the world server a second source
+of truth about money — the two would eventually disagree, and the one holding
+the money should win. A nudge has neither problem.
+**Cost to change:** Low. The mechanism is general and is the obvious way to
+tell a player about anything else that changes.
+
+## D-051 — A trade nobody touches for ten minutes calls itself off
+
+**Date:** 2026-09-11
+**Decision:** A trade with no activity for ten minutes is cancelled, and
+everything goes back. Logging out cancels any trade too.
+**Why:** Somebody who closes the tab half way through would otherwise leave
+both people unable to trade with anybody else, and their belongings on a table
+nobody is sitting at. Ten minutes is longer than a real conversation about a
+stool and shorter than anybody would wait.
+**Cost to change:** None. It is one constant.
