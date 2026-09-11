@@ -80,9 +80,29 @@ interface Avatar {
   bubbleUntilMs: number;
 }
 
+/**
+ * What the interface tells the scene about the room it is drawing.
+ *
+ * Furniture comes from the API, not from the world server — the world server
+ * only knows where the walls are. This is how the React side hands it over
+ * without the scene having to know what an HTTP request is.
+ */
+export interface HouseScenery {
+  /** What is standing in this house, if the player is in one. */
+  furniture: ReadonlyArray<{ id: string; name: string; x: number; y: number; rotation: number }>;
+  /** Goes up whenever the furniture changes, so the scene redraws it. */
+  revision: number;
+  /**
+   * Called when the player taps a tile. Return true to swallow the tap, which
+   * is what arranging furniture does instead of walking there.
+   */
+  onTileClick: ((x: number, y: number) => boolean) | null;
+}
+
 export interface WorldSceneData {
   readonly connection: WorldConnection;
   readonly world: WorldInfo;
+  readonly scenery: HouseScenery;
 }
 
 export class WorldScene extends Phaser.Scene {
@@ -90,9 +110,13 @@ export class WorldScene extends Phaser.Scene {
 
   private connection!: WorldConnection;
   private world!: WorldInfo;
+  private scenery!: HouseScenery;
+  private drawnFurnitureRevision = -1;
+  private drawnRealmRevision = -1;
+  private furniture: Phaser.GameObjects.Container | null = null;
   private avatars = new Map<string, Avatar>();
   /** One drawn square of ground per chunk we hold, by `cx:cy`. */
-  private chunkImages = new Map<string, Phaser.GameObjects.RenderTexture>();
+  private chunkImages = new Map<string, Phaser.GameObjects.Image>();
   /**
    * Chunks that have arrived but have not been drawn yet.
    *
@@ -115,6 +139,7 @@ export class WorldScene extends Phaser.Scene {
   init(data: WorldSceneData): void {
     this.connection = data.connection;
     this.world = data.world;
+    this.scenery = data.scenery;
   }
 
   create(): void {
@@ -126,10 +151,33 @@ export class WorldScene extends Phaser.Scene {
 
   override update(time: number, delta: number): void {
     this.pollKeyboard();
+    this.syncRealm();
     this.syncChunks();
+    this.syncFurniture();
     this.syncAvatars();
     this.syncBubbles(time);
     this.easeAvatars(delta);
+  }
+
+  /**
+   * Notice that the player has walked into a house, or back out.
+   *
+   * The room is a different size, so the camera must be told; and every avatar
+   * on screen belonged to the place they have just left.
+   */
+  private syncRealm(): void {
+    if (this.connection.realmRevision === this.drawnRealmRevision) return;
+    this.drawnRealmRevision = this.connection.realmRevision;
+
+    const world = this.connection.world;
+    if (world !== null) this.world = world;
+    this.setUpCamera();
+
+    for (const avatar of this.avatars.values()) {
+      avatar.bubble?.destroy();
+      avatar.container.destroy();
+    }
+    this.avatars.clear();
   }
 
   // -- the ground ---------------------------------------------------------
@@ -153,6 +201,9 @@ export class WorldScene extends Phaser.Scene {
       for (const [key, image] of this.chunkImages) {
         if (this.connection.chunks.has(key)) continue;
         image.destroy();
+        // The texture goes with it: ground we have walked away from should not
+        // still be costing memory on a phone.
+        this.textures.remove(`chunk:${key}`);
         this.chunkImages.delete(key);
       }
     }
@@ -169,44 +220,103 @@ export class WorldScene extends Phaser.Scene {
   }
 
   /**
-   * Draw one chunk into a single texture.
+   * Draw one chunk, once, as one image.
    *
-   * A chunk is a thousand tiles. Drawing them as a thousand rectangles every
-   * frame is the easiest way to miss the 60 fps target on a phone, so they are
-   * drawn once, here, and then moved around as one image.
+   * The trick here is the difference between a stutter and nothing at all.
+   *
+   * A chunk is 32x32 tiles and a tile is 32 pixels, so drawing it at full size
+   * means painting a million pixels — over a tenth of a second on a machine
+   * without a graphics card, which is a jolt every time somebody walks into
+   * new ground.
+   *
+   * But every tile is one flat colour. So the chunk is painted at **one pixel
+   * per tile** — a thousand pixels instead of a million — and then blown up
+   * thirty-two times. The renderer is in pixel-art mode, so it scales without
+   * smoothing: exactly the same squares, drawn a thousand times more cheaply.
    */
-  private drawChunk(chunk: HeldChunk): Phaser.GameObjects.RenderTexture {
-    const size = CHUNK_SIZE_TILES * TILE_SIZE_PX;
-    const graphics = this.add.graphics();
+  private drawChunk(chunk: HeldChunk): Phaser.GameObjects.Image {
+    const key = chunkTextureKey(chunk);
+    if (this.textures.exists(key)) this.textures.remove(key);
 
-    for (let y = 0; y < CHUNK_SIZE_TILES; y += 1) {
-      const row = chunk.rows[y];
-      if (row === undefined) continue;
-      for (let x = 0; x < CHUNK_SIZE_TILES; x += 1) {
-        const char = row[x] ?? '#';
-        const pair = TILE_COLORS[char] ?? TILE_COLORS['#'];
-        const [base, alt] = pair ?? [colorTokens.tileUnknown, colorTokens.tileUnknown];
-        graphics.fillStyle((x + y) % 2 === 0 ? base : alt, 1);
-        graphics.fillRect(x * TILE_SIZE_PX, y * TILE_SIZE_PX, TILE_SIZE_PX, TILE_SIZE_PX);
+    const canvas = this.textures.createCanvas(key, CHUNK_SIZE_TILES, CHUNK_SIZE_TILES);
+    const context = canvas?.getContext() ?? null;
+
+    if (canvas !== null && canvas !== undefined && context !== null) {
+      const pixels = context.createImageData(CHUNK_SIZE_TILES, CHUNK_SIZE_TILES);
+      const originX = chunk.cx * CHUNK_SIZE_TILES;
+      const originY = chunk.cy * CHUNK_SIZE_TILES;
+
+      for (let y = 0; y < CHUNK_SIZE_TILES; y += 1) {
+        const row = chunk.rows[y];
+        for (let x = 0; x < CHUNK_SIZE_TILES; x += 1) {
+          // A chunk is always a full 32x32 square, so the one at an edge is
+          // padded with stone. Drawing that padding would put a slab of wall
+          // outside the world — very visible around a house, which is far
+          // smaller than a single chunk. Nothing is drawn there instead.
+          if (originX + x >= this.world.width || originY + y >= this.world.height) continue;
+
+          const char = row?.[x] ?? '#';
+          const pair = TILE_COLORS[char] ?? TILE_COLORS['#'];
+          const [base, alt] = pair ?? [colorTokens.tileUnknown, colorTokens.tileUnknown];
+          const colour = (x + y) % 2 === 0 ? base : alt;
+
+          const at = (y * CHUNK_SIZE_TILES + x) * 4;
+          pixels.data[at] = (colour >> 16) & 0xff;
+          pixels.data[at + 1] = (colour >> 8) & 0xff;
+          pixels.data[at + 2] = colour & 0xff;
+          pixels.data[at + 3] = 255;
+        }
       }
+
+      context.putImageData(pixels, 0, 0);
+      canvas.refresh();
     }
 
-    const texture = this.add.renderTexture(chunk.cx * size, chunk.cy * size, size, size);
-    texture.setOrigin(0, 0);
-    texture.draw(graphics, 0, 0);
-    texture.setDepth(0);
-    graphics.destroy();
-    return texture;
+    const size = CHUNK_SIZE_TILES * TILE_SIZE_PX;
+    const image = this.add.image(chunk.cx * size, chunk.cy * size, key);
+    image.setOrigin(0, 0);
+    image.setScale(TILE_SIZE_PX);
+    image.setDepth(0);
+    return image;
   }
 
-  private setUpCamera(): void {
-    this.cameras.main.setBounds(
-      0,
-      0,
-      this.world.width * TILE_SIZE_PX,
-      this.world.height * TILE_SIZE_PX,
+  /**
+   * True when the whole place fits on the screen at once — which a house does
+   * and the city never will.
+   */
+  private get roomFitsOnScreen(): boolean {
+    return (
+      this.world.width * TILE_SIZE_PX <= this.scale.width &&
+      this.world.height * TILE_SIZE_PX <= this.scale.height
     );
-    this.cameras.main.setRoundPixels(true);
+  }
+
+  /**
+   * Point the camera at the right thing.
+   *
+   * In the city the camera follows the player, because the city is far larger
+   * than the screen. A house is smaller than the screen, so following would
+   * push it into a corner and leave most of the window empty: the whole room
+   * is centred instead, and the camera stays still.
+   */
+  private setUpCamera(): void {
+    const camera = this.cameras.main;
+    const worldWidth = this.world.width * TILE_SIZE_PX;
+    const worldHeight = this.world.height * TILE_SIZE_PX;
+
+    if (this.roomFitsOnScreen) {
+      camera.stopFollow();
+      camera.setZoom(1);
+      // No bounds at all, and then centre it. Bounds smaller than the camera
+      // get clamped back to the corner, which is what made a tap on the middle
+      // of a house land on tile 20,9 — outside a room that is fourteen wide.
+      camera.removeBounds();
+      camera.centerOn(worldWidth / 2, worldHeight / 2);
+    } else {
+      camera.setBounds(0, 0, worldWidth, worldHeight);
+    }
+
+    camera.setRoundPixels(true);
   }
 
   // -- input --------------------------------------------------------------
@@ -231,10 +341,16 @@ export class WorldScene extends Phaser.Scene {
       if (this.input.pointer2.isDown) return;
 
       const world = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
-      this.connection.walkTo({
+      const tile = {
         x: Math.floor(world.x / TILE_SIZE_PX),
         y: Math.floor(world.y / TILE_SIZE_PX),
-      });
+      };
+
+      // Somebody arranging their house is pointing at a place to put a stool,
+      // not asking to walk there.
+      if (this.scenery.onTileClick?.(tile.x, tile.y) === true) return;
+
+      this.connection.walkTo(tile);
     });
 
     // Pinch to zoom on a phone, wheel to zoom on a desktop. Both are clamped,
@@ -267,6 +383,8 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private setZoom(value: number): void {
+    // Zooming a room that already fits on screen only moves it off the screen.
+    if (this.roomFitsOnScreen) return;
     this.cameras.main.setZoom(Phaser.Math.Clamp(value, MIN_ZOOM, MAX_ZOOM));
   }
 
@@ -359,9 +477,58 @@ export class WorldScene extends Phaser.Scene {
     container.add([body, label]);
     this.avatars.set(view.id, { container, targetPx, bubble: null, bubbleUntilMs: 0 });
 
-    if (isSelf) {
+    // Only in the city: a house is centred on screen and the camera stays put.
+    if (isSelf && !this.roomFitsOnScreen) {
       this.cameras.main.startFollow(container, true, 0.12, 0.12);
     }
+  }
+
+  // -- furniture ----------------------------------------------------------
+
+  /**
+   * Draw what is standing in the house.
+   *
+   * Furniture is drawn as a plain block with its name on it, for the same
+   * reason the ground is drawn as flat colour: no picture enters this
+   * repository before `docs/ASSETS.md` can record its licence. The shape is
+   * turned by its rotation, so turning something is visible.
+   */
+  private syncFurniture(): void {
+    if (this.scenery.revision === this.drawnFurnitureRevision) return;
+    this.drawnFurnitureRevision = this.scenery.revision;
+
+    this.furniture?.destroy();
+    this.furniture = null;
+    if (this.scenery.furniture.length === 0) return;
+
+    const container = this.add.container(0, 0);
+    container.setDepth(1);
+
+    for (const piece of this.scenery.furniture) {
+      const centreX = piece.x * TILE_SIZE_PX + TILE_SIZE_PX / 2;
+      const centreY = piece.y * TILE_SIZE_PX + TILE_SIZE_PX / 2;
+
+      const block = this.add.rectangle(
+        centreX,
+        centreY,
+        TILE_SIZE_PX * 0.8,
+        TILE_SIZE_PX * 0.6,
+        colorTokens.tileFloor,
+      );
+      block.setStrokeStyle(2, colorTokens.accent, 0.9);
+      block.setAngle(piece.rotation);
+
+      const label = this.add.text(centreX, centreY - TILE_SIZE_PX * 0.55, piece.name, {
+        fontFamily: fontFamilyTokens.ui,
+        fontSize: `${fontSizeTokens.sm}px`,
+        color: toHex(colorTokens.textMuted),
+      });
+      label.setOrigin(0.5, 0.5);
+
+      container.add([block, label]);
+    }
+
+    this.furniture = container;
   }
 
   // -- speech -------------------------------------------------------------
@@ -463,4 +630,9 @@ function toHex(value: number): string {
 
 function chunkKeyOf(chunk: HeldChunk): string {
   return `${chunk.cx}:${chunk.cy}`;
+}
+
+/** The name the drawn ground of one chunk is stored under. */
+function chunkTextureKey(chunk: HeldChunk): string {
+  return `chunk:${chunkKeyOf(chunk)}`;
 }

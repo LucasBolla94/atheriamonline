@@ -58,6 +58,8 @@ export interface ConnectionHandlers {
   onChat?: (entry: ChatEntry) => void;
   /** Something the player is part of changed. Go and ask the API about it. */
   onNotice?: (about: 'trade') => void;
+  /** The player is somewhere else now: the city, or inside a house. */
+  onRealm?: (realm: 'city' | 'house', houseId: string | null) => void;
   onReject?: (reason: RejectReason) => void;
   onClosed?: (reason: string) => void;
 }
@@ -93,8 +95,17 @@ export class WorldConnection {
    * standing still. So this is built up over time rather than replaced.
    */
   private readonly nearby = new Map<string, PlayerView>();
-  /** How big the city is. Sent once, on welcome. */
+  /** How big the place the player is standing in is. */
   world: WorldInfo | null = null;
+
+  /** Where the player is: the city, or the inside of one house. */
+  realm: 'city' | 'house' = 'city';
+
+  /** Whose house they are in, when they are in one. */
+  houseId: string | null = null;
+
+  /** Goes up whenever the player moves between the city and a house. */
+  realmRevision = 0;
 
   /**
    * The pieces of the map we have been given, by `cx:cy`.
@@ -286,6 +297,20 @@ export class WorldConnection {
         if (this.chatLog.length > CHAT_HISTORY) this.chatLog.shift();
         this.chatRevision += 1;
         this.handlers.onChat?.(entry);
+        return;
+      }
+      case 'realm': {
+        // Everything held about where we were is thrown away: none of it is
+        // true in the place we are now standing.
+        this.realm = message.realm;
+        this.houseId = message.houseId;
+        this.world = message.world;
+        this.chunks.clear();
+        this.nearby.clear();
+        this.you = null;
+        this.chunkRevision += 1;
+        this.realmRevision += 1;
+        this.handlers.onRealm?.(message.realm, message.houseId);
         return;
       }
       case 'notice': {

@@ -8,12 +8,14 @@ import Phaser from 'phaser';
 import type { WorldInfo } from '@atheriam/protocol';
 import { colorTokens } from '../tokens/tokens.js';
 import type { WorldConnection } from '../net/connection.js';
-import { WorldScene, type WorldSceneData } from './WorldScene.js';
+import { WorldScene, type HouseScenery, type WorldSceneData } from './WorldScene.js';
 
 export interface CreateGameOptions {
   readonly parent: HTMLElement;
   readonly connection: WorldConnection;
   readonly world: WorldInfo;
+  /** What the interface knows about the room: its furniture, and taps on it. */
+  readonly scenery: HouseScenery;
 }
 
 export function createGame(options: CreateGameOptions): Phaser.Game {
@@ -45,7 +47,11 @@ export function createGame(options: CreateGameOptions): Phaser.Game {
     scene: [WorldScene],
   });
 
-  const sceneData: WorldSceneData = { connection: options.connection, world: options.world };
+  const sceneData: WorldSceneData = {
+    connection: options.connection,
+    world: options.world,
+    scenery: options.scenery,
+  };
   game.scene.start(WorldScene.KEY, sceneData);
   return game;
 }

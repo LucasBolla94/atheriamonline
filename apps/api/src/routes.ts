@@ -58,6 +58,20 @@ import {
   type TradeFailure,
 } from './trading.js';
 import { parseAmount } from '@atheriam/economy';
+import {
+  contentsOf,
+  houseById,
+  houseOf,
+  mayEnter,
+  place,
+  rotate,
+  setAccess,
+  takeBack,
+  unwelcome,
+  welcome,
+  welcomedNames,
+  type HouseFailure,
+} from './houses.js';
 import { emailSchema } from './auth/email.js';
 import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH } from './auth/password.js';
 import { SESSION_TTL_SECONDS, type SessionStore } from './auth/sessions.js';
@@ -90,9 +104,21 @@ const loginBody = z.object({
 
 /** What the player is told when something is refused. */
 const MESSAGES: Record<
-  RegisterFailure | LoginFailure | ModerationFailure | TradeFailure | 'unknown-problem',
+  | RegisterFailure
+  | LoginFailure
+  | ModerationFailure
+  | TradeFailure
+  | HouseFailure
+  | 'unknown-problem',
   string
 > = {
+  'no-such-house': 'There is no house there.',
+  'not-your-house': 'That is not your house.',
+  'not-welcome': 'The door is shut. They have not welcomed you in.',
+  'not-furniture': 'That is not something you can put down.',
+  'tile-taken': 'Something is already standing there.',
+  'bad-place': 'Nothing can stand there.',
+  'bad-rotation': 'Furniture turns in quarters.',
   'unknown-problem': 'Something went wrong. Please try again.',
   'already-trading': 'One of you is already trading with somebody else.',
   'no-such-trade': 'That trade is no longer open.',
@@ -369,6 +395,228 @@ export async function registerRoutes(app: FastifyInstance, options: RouteOptions
   });
 
   // ---------------------------------------------------------------------
+  // Houses.
+  //
+  // The API owns the house: who may come in, and what is standing in it. The
+  // world server owns where people are, so "let me in" ends with a command to
+  // it rather than with this server moving anybody.
+  // ---------------------------------------------------------------------
+
+  /** Anything addressed by its own id: a house, a trade. */
+  const idParams = z.object({ id: z.string().uuid() });
+
+  const accessBody = z.object({ access: z.enum(['nobody', 'welcomed', 'everyone']) });
+  const placeBody = z.object({
+    itemId: z.string().uuid(),
+    x: z.number().int().min(0).max(64),
+    y: z.number().int().min(0).max(64),
+    rotation: z.number().int().min(0).max(359),
+  });
+  const rotateBody = z.object({
+    itemId: z.string().uuid(),
+    rotation: z.number().int().min(0).max(359),
+  });
+  const takeBackBody = z.object({ itemId: z.string().uuid() });
+
+  /** Your own house: who may come in, and what is in it. */
+  app.get('/api/houses/mine', async (request, reply) => {
+    const who = await requirePlayer(request, reply);
+    if (who === null) return reply;
+
+    const house = await houseOf(db, who.character.id);
+    return reply.send({
+      id: house.id,
+      access: house.access,
+      welcomed: await welcomedNames(db, house.id),
+      contents: await contentsOf(db, house.id),
+      yours: true,
+    });
+  });
+
+  /** What is in a house you are standing in, or about to walk into. */
+  app.get('/api/houses/:id', async (request, reply) => {
+    const who = await requirePlayer(request, reply);
+    if (who === null) return reply;
+
+    const id = idParams.safeParse(request.params);
+    if (!id.success) return badRequest(reply);
+
+    const house = await houseById(db, id.data.id);
+    if (house === null) {
+      return reply.code(404).send({ error: 'no-such-house', message: MESSAGES['no-such-house'] });
+    }
+    if (!(await mayEnter(db, house, who.character.id))) {
+      return reply.code(403).send({ error: 'not-welcome', message: MESSAGES['not-welcome'] });
+    }
+
+    return reply.send({
+      id: house.id,
+      access: house.access,
+      welcomed: [],
+      contents: await contentsOf(db, house.id),
+      yours: house.ownerId === who.character.id,
+    });
+  });
+
+  /** Go home. */
+  app.post('/api/houses/mine/enter', async (request, reply) => {
+    const who = await requirePlayer(request, reply);
+    if (who === null) return reply;
+
+    const house = await houseOf(db, who.character.id);
+    await world.enterHouse(who.character.id, house.id);
+    return reply.send({ id: house.id });
+  });
+
+  /** Call on somebody. */
+  app.post('/api/houses/visit', async (request, reply) => {
+    const who = await requirePlayer(request, reply);
+    if (who === null) return reply;
+
+    const parsed = nameBody.safeParse(request.body);
+    if (!parsed.success) {
+      return reply
+        .code(400)
+        .send({ error: 'invalid-request', message: MESSAGES['no-such-character'] });
+    }
+
+    const them = await findCharacterByName(db, parsed.data.name);
+    if (them === null) {
+      return reply
+        .code(404)
+        .send({ error: 'no-such-character', message: MESSAGES['no-such-character'] });
+    }
+
+    const house = await houseOf(db, them.id);
+    if (!(await mayEnter(db, house, who.character.id))) {
+      return reply.code(403).send({ error: 'not-welcome', message: MESSAGES['not-welcome'] });
+    }
+
+    await world.enterHouse(who.character.id, house.id);
+    return reply.send({ id: house.id });
+  });
+
+  /** Back out into the street. */
+  app.post('/api/houses/leave', async (request, reply) => {
+    const who = await requirePlayer(request, reply);
+    if (who === null) return reply;
+    await world.leaveHouse(who.character.id);
+    return reply.send({ ok: true });
+  });
+
+  /** Change who may come in. */
+  app.post('/api/houses/mine/access', async (request, reply) => {
+    const who = await requirePlayer(request, reply);
+    if (who === null) return reply;
+
+    const parsed = accessBody.safeParse(request.body);
+    if (!parsed.success) return badRequest(reply);
+
+    const house = await setAccess(db, who.character.id, parsed.data.access);
+    return reply.send({ access: house.access });
+  });
+
+  /** Welcome somebody in, or stop doing so. */
+  app.post('/api/houses/mine/welcome', async (request, reply) => {
+    const who = await requirePlayer(request, reply);
+    if (who === null) return reply;
+
+    const parsed = nameBody.safeParse(request.body);
+    if (!parsed.success) return badRequest(reply);
+
+    const them = await findCharacterByName(db, parsed.data.name);
+    if (them === null) {
+      return reply
+        .code(404)
+        .send({ error: 'no-such-character', message: MESSAGES['no-such-character'] });
+    }
+
+    const result = await welcome(db, who.character.id, them.id);
+    if (!result.ok) {
+      return reply.code(400).send({ error: result.reason, message: MESSAGES[result.reason] });
+    }
+
+    return reply.send({ welcomed: await welcomedNames(db, result.data.id) });
+  });
+
+  app.post('/api/houses/mine/unwelcome', async (request, reply) => {
+    const who = await requirePlayer(request, reply);
+    if (who === null) return reply;
+
+    const parsed = nameBody.safeParse(request.body);
+    if (!parsed.success) return badRequest(reply);
+
+    const them = await findCharacterByName(db, parsed.data.name);
+    if (them === null) {
+      return reply
+        .code(404)
+        .send({ error: 'no-such-character', message: MESSAGES['no-such-character'] });
+    }
+
+    const result = await unwelcome(db, who.character.id, them.id);
+    if (!result.ok) {
+      return reply.code(400).send({ error: result.reason, message: MESSAGES[result.reason] });
+    }
+
+    return reply.send({ welcomed: await welcomedNames(db, result.data.id) });
+  });
+
+  /** Put a piece of furniture down. It leaves your inventory. */
+  app.post('/api/houses/mine/place', async (request, reply) => {
+    const who = await requirePlayer(request, reply);
+    if (who === null) return reply;
+
+    const parsed = placeBody.safeParse(request.body);
+    if (!parsed.success) return badRequest(reply);
+
+    const result = await place(
+      db,
+      who.character.id,
+      parsed.data.itemId,
+      parsed.data.x,
+      parsed.data.y,
+      parsed.data.rotation,
+    );
+    if (!result.ok) {
+      return reply.code(400).send({ error: result.reason, message: MESSAGES[result.reason] });
+    }
+
+    return reply.send({ contents: result.data });
+  });
+
+  /** Turn a piece of furniture on the spot. */
+  app.post('/api/houses/mine/rotate', async (request, reply) => {
+    const who = await requirePlayer(request, reply);
+    if (who === null) return reply;
+
+    const parsed = rotateBody.safeParse(request.body);
+    if (!parsed.success) return badRequest(reply);
+
+    const result = await rotate(db, who.character.id, parsed.data.itemId, parsed.data.rotation);
+    if (!result.ok) {
+      return reply.code(400).send({ error: result.reason, message: MESSAGES[result.reason] });
+    }
+
+    return reply.send({ contents: result.data });
+  });
+
+  /** Pick a piece of furniture back up. */
+  app.post('/api/houses/mine/take-back', async (request, reply) => {
+    const who = await requirePlayer(request, reply);
+    if (who === null) return reply;
+
+    const parsed = takeBackBody.safeParse(request.body);
+    if (!parsed.success) return badRequest(reply);
+
+    const result = await takeBack(db, who.character.id, parsed.data.itemId);
+    if (!result.ok) {
+      return reply.code(400).send({ error: result.reason, message: MESSAGES[result.reason] });
+    }
+
+    return reply.send({ contents: result.data });
+  });
+
+  // ---------------------------------------------------------------------
   // Trading.
   //
   // Every one of these ends the same way: the other person is nudged, and
@@ -376,7 +624,6 @@ export async function registerRoutes(app: FastifyInstance, options: RouteOptions
   // never told what changed — it is told to look, and it asks.
   // ---------------------------------------------------------------------
 
-  const tradeIdParams = z.object({ id: z.string().uuid() });
   const itemBody = z.object({ itemId: z.string().uuid() });
   const moneyBody = z.object({ amount: z.string().min(1).max(24) });
 
@@ -436,9 +683,9 @@ export async function registerRoutes(app: FastifyInstance, options: RouteOptions
     const who = await requirePlayer(request, reply);
     if (who === null) return reply;
 
-    const id = tradeIdParams.safeParse(request.params);
+    const id = idParams.safeParse(request.params);
     const body = itemBody.safeParse(request.body);
-    if (!id.success || !body.success) return badTradeRequest(reply);
+    if (!id.success || !body.success) return badRequest(reply);
 
     const result = await offerItem(db, id.data.id, who.character.id, body.data.itemId);
     if (!result.ok) {
@@ -456,9 +703,9 @@ export async function registerRoutes(app: FastifyInstance, options: RouteOptions
     const who = await requirePlayer(request, reply);
     if (who === null) return reply;
 
-    const id = tradeIdParams.safeParse(request.params);
+    const id = idParams.safeParse(request.params);
     const body = itemBody.safeParse(request.body);
-    if (!id.success || !body.success) return badTradeRequest(reply);
+    if (!id.success || !body.success) return badRequest(reply);
 
     const result = await withdrawItem(db, id.data.id, who.character.id, body.data.itemId);
     if (!result.ok) {
@@ -477,9 +724,9 @@ export async function registerRoutes(app: FastifyInstance, options: RouteOptions
     const who = await requirePlayer(request, reply);
     if (who === null) return reply;
 
-    const id = tradeIdParams.safeParse(request.params);
+    const id = idParams.safeParse(request.params);
     const body = moneyBody.safeParse(request.body);
-    if (!id.success || !body.success) return badTradeRequest(reply);
+    if (!id.success || !body.success) return badRequest(reply);
 
     // Read by the economy package, which does not use floating point.
     const amount = parseAmount(body.data.amount);
@@ -506,8 +753,8 @@ export async function registerRoutes(app: FastifyInstance, options: RouteOptions
     const who = await requirePlayer(request, reply);
     if (who === null) return reply;
 
-    const id = tradeIdParams.safeParse(request.params);
-    if (!id.success) return badTradeRequest(reply);
+    const id = idParams.safeParse(request.params);
+    if (!id.success) return badRequest(reply);
 
     const result = await confirmTrade(db, id.data.id, who.character.id);
     if (!result.ok) {
@@ -534,8 +781,8 @@ export async function registerRoutes(app: FastifyInstance, options: RouteOptions
     const who = await requirePlayer(request, reply);
     if (who === null) return reply;
 
-    const id = tradeIdParams.safeParse(request.params);
-    if (!id.success) return badTradeRequest(reply);
+    const id = idParams.safeParse(request.params);
+    if (!id.success) return badRequest(reply);
 
     const result = await cancelTrade(db, id.data.id, who.character.id);
     if (!result.ok) {
@@ -550,7 +797,7 @@ export async function registerRoutes(app: FastifyInstance, options: RouteOptions
     return reply.send({ trade: null });
   });
 
-  function badTradeRequest(reply: FastifyReply) {
+  function badRequest(reply: FastifyReply) {
     return reply
       .code(400)
       .send({ error: 'invalid-request', message: 'That request did not make sense.' });

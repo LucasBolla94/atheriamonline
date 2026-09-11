@@ -659,3 +659,207 @@ describe('snapshots only carry what changed', () => {
     expect(latest?.you.x).toBe(start + 1);
   });
 });
+
+/**
+ * Going indoors.
+ *
+ * A house is its own world: its own map, its own crowd, its own chat. These
+ * check that moving between them takes nothing along that should not come,
+ * and leaves nothing behind that should.
+ */
+describe('houses', () => {
+  const field = new GameMap(Array.from({ length: 60 }, () => '.'.repeat(60)));
+  let server: WorldServer;
+  let world: World;
+  let tickets: FakeTickets;
+  let port: number;
+  const clients: TestClient[] = [];
+
+  beforeEach(async () => {
+    world = new World(field);
+    tickets = new FakeTickets();
+    server = new WorldServer({
+      host: '127.0.0.1',
+      port: 0,
+      world,
+      resolveTicket: tickets.spend,
+      savePosition: tickets.save,
+    });
+    server.start();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    port = server.port;
+  });
+
+  afterEach(async () => {
+    for (const client of clients) client.close();
+    clients.length = 0;
+    await server.stop();
+  });
+
+  async function joinAt(id: string, name: string, x: number, y: number): Promise<TestClient> {
+    const client = await TestClient.connect(port);
+    clients.push(client);
+    client.send({ t: 'join', ticket: tickets.issue(character(id, name, x, y)) });
+    await client.waitFor('snapshot');
+    return client;
+  }
+
+  it('takes a player indoors and tells them where they are', async () => {
+    const client = await joinAt('c-aldric', 'Aldric', 10, 10);
+
+    expect(server.enterHouse('c-aldric', 'house-1')).toBe(true);
+
+    const realm = await client.waitFor('realm');
+    expect(realm.realm).toBe('house');
+    expect(realm.houseId).toBe('house-1');
+    // A house is a small room, not the city.
+    expect(realm.world.width).toBeLessThan(field.width);
+
+    // And they are no longer standing in the city.
+    expect(world.playerCount).toBe(0);
+    expect(server.occupiedHouses).toBe(1);
+  });
+
+  it('puts them back where they were standing when they come out', async () => {
+    const client = await joinAt('c-aldric', 'Aldric', 12, 14);
+
+    server.enterHouse('c-aldric', 'house-1');
+    await client.waitFor('realm');
+    client.clear();
+
+    expect(server.leaveHouse('c-aldric')).toBe(true);
+    const back = await client.waitFor('realm');
+
+    expect(back.realm).toBe('city');
+    expect(back.spawn).toEqual({ x: 12, y: 14 });
+    expect(world.playerCount).toBe(1);
+  });
+
+  it('forgets a house once the last person leaves it', async () => {
+    const client = await joinAt('c-aldric', 'Aldric', 10, 10);
+    server.enterHouse('c-aldric', 'house-1');
+    await client.waitFor('realm');
+    expect(server.occupiedHouses).toBe(1);
+
+    server.leaveHouse('c-aldric');
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(server.occupiedHouses).toBe(0);
+  });
+
+  it('hides the people in a house from the people in the street', async () => {
+    const aldric = await joinAt('c-aldric', 'Aldric', 10, 10);
+    const bryn = await joinAt('c-bryn', 'Bryn', 11, 10);
+    await new Promise((resolve) => setTimeout(resolve, 350));
+
+    server.enterHouse('c-aldric', 'house-1');
+    await aldric.waitFor('realm');
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    const gone = bryn.received
+      .filter(
+        (message): message is Extract<ServerMessage, { t: 'snapshot' }> => message.t === 'snapshot',
+      )
+      .flatMap((snapshot) => snapshot.gone);
+    expect(gone).toContain('c-aldric');
+  });
+
+  it('does not carry a remark from indoors out into the street', async () => {
+    const aldric = await joinAt('c-aldric', 'Aldric', 10, 10);
+    const bryn = await joinAt('c-bryn', 'Bryn', 11, 10);
+
+    server.enterHouse('c-aldric', 'house-1');
+    await aldric.waitFor('realm');
+    bryn.clear();
+
+    aldric.send({ t: 'say', seq: 1, text: 'anybody home?' });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    expect(bryn.latest('chat')).toBeUndefined();
+  });
+
+  it('lets two people in the same house hear each other', async () => {
+    const aldric = await joinAt('c-aldric', 'Aldric', 10, 10);
+    const bryn = await joinAt('c-bryn', 'Bryn', 30, 30);
+
+    server.enterHouse('c-aldric', 'house-1');
+    server.enterHouse('c-bryn', 'house-1');
+    await aldric.waitFor('realm');
+    await bryn.waitFor('realm');
+
+    aldric.send({ t: 'say', seq: 1, text: 'come in' });
+    const heard = await bryn.waitFor('chat');
+    expect(heard.text).toBe('come in');
+  });
+
+  it('does not let a mute be escaped by going indoors', async () => {
+    const client = await joinAt('c-aldric', 'Aldric', 10, 10);
+    server.mute('c-aldric', Date.now() + 60_000);
+
+    server.enterHouse('c-aldric', 'house-1');
+    await client.waitFor('realm');
+    client.clear();
+
+    client.send({ t: 'say', seq: 2, text: 'let me out' });
+    const reject = await client.waitFor('reject');
+    expect(reject.reason).toBe('muted');
+  });
+
+  it('refuses to take somebody indoors twice', async () => {
+    const client = await joinAt('c-aldric', 'Aldric', 10, 10);
+    expect(server.enterHouse('c-aldric', 'house-1')).toBe(true);
+    await client.waitFor('realm');
+    expect(server.enterHouse('c-aldric', 'house-2')).toBe(false);
+  });
+
+  it('says so when there is nobody to take indoors', () => {
+    expect(server.enterHouse('c-nobody', 'house-1')).toBe(false);
+    expect(server.leaveHouse('c-nobody')).toBe(false);
+  });
+});
+
+/**
+ * Leaving from indoors.
+ *
+ * A tile inside a house means nothing in the city, so somebody who closes the
+ * tab in their kitchen must not come back standing in whatever the city has at
+ * those coordinates.
+ */
+describe('logging out from inside a house', () => {
+  const field = new GameMap(Array.from({ length: 60 }, () => '.'.repeat(60)));
+  let server: WorldServer;
+  let tickets: FakeTickets;
+  let port: number;
+
+  beforeEach(async () => {
+    tickets = new FakeTickets();
+    server = new WorldServer({
+      host: '127.0.0.1',
+      port: 0,
+      world: new World(field),
+      resolveTicket: tickets.spend,
+      savePosition: tickets.save,
+    });
+    server.start();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    port = server.port;
+  });
+
+  afterEach(async () => {
+    await server.stop();
+  });
+
+  it('writes down the doorstep, not the spot on the floorboards', async () => {
+    const client = await TestClient.connect(port);
+    client.send({ t: 'join', ticket: tickets.issue(character('c-aldric', 'Aldric', 30, 40)) });
+    await client.waitFor('snapshot');
+
+    server.enterHouse('c-aldric', 'house-1');
+    await client.waitFor('realm');
+
+    client.close();
+    await new Promise((resolve) => setTimeout(resolve, 250));
+
+    expect(tickets.saved).toHaveLength(1);
+    expect(tickets.saved[0]).toMatchObject({ id: 'c-aldric', x: 30, y: 40 });
+  });
+});

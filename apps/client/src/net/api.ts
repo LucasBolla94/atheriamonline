@@ -222,6 +222,99 @@ export async function cancelTrade(tradeId: string): Promise<TradeAnswer> {
   return request(`/api/trades/${tradeId}/cancel`, { method: 'POST' });
 }
 
+/** One piece of furniture standing in a house. */
+export interface PlacedItem {
+  readonly id: string;
+  readonly definitionId: string;
+  readonly name: string;
+  readonly x: number;
+  readonly y: number;
+  readonly rotation: number;
+}
+
+export interface HouseView {
+  readonly id: string;
+  readonly access: 'nobody' | 'welcomed' | 'everyone';
+  readonly welcomed: string[];
+  readonly contents: PlacedItem[];
+  readonly yours: boolean;
+}
+
+/** Your own house, made the first time you ask for it. */
+export async function myHouse(): Promise<ApiResult<HouseView>> {
+  return request('/api/houses/mine');
+}
+
+/** What is in a house you are allowed into. */
+export async function houseById(id: string): Promise<ApiResult<HouseView>> {
+  return request(`/api/houses/${id}`);
+}
+
+/** Go home. */
+export async function goHome(): Promise<ApiResult<{ id: string }>> {
+  return request('/api/houses/mine/enter', { method: 'POST' });
+}
+
+/** Call on somebody. */
+export async function visitHouse(name: string): Promise<ApiResult<{ id: string }>> {
+  return request('/api/houses/visit', { method: 'POST', body: JSON.stringify({ name }) });
+}
+
+/** Back out into the street. */
+export async function leaveHouse(): Promise<ApiResult<{ ok: true }>> {
+  return request('/api/houses/leave', { method: 'POST' });
+}
+
+/** Change who may come in. */
+export async function setHouseAccess(
+  access: 'nobody' | 'welcomed' | 'everyone',
+): Promise<ApiResult<{ access: string }>> {
+  return request('/api/houses/mine/access', { method: 'POST', body: JSON.stringify({ access }) });
+}
+
+/** Welcome somebody in, or stop doing so. */
+export async function welcomeToHouse(name: string): Promise<ApiResult<{ welcomed: string[] }>> {
+  return request('/api/houses/mine/welcome', { method: 'POST', body: JSON.stringify({ name }) });
+}
+
+export async function unwelcomeFromHouse(name: string): Promise<ApiResult<{ welcomed: string[] }>> {
+  return request('/api/houses/mine/unwelcome', { method: 'POST', body: JSON.stringify({ name }) });
+}
+
+/** Put a piece of furniture down. It leaves your inventory. */
+export async function placeFurniture(
+  itemId: string,
+  x: number,
+  y: number,
+  rotation: number,
+): Promise<ApiResult<{ contents: PlacedItem[] }>> {
+  return request('/api/houses/mine/place', {
+    method: 'POST',
+    body: JSON.stringify({ itemId, x, y, rotation }),
+  });
+}
+
+/** Turn a piece of furniture on the spot. */
+export async function rotateFurniture(
+  itemId: string,
+  rotation: number,
+): Promise<ApiResult<{ contents: PlacedItem[] }>> {
+  return request('/api/houses/mine/rotate', {
+    method: 'POST',
+    body: JSON.stringify({ itemId, rotation }),
+  });
+}
+
+/** Pick a piece of furniture back up. */
+export async function takeBackFurniture(
+  itemId: string,
+): Promise<ApiResult<{ contents: PlacedItem[] }>> {
+  return request('/api/houses/mine/take-back', {
+    method: 'POST',
+    body: JSON.stringify({ itemId }),
+  });
+}
+
 /** Ask for a ticket to open the WebSocket with. */
 export async function worldTicket(): Promise<ApiResult<{ ticket: string }>> {
   return request('/api/world/ticket', { method: 'POST' });

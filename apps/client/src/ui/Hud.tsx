@@ -13,7 +13,10 @@ export interface HudProps {
   readonly touch: boolean;
   /** What is in the purse, already written out. Null until the server says. */
   readonly purse: string | null;
+  /** True when the player is inside a house rather than out in the city. */
+  readonly indoors: boolean;
   readonly onOpenPouch: () => void;
+  readonly onGoHome: () => void;
   readonly onLogOut: () => void;
 }
 
@@ -24,7 +27,9 @@ export function Hud({
   nearbyCount,
   touch,
   purse,
+  indoors,
   onOpenPouch,
+  onGoHome,
   onLogOut,
 }: HudProps): JSX.Element {
   return (
@@ -36,6 +41,9 @@ export function Hud({
         <span className="hud__muted">{strings.hud.playersNearby(nearbyCount)}</span>
         <button type="button" className="hud__button" onClick={onOpenPouch}>
           {purse === null ? strings.pouch.open : `${strings.pouch.open} · ${purse}`}
+        </button>
+        <button type="button" className="hud__button" onClick={onGoHome}>
+          {indoors ? strings.house.leave : strings.house.goHome}
         </button>
         <button type="button" className="hud__button" onClick={onLogOut}>
           {strings.auth.logOut}

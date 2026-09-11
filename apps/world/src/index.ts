@@ -137,6 +137,12 @@ commands.on('message', (_channel, raw) => {
     case 'notify':
       server.notify(command.characterId, command.about);
       return;
+    case 'enter-house':
+      server.enterHouse(command.characterId, command.houseId);
+      return;
+    case 'leave-house':
+      server.leaveHouse(command.characterId);
+      return;
   }
 });
 

@@ -10,8 +10,13 @@ Last updated: 2026-09-11
 
 ## Current phase
 
-**Phase 6 — Trading** — done. **The game is live at https://atheriam.online.**
-Next up: **Phase 7 — Houses**, the last one on the list.
+**Every phase on the list is done.** The game is live at
+https://atheriam.online: accounts, a city, chat and moderation, money and
+items, trading, and a house each.
+
+What happens next is not another phase — it is whatever the answers to
+`docs/OPEN_QUESTIONS.md` turn out to be, starting with whether it feels right
+on a real phone (Q-001).
 
 ## Phase list
 
@@ -91,11 +96,14 @@ charge.
 - [x] Tests that try the oldest trick there is — agree, then swap the good
       item — and fail if it works
 
-### Phase 7 — Houses
+### Phase 7 — Houses — DONE
 
-- [ ] House interiors, one per player
-- [ ] Place and rotate furniture (moves the instance, never copies)
-- [ ] Access control: nobody / friends / everyone
+- [x] House interiors, one per player, made the first time they ask
+- [x] Each house is its own world: its own crowd, and chat that does not carry
+      out into the street
+- [x] Place, turn and pick up furniture — which moves the item instance and
+      never copies it, proven by a test that moves one stool twenty times
+- [x] Access: nobody, the people you have welcomed, or anybody
 
 ### Phase 8 — Mobile and polish — DONE
 

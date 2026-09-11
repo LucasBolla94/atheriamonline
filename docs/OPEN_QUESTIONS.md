@@ -33,6 +33,28 @@ a shop.
 few hundred players to feel busy.
 **What we need from you:** is a single district enough for launch?
 
+## Q-010 — Should a house be somewhere in the city, or only a button?
+
+Today "Go home" is a button, and calling on somebody is another one. There is
+no door in the street that leads to a particular person's house — see D-053
+for why: there are six houses drawn in the residential quarter and there will
+be thousands of players.
+**Working assumption:** buttons are enough, and the city stays a place people
+meet rather than a street of front doors.
+**What we need from you:** whether you want a district where houses really do
+belong to particular players, which is a much bigger city and a way to buy or
+be given a plot.
+
+## Q-011 — Should "welcomed" become a real friends list?
+
+A house door is open to nobody, to the people on a list the owner keeps, or to
+anybody. The list is one-way: you can welcome somebody without their knowing.
+**Working assumption:** a one-way list is enough, and friendship is a separate
+feature nobody has asked for yet — see D-054.
+**What we need from you:** whether players should be able to be friends with
+each other properly, and what else that would change (seeing who is online,
+finding each other in the city, and so on).
+
 ## Q-004 — What happens to a player who is offline for a long time?
 
 **Working assumption:** nothing. The character and house stay forever.

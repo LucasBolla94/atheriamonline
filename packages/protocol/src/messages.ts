@@ -26,8 +26,10 @@ import { CHUNK_SIZE_TILES, MAX_CHAT_LENGTH } from '@atheriam/shared';
  * 5: a snapshot carries only what changed for this player, plus the people
  *    who have gone. A crowd standing still now costs nothing.
  * 6: the server can nudge a player to go and look at something that changed.
+ * 7: a player can be somewhere other than the city — inside a house — and is
+ *    told when that changes.
  */
-export const PROTOCOL_VERSION = 6;
+export const PROTOCOL_VERSION = 7;
 
 /** The eight directions a player may step in. */
 export const directionSchema = z.enum(['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw']);
@@ -283,6 +285,24 @@ export const noticeSchema = z.object({
   about: z.enum(['trade']),
 });
 
+/**
+ * "You are somewhere else now."
+ *
+ * Sent when a player walks into a house or back out into the city. The client
+ * throws away the ground and the crowd it was holding, because none of it is
+ * where it is standing any more.
+ */
+export const realmSchema = z.object({
+  t: z.literal('realm'),
+  realm: z.enum(['city', 'house']),
+  /** Whose house, when it is a house. The browser asks the API what is in it. */
+  houseId: z.string().min(1).max(64).nullable(),
+  world: worldInfoSchema,
+  spawn: tilePosSchema,
+});
+
+export type Realm = z.infer<typeof realmSchema>;
+
 export const pongSchema = z.object({
   t: z.literal('pong'),
   ts: z.number().int(),
@@ -296,6 +316,7 @@ export const serverMessageSchema = z.discriminatedUnion('t', [
   snapshotSchema,
   chatSchema,
   noticeSchema,
+  realmSchema,
   rejectSchema,
   byeSchema,
   pongSchema,

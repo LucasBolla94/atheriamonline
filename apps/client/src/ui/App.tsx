@@ -28,6 +28,8 @@ import { Hud } from './Hud.js';
 import { PlayerActions } from './PlayerActions.js';
 import { Pouch } from './Pouch.js';
 import { TradeWindow } from './TradeWindow.js';
+import { HousePanel } from './HousePanel.js';
+import type { HouseScenery } from '../game/WorldScene.js';
 import { errorMessage, strings } from './strings.js';
 
 /** Where the world server is. In production Caddy serves it under /ws. */
@@ -60,8 +62,22 @@ export function App(): JSX.Element {
   const [trade, setTrade] = useState<api.TradeView | null>(null);
   const [tradeNotice, setTradeNotice] = useState<string | null>(null);
   const [tradeBusy, setTradeBusy] = useState(false);
+  const [house, setHouse] = useState<api.HouseView | null>(null);
+  const [housePanelOpen, setHousePanelOpen] = useState(false);
+  const [houseNotice, setHouseNotice] = useState<string | null>(null);
+  const [houseBusy, setHouseBusy] = useState(false);
+  const [picked, setPicked] = useState<api.InventoryItem | null>(null);
+  const [indoors, setIndoors] = useState(false);
 
   const connectionRef = useRef<WorldConnection | null>(null);
+  /**
+   * What the Phaser scene is told about the room it is drawing.
+   *
+   * Furniture comes from the API and taps go back to React, so this object is
+   * the one place the two sides meet. It is a ref because the scene reads it
+   * every frame and must never be handed a stale copy.
+   */
+  const sceneryRef = useRef<HouseScenery>({ furniture: [], revision: 0, onTileClick: null });
   /**
    * How the connection reaches the newest trade-refresher.
    *
@@ -94,6 +110,20 @@ export function App(): JSX.Element {
       onChat: (entry) => setChat((previous) => [...previous, entry]),
       onNotice: (about) => {
         if (about === 'trade') refreshTradeRef.current?.();
+      },
+      onRealm: (which, houseId) => {
+        setIndoors(which === 'house');
+        setHouseNotice(null);
+        setPicked(null);
+        if (which === 'house') {
+          refreshHouseRef.current?.(houseId);
+          setHousePanelOpen(true);
+        } else {
+          setHouse(null);
+          setHousePanelOpen(false);
+          sceneryRef.current.furniture = [];
+          sceneryRef.current.revision += 1;
+        }
       },
       onReject: (reason) => {
         // Most refusals are ordinary and the next snapshot corrects them. The
@@ -247,6 +277,66 @@ export function App(): JSX.Element {
 
   refreshTradeRef.current = refreshTrade;
 
+  /**
+   * What tapping the floor does.
+   *
+   * The scene asks this on every tap and walks the player there if it says no.
+   * Refs rather than state, because the scene keeps one copy of this function
+   * for the life of the game and must see what is true now, not what was true
+   * when it was made.
+   */
+  const pickedRef = useRef<api.InventoryItem | null>(null);
+  pickedRef.current = picked;
+  const houseRef = useRef<api.HouseView | null>(null);
+  houseRef.current = house;
+
+  /** Hand the scene a new set of furniture to draw. */
+  const showFurniture = useCallback((contents: readonly api.PlacedItem[]) => {
+    sceneryRef.current.furniture = contents;
+    sceneryRef.current.revision += 1;
+  }, []);
+
+  /** Ask the API about the house the player is standing in. */
+  const refreshHouse = useCallback(
+    (houseId: string | null) => {
+      void (async () => {
+        const result = houseId === null ? await api.myHouse() : await api.houseById(houseId);
+        if (!result.ok) {
+          setHouseNotice(result.message);
+          return;
+        }
+        setHouse(result.data);
+        showFurniture(result.data.contents);
+      })();
+    },
+    [showFurniture],
+  );
+
+  const refreshHouseRef = useRef<((houseId: string | null) => void) | null>(null);
+  refreshHouseRef.current = refreshHouse;
+
+  /** Every house action ends the same way: new contents, or a reason why not. */
+  const houseAction = useCallback(
+    (action: () => Promise<api.ApiResult<{ contents: api.PlacedItem[] }>>) => {
+      setHouseBusy(true);
+      setHouseNotice(null);
+      void (async () => {
+        const result = await action();
+        setHouseBusy(false);
+        if (!result.ok) {
+          setHouseNotice(result.message);
+          return;
+        }
+        setHouse((previous) =>
+          previous === null ? previous : { ...previous, contents: result.data.contents },
+        );
+        showFurniture(result.data.contents);
+        refreshPouchRef.current?.();
+      })();
+    },
+    [showFurniture],
+  );
+
   /** If the browser is already logged in, walk straight back into the city. */
   useEffect(() => {
     let cancelled = false;
@@ -319,6 +409,8 @@ export function App(): JSX.Element {
       setPurse(null);
       setItems([]);
       setTrade(null);
+      setHouse(null);
+      setIndoors(false);
       setState('idle');
       setError(null);
       setBusy(false);
@@ -338,8 +430,27 @@ export function App(): JSX.Element {
     const connection = connectionRef.current;
     if (parent === null || connection === null || gameRef.current !== null) return;
 
-    gameRef.current = createGame({ parent, connection, world });
+    gameRef.current = createGame({
+      parent,
+      connection,
+      world,
+      scenery: sceneryRef.current,
+    });
   }, [playing, world]);
+
+  // Tapping the floor while holding something puts it down there instead of
+  // walking to it.
+  useEffect(() => {
+    sceneryRef.current.onTileClick = (x: number, y: number): boolean => {
+      const item = pickedRef.current;
+      if (item === null) return false;
+      if (houseRef.current?.yours !== true) return false;
+
+      houseAction(() => api.placeFurniture(item.id, x, y, 0));
+      setPicked(null);
+      return true;
+    };
+  }, [houseAction]);
 
   // Leave the city tidily if the tab goes away, so the server does not have to
   // wait for a timeout to notice — and so the player's position is saved.
@@ -366,6 +477,10 @@ export function App(): JSX.Element {
           nearbyCount={nearbyCount}
           touch={touch}
           purse={purse?.display ?? null}
+          indoors={indoors}
+          onGoHome={() => {
+            void (indoors ? api.leaveHouse() : api.goHome());
+          }}
           onOpenPouch={() => {
             setPouchNotice(null);
             refreshPouch();
@@ -392,6 +507,58 @@ export function App(): JSX.Element {
           onClaimDaily={handleClaimDaily}
           onClose={() => setPouchOpen(false)}
         />
+      )}
+      {housePanelOpen && house !== null && (
+        <HousePanel
+          house={house}
+          inventory={items}
+          picked={picked}
+          busy={houseBusy}
+          notice={houseNotice}
+          onPick={setPicked}
+          onRotate={(item) =>
+            houseAction(() => api.rotateFurniture(item.id, (item.rotation + 90) % 360))
+          }
+          onTakeBack={(item) => houseAction(() => api.takeBackFurniture(item.id))}
+          onAccess={(access) => {
+            setHouseBusy(true);
+            void (async () => {
+              const result = await api.setHouseAccess(access);
+              setHouseBusy(false);
+              if (result.ok) refreshHouse(null);
+            })();
+          }}
+          onWelcome={(name) => {
+            setHouseBusy(true);
+            void (async () => {
+              const result = await api.welcomeToHouse(name);
+              setHouseBusy(false);
+              setHouseNotice(result.ok ? null : result.message);
+              if (result.ok) refreshHouse(null);
+            })();
+          }}
+          onUnwelcome={(name) => {
+            setHouseBusy(true);
+            void (async () => {
+              await api.unwelcomeFromHouse(name);
+              setHouseBusy(false);
+              refreshHouse(null);
+            })();
+          }}
+          onLeave={() => {
+            void api.leaveHouse();
+          }}
+          onClose={() => setHousePanelOpen(false)}
+        />
+      )}
+      {indoors && !housePanelOpen && (
+        <button
+          type="button"
+          className="hud__button house__reopen"
+          onClick={() => setHousePanelOpen(true)}
+        >
+          {strings.house.open}
+        </button>
       )}
       {trade !== null && (
         <TradeWindow
@@ -420,6 +587,13 @@ export function App(): JSX.Element {
           onTrade={(name) => {
             setChosenPlayer(null);
             tradeAction(() => api.startTrade(name));
+          }}
+          onVisit={(name) => {
+            setChosenPlayer(null);
+            void (async () => {
+              const result = await api.visitHouse(name);
+              if (!result.ok) setChatNotice(result.message);
+            })();
           }}
           onClose={() => setChosenPlayer(null)}
         />

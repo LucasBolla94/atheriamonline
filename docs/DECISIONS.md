@@ -598,3 +598,73 @@ both people unable to trade with anybody else, and their belongings on a table
 nobody is sitting at. Ten minutes is longer than a real conversation about a
 stool and shorter than anybody would wait.
 **Cost to change:** None. It is one constant.
+
+## D-052 — A house is its own world, not a corner of the city
+
+**Date:** 2026-09-11
+**Decision:** The world server keeps one `World` per place: the city, and the
+inside of every house somebody is currently standing in. A house's world is
+made when the first person walks in and forgotten when the last one leaves.
+**Why:** Everything that already worked in the city — interest management,
+chat radius, snapshots, the speed limit — works inside a house without a
+single rule being written twice, because a house is the same kind of thing as
+the city, only smaller. The alternative was a "room id" threaded through every
+one of those rules, which is the same feature with more places to get it
+wrong. An empty house costs nothing at all.
+**Cost to change:** Medium, but there is no reason to.
+
+## D-053 — Houses are entered from the interface, not through a door in the street
+
+**Date:** 2026-09-11
+**Decision:** "Go home" and "Call on them at home" are buttons. There is no
+house door in the city that leads to a particular player's house.
+**Why:** There are six houses drawn in the residential streets and there will
+be thousands of players. Any mapping between the two would be a lie — either
+most players' houses are unreachable, or the streets fill with doors nobody
+can walk between. Making it a deliberate action keeps the city honest about
+what it is: a place people meet, with private space reached from anywhere.
+**Cost to change:** Low. If the city ever has a district where each house does
+belong to somebody, walking through its door becomes another way to call the
+same code.
+
+## D-054 — "Welcomed" is a list, not a friendship
+
+**Date:** 2026-09-11
+**Decision:** A house door is open to nobody, to the people on a list the
+owner keeps, or to anybody. The list is one-way and needs nobody's agreement.
+**Why:** `docs/SPEC.md` section 10 asks for nobody / friends / everyone.
+Friendship is a feature of its own — requests, acceptance, removal, and what
+it means elsewhere in the game — and a house does not need one to be useful. A
+list the owner writes is the same three settings with none of that, and it can
+become a friends list later without the door having to change.
+**Cost to change:** Low.
+
+## D-055 — A room that fits on the screen is centred, with no camera bounds
+
+**Date:** 2026-09-11
+**Decision:** When the whole place fits on screen — which a house does and the
+city never will — the camera stops following the player, drops its bounds and
+centres on the room. Pinching to zoom does nothing there.
+**Why:** Found by a test that put a stool in the middle of a room and was told
+"nothing can stand there". Camera bounds smaller than the camera itself get
+clamped back to the corner, so the room was drawn in the top-left while the
+game believed it was centred — and a tap in the middle of the screen landed on
+tile 20,9, outside a room that is fourteen tiles wide. Without bounds there is
+nothing to clamp and the centring holds.
+**Cost to change:** None.
+
+## D-056 — The ground is painted one pixel per tile and then blown up
+
+**Date:** 2026-09-11
+**Decision:** A chunk is drawn into a 32x32 pixel texture — one pixel per
+tile — and that texture is scaled up thirty-two times. The renderer is in
+pixel-art mode, so it scales without smoothing.
+**Why:** Every tile is one flat colour, so painting them at full size means
+writing a million pixels to say what a thousand can. Measured on this machine,
+drawing a chunk at full size took over a tenth of a second and a burst of them
+took 400 ms; at one pixel per tile the same picture comes out identical — the
+screenshots before and after are indistinguishable — for a thousandth of the
+work. Ground the player has walked away from now has its texture deleted too,
+which matters on a phone.
+**Cost to change:** Low, and it stops being an optimisation the moment tiles
+stop being flat colours — real artwork would go back to a full-size texture.

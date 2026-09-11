@@ -20,6 +20,9 @@ export interface WorldLink {
   block(blockerId: string, blockedId: string, blocked: boolean): Promise<void>;
   /** Nudge somebody to go and look at something that changed. */
   notify(characterId: string, about: 'trade'): Promise<void>;
+  /** Take somebody indoors, or bring them back out. */
+  enterHouse(characterId: string, houseId: string): Promise<void>;
+  leaveHouse(characterId: string): Promise<void>;
 }
 
 /** The real link: a Redis channel the world server listens on. */
@@ -41,6 +44,8 @@ export function redisWorldLink(redis: Redis, onError?: (error: unknown) => void)
     block: (blockerId, blockedId, blocked) =>
       publish({ t: 'block', blockerId, blockedId, blocked }),
     notify: (characterId, about) => publish({ t: 'notify', characterId, about }),
+    enterHouse: (characterId, houseId) => publish({ t: 'enter-house', characterId, houseId }),
+    leaveHouse: (characterId) => publish({ t: 'leave-house', characterId }),
   };
 }
 
@@ -51,5 +56,7 @@ export function silentWorldLink(): WorldLink {
     mute: async () => Promise.resolve(),
     block: async () => Promise.resolve(),
     notify: async () => Promise.resolve(),
+    enterHouse: async () => Promise.resolve(),
+    leaveHouse: async () => Promise.resolve(),
   };
 }

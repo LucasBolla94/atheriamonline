@@ -399,15 +399,33 @@ body {
   cursor: not-allowed;
 }
 
-/* Blocking and reporting, over the top of the city. */
+/*
+ * Anything that opens over the city: blocking, reporting, the purse, a trade,
+ * a house.
+ *
+ * A phone in landscape is under 400 pixels tall and every one of these panels
+ * is taller than that. The panel scrolls inside the overlay — without it the
+ * buttons at the bottom are simply unreachable, which is the same bug the
+ * sign-up form had and the same reason it matters: the feature may as well not
+ * exist on a phone.
+ */
 .overlay {
   position: absolute;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: var(--space-md);
+  padding: max(var(--space-md), env(safe-area-inset-top))
+    max(var(--space-md), env(safe-area-inset-right))
+    max(var(--space-md), env(safe-area-inset-bottom))
+    max(var(--space-md), env(safe-area-inset-left));
   background: color-mix(in srgb, var(--color-backdrop) 75%, transparent);
+  overflow-y: auto;
+}
+
+.overlay .panel {
+  max-height: 100%;
+  overflow-y: auto;
 }
 
 .panel--small {
@@ -531,8 +549,6 @@ body {
 /* The trade window: two sides, side by side, so nothing is hidden. */
 .panel--wide {
   max-width: 560px;
-  max-height: 88vh;
-  overflow-y: auto;
 }
 
 .trade__table {
@@ -595,4 +611,12 @@ body {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
+}
+
+/* The way back into the house panel once it has been closed. */
+.house__reopen {
+  position: absolute;
+  top: max(var(--space-xl), env(safe-area-inset-top));
+  right: max(var(--space-md), env(safe-area-inset-right));
+  background: color-mix(in srgb, var(--color-surface) 85%, transparent);
 }

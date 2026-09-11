@@ -265,6 +265,9 @@ export const ledgerEntries = pgTable(
   ],
 );
 
+/** Who may come into a house. */
+export const houseAccess = pgEnum('house_access', ['nobody', 'welcomed', 'everyone']);
+
 /** Where a trade has got to. */
 export const tradeStatus = pgEnum('trade_status', ['open', 'completed', 'cancelled']);
 
@@ -396,6 +399,50 @@ export const tradeItems = pgTable(
   ],
 );
 
+/**
+ * A player's own four walls.
+ *
+ * One per character. The inside is a small fixed room; what makes it theirs is
+ * what they put in it, which is item instances whose holder is this house.
+ *
+ * Access is deliberately three plain settings rather than a system of
+ * permissions. "welcomed" is a list the owner keeps by hand — see
+ * `house_guests` — because a two-way friendship system is a feature of its
+ * own and this does not need one to be useful.
+ */
+export const houses = pgTable(
+  'houses',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => characters.id, { onDelete: 'cascade' }),
+    access: houseAccess('access').notNull().default('welcomed'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex('houses_owner_key').on(table.ownerId)],
+);
+
+/** People the owner has said may come in. */
+export const houseGuests = pgTable(
+  'house_guests',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    houseId: uuid('house_id')
+      .notNull()
+      .references(() => houses.id, { onDelete: 'cascade' }),
+    characterId: uuid('character_id')
+      .notNull()
+      .references(() => characters.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('house_guests_pair_key').on(table.houseId, table.characterId),
+    index('house_guests_house_idx').on(table.houseId),
+  ],
+);
+
 export type Account = typeof accounts.$inferSelect;
 export type NewAccount = typeof accounts.$inferInsert;
 export type Character = typeof characters.$inferSelect;
@@ -409,5 +456,7 @@ export type Transfer = typeof transfers.$inferSelect;
 export type LedgerEntry = typeof ledgerEntries.$inferSelect;
 export type ItemDefinition = typeof itemDefinitions.$inferSelect;
 export type ItemInstance = typeof itemInstances.$inferSelect;
+export type House = typeof houses.$inferSelect;
+export type HouseGuest = typeof houseGuests.$inferSelect;
 export type Trade = typeof trades.$inferSelect;
 export type TradeItem = typeof tradeItems.$inferSelect;

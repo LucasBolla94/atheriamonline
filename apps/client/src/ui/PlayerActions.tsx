@@ -16,6 +16,7 @@ export interface PlayerActionsProps {
   readonly onUnblock: (name: string) => void;
   readonly onReport: (name: string, reason: string) => void;
   readonly onTrade: (name: string) => void;
+  readonly onVisit: (name: string) => void;
   readonly onClose: () => void;
 }
 
@@ -27,6 +28,7 @@ export function PlayerActions({
   onUnblock,
   onReport,
   onTrade,
+  onVisit,
   onClose,
 }: PlayerActionsProps): JSX.Element {
   const [reason, setReason] = useState('');
@@ -61,6 +63,16 @@ export function PlayerActions({
             <p className="notice notice--quiet">
               {blocked ? strings.safety.unblockHelp : strings.safety.blockHelp}
             </p>
+
+            <button
+              type="button"
+              className="button button--quiet"
+              disabled={busy}
+              onClick={() => onVisit(name)}
+            >
+              {strings.house.visit}
+            </button>
+            <p className="notice notice--quiet">{strings.house.accessHelp['welcomed']}</p>
 
             <button
               type="button"

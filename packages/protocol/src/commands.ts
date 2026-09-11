@@ -56,11 +56,30 @@ export const notifyCommandSchema = z.object({
   about: z.enum(['trade']),
 });
 
+/**
+ * Take a player indoors, or bring them back out.
+ *
+ * Whether they are allowed in was decided by the API, which owns the house and
+ * its list of who may come in. The world server only moves them.
+ */
+export const enterHouseCommandSchema = z.object({
+  t: z.literal('enter-house'),
+  characterId: characterIdSchema,
+  houseId: z.string().min(1).max(64),
+});
+
+export const leaveHouseCommandSchema = z.object({
+  t: z.literal('leave-house'),
+  characterId: characterIdSchema,
+});
+
 export const worldCommandSchema = z.discriminatedUnion('t', [
   kickCommandSchema,
   muteCommandSchema,
   blockCommandSchema,
   notifyCommandSchema,
+  enterHouseCommandSchema,
+  leaveHouseCommandSchema,
 ]);
 
 export type WorldCommand = z.infer<typeof worldCommandSchema>;

@@ -6,7 +6,13 @@
  * allowed to know. All the game rules live in `world.ts`; none live here.
  */
 import { WebSocketServer, type WebSocket } from 'ws';
-import { CHUNK_SIZE_TILES, TICK_MS, chunkKey } from '@atheriam/shared';
+import {
+  CHUNK_SIZE_TILES,
+  HOUSE_ENTRANCE,
+  TICK_MS,
+  chunkKey,
+  type TilePos,
+} from '@atheriam/shared';
 import {
   PROTOCOL_VERSION,
   decodeClientMessage,
@@ -16,8 +22,9 @@ import {
   type ServerMessage,
 } from '@atheriam/protocol';
 import { spawnPoint } from './map.js';
+import { Realms, houseIdOf, houseRealm, type RealmId } from './realms.js';
 import { chunksInView, diffChunks } from './streaming.js';
-import type { JoiningCharacter, World } from './world.js';
+import type { JoiningCharacter, PlayerState, World } from './world.js';
 
 /**
  * The most messages one connection may send per second. A normal player sends
@@ -60,6 +67,13 @@ interface Connection {
    * simply sent it again rather than left with a hole in the world.
    */
   readonly chunks: Set<string>;
+  /** Where this player is: the city, or the inside of one house. */
+  realm: RealmId;
+  /**
+   * Where they were standing in the city before they went indoors, so that
+   * coming out puts them back on the doorstep rather than in the square.
+   */
+  cityPosition: TilePos | null;
   alive: boolean;
 }
 
@@ -95,7 +109,8 @@ export interface WorldServerOptions {
 
 export class WorldServer {
   private readonly wss: WebSocketServer;
-  private readonly world: World;
+  /** The city, and the inside of every house somebody is standing in. */
+  private readonly realms: Realms;
   private readonly connections = new Map<WebSocket, Connection>();
   /** The same connections, found by the character playing on them. */
   private readonly byPlayer = new Map<string, Connection>();
@@ -106,12 +121,27 @@ export class WorldServer {
   private heartbeatTimer: NodeJS.Timeout | null = null;
 
   constructor(options: WorldServerOptions) {
-    this.world = options.world;
+    this.realms = new Realms(options.world);
     this.now = options.now ?? (() => Date.now());
     this.resolveTicket = options.resolveTicket;
     this.savePosition = options.savePosition;
     this.wss = new WebSocketServer({ host: options.host, port: options.port });
     this.wss.on('connection', (socket) => this.onConnection(socket));
+  }
+
+  /** The city itself. Everything that is not inside somebody's house. */
+  private get world(): World {
+    return this.realms.city;
+  }
+
+  /** The world one connection is standing in. */
+  private worldOf(connection: Connection): World {
+    return this.realms.get(connection.realm);
+  }
+
+  /** How many houses have somebody in them. */
+  get occupiedHouses(): number {
+    return this.realms.occupiedHouses;
   }
 
   /** The port actually in use. Useful when the port was chosen as 0. */
@@ -155,6 +185,8 @@ export class WorldServer {
       lastSentRevision: -1,
       believes: new Map<string, string>(),
       chunks: new Set<string>(),
+      realm: 'city',
+      cityPosition: null,
       alive: true,
     };
     this.connections.set(socket, connection);
@@ -170,19 +202,34 @@ export class WorldServer {
   private onClose(connection: Connection): void {
     const playerId = connection.playerId;
     if (playerId !== null) {
-      const player = this.world.get(playerId);
+      const world = this.worldOf(connection);
+      const player = world.get(playerId);
       connection.playerId = null;
       this.byPlayer.delete(playerId);
-      this.world.leave(playerId);
+      world.leave(playerId);
+      this.realms.forgetIfEmpty(connection.realm);
 
       if (player !== undefined) {
-        // Where they stood is written down now, once, as they leave. A failure
-        // here must not take the server down with it: the worst case is that
-        // one player starts tomorrow a few tiles from where they stopped.
+        /*
+         * Where they stood is written down now, once, as they leave.
+         *
+         * Somebody who closes the tab inside a house has their *doorstep*
+         * written down, not the spot on the floorboards: a house tile means
+         * nothing in the city, and saving it would put them somewhere
+         * arbitrary next time they log in.
+         *
+         * A failure here must not take the server down with it. The worst case
+         * is that one player starts tomorrow a few tiles from where they
+         * stopped.
+         */
+        const outside = connection.cityPosition;
+        const saved =
+          connection.realm === 'city' || outside === null ? { x: player.x, y: player.y } : outside;
+
         void this.savePosition({
           id: player.id,
-          x: player.x,
-          y: player.y,
+          x: saved.x,
+          y: saved.y,
           facing: player.facing,
         }).catch((error: unknown) => {
           console.error('[world] could not save a position on disconnect:', error);
@@ -212,7 +259,11 @@ export class WorldServer {
     const message = decoded.message;
 
     if (message.t === 'ping') {
-      this.send(connection, { t: 'pong', ts: message.ts, serverTick: this.world.tick });
+      this.send(connection, {
+        t: 'pong',
+        ts: message.ts,
+        serverTick: this.worldOf(connection).tick,
+      });
       return;
     }
 
@@ -238,10 +289,10 @@ export class WorldServer {
 
     const rejection =
       message.t === 'step'
-        ? this.world.handleStep(playerId, message.dir, nowMs)
+        ? this.worldOf(connection).handleStep(playerId, message.dir, nowMs)
         : message.t === 'walkTo'
-          ? this.world.handleWalkTo(playerId, message.to)
-          : this.world.handleStop(playerId);
+          ? this.worldOf(connection).handleWalkTo(playerId, message.to)
+          : this.worldOf(connection).handleStop(playerId);
 
     if (rejection !== null) {
       this.send(connection, { t: 'reject', seq: message.seq, reason: rejection });
@@ -309,7 +360,7 @@ export class WorldServer {
     text: string,
     nowMs: number,
   ): void {
-    const result = this.world.handleSay(playerId, text, nowMs);
+    const result = this.worldOf(connection).handleSay(playerId, text, nowMs);
     if (!result.ok) {
       this.send(connection, { t: 'reject', seq, reason: result.reason });
       return;
@@ -320,12 +371,15 @@ export class WorldServer {
       from: result.from.id,
       name: result.from.name,
       text: result.text,
-      tick: this.world.tick,
+      tick: this.worldOf(connection).tick,
     } as const;
 
     for (const listenerId of result.listeners) {
       const listener = this.byPlayer.get(listenerId);
       if (listener === undefined) continue;
+      // Belt and braces: the world already only lists people in the same
+      // realm, because each realm is its own world.
+      if (listener.realm !== connection.realm) continue;
       this.send(listener, chat);
     }
   }
@@ -343,9 +397,9 @@ export class WorldServer {
     return true;
   }
 
-  /** Silence a player who is online right now. */
+  /** Silence a player who is online right now, wherever they are standing. */
   mute(characterId: string, untilMs: number | null): void {
-    this.world.mute(characterId, untilMs);
+    for (const world of this.realms.all()) world.mute(characterId, untilMs);
   }
 
   /**
@@ -363,7 +417,89 @@ export class WorldServer {
 
   /** Apply a block, or lift one, for a player who is online right now. */
   setBlock(blockerId: string, blockedId: string, blocked: boolean): void {
-    this.world.block(blockerId, blockedId, blocked);
+    for (const world of this.realms.all()) world.block(blockerId, blockedId, blocked);
+  }
+
+  /**
+   * Take a player indoors.
+   *
+   * Whether they are allowed in was decided by the API, which owns the house.
+   * This only moves them. Returns false when they are not online, which is
+   * ordinary: somebody may be sent home while they are logged out.
+   */
+  enterHouse(characterId: string, houseId: string): boolean {
+    const connection = this.byPlayer.get(characterId);
+    if (connection === undefined) return false;
+    if (connection.realm !== 'city') return false;
+
+    const player = this.world.get(characterId);
+    if (player === undefined) return false;
+    connection.cityPosition = { x: player.x, y: player.y };
+
+    return this.moveRealm(connection, houseRealm(houseId), HOUSE_ENTRANCE);
+  }
+
+  /** Send a player back out into the city, where they came in. */
+  leaveHouse(characterId: string): boolean {
+    const connection = this.byPlayer.get(characterId);
+    if (connection === undefined) return false;
+    if (connection.realm === 'city') return false;
+
+    const back = connection.cityPosition;
+    connection.cityPosition = null;
+    return this.moveRealm(connection, 'city', back);
+  }
+
+  /**
+   * Move one player from the world they are in to another one.
+   *
+   * Everything the client was holding about where it was — the ground, and
+   * everybody standing on it — is thrown away on both sides, because none of
+   * it is true any more.
+   */
+  private moveRealm(connection: Connection, to: RealmId, at: TilePos | null): boolean {
+    const playerId = connection.playerId;
+    if (playerId === null) return false;
+
+    const from = this.worldOf(connection);
+    const player = from.get(playerId);
+    if (player === undefined) return false;
+
+    const carried = carriedState(player);
+    from.leave(playerId);
+
+    const target = this.realms.get(to);
+    const landing = at ?? spawnPoint(target.map);
+    const arrived = target.join({ ...carried, x: landing.x, y: landing.y }, this.now());
+
+    if (!arrived.ok) {
+      // Put them back where they were rather than leaving them nowhere.
+      from.join({ ...carried, x: player.x, y: player.y }, this.now());
+      this.realms.forgetIfEmpty(to);
+      return false;
+    }
+
+    const previous = connection.realm;
+    connection.realm = to;
+    connection.chunks.clear();
+    connection.believes.clear();
+    connection.lastSentRevision = -1;
+    this.realms.forgetIfEmpty(previous);
+
+    const houseId = houseIdOf(to);
+    this.send(connection, {
+      t: 'realm',
+      realm: houseId === null ? 'city' : 'house',
+      houseId,
+      world: {
+        width: target.map.width,
+        height: target.map.height,
+        chunkSize: CHUNK_SIZE_TILES,
+      },
+      spawn: { x: arrived.player.x, y: arrived.player.y },
+    });
+    this.sendSnapshot(connection);
+    return true;
   }
 
   private isFlooding(connection: Connection, nowMs: number): boolean {
@@ -377,14 +513,15 @@ export class WorldServer {
 
   private onTick(): void {
     const nowMs = this.now();
-    this.world.advance(nowMs);
+    // The city, and the inside of every house somebody is standing in.
+    for (const world of this.realms.all()) world.advance(nowMs);
 
     for (const connection of this.connections.values()) {
       if (connection.playerId === null) continue;
-      // Refresh a client whenever the world has changed since the last
-      // snapshot it was sent. That covers a player moving, but also somebody
-      // joining or leaving, which no amount of movement would have caught.
-      if (connection.lastSentRevision !== this.world.revision) {
+      // Refresh a client whenever the world it is in has changed since the
+      // last snapshot it was sent. That covers a player moving, but also
+      // somebody joining or leaving, which no movement would have caught.
+      if (connection.lastSentRevision !== this.worldOf(connection).revision) {
         this.sendSnapshot(connection);
       }
     }
@@ -414,7 +551,8 @@ export class WorldServer {
    */
   private sendSnapshot(connection: Connection): void {
     if (connection.playerId === null) return;
-    const view = this.world.viewFor(connection.playerId);
+    const world = this.worldOf(connection);
+    const view = world.viewFor(connection.playerId);
     if (view === null) return;
 
     // The ground goes out before the people standing on it, so the client
@@ -448,12 +586,12 @@ export class WorldServer {
     const meChanged = connection.believes.get(view.you.id) !== mySignature;
     connection.believes.set(view.you.id, mySignature);
 
-    connection.lastSentRevision = this.world.revision;
+    connection.lastSentRevision = world.revision;
     if (!meChanged && changed.length === 0 && gone.length === 0) return;
 
     this.send(connection, {
       t: 'snapshot',
-      tick: this.world.tick,
+      tick: world.tick,
       you: view.you,
       players: changed,
       gone,
@@ -469,7 +607,8 @@ export class WorldServer {
    * what a client is allowed to know about the map.
    */
   private syncChunks(connection: Connection, centre: { x: number; y: number }): void {
-    const wanted = chunksInView(this.world.map, centre);
+    const map = this.worldOf(connection).map;
+    const wanted = chunksInView(map, centre);
     const { toSend, toDrop } = diffChunks(connection.chunks, wanted);
 
     for (const chunk of toDrop) {
@@ -478,7 +617,7 @@ export class WorldServer {
     }
 
     for (const chunk of toSend) {
-      const rows = this.world.map.chunkRows(chunk);
+      const rows = map.chunkRows(chunk);
       if (rows === null) continue;
       this.send(connection, { t: 'chunk', cx: chunk.cx, cy: chunk.cy, rows: [...rows] });
       connection.chunks.add(chunkKey(chunk));
@@ -505,4 +644,22 @@ export class WorldServer {
  */
 function signatureOf(player: PlayerView): string {
   return `${player.x},${player.y},${player.facing}`;
+}
+
+/**
+ * What follows a player from one world to another.
+ *
+ * A mute and a block list are about the person, not the place: walking into a
+ * house must not be a way to escape either.
+ */
+function carriedState(player: PlayerState): JoiningCharacter {
+  return {
+    id: player.id,
+    name: player.name,
+    x: player.x,
+    y: player.y,
+    facing: player.facing,
+    mutedUntilMs: player.mutedUntilMs,
+    blocked: [...player.blocked],
+  };
 }
