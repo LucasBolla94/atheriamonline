@@ -1,0 +1,255 @@
+/**
+ * The authoritative world.
+ *
+ * Everything the players can see lives in this object, in memory. Nothing here
+ * touches the database: positions change ten times a second, and a database
+ * write per step would be the end of the server. Durable saving is a separate,
+ * slow job — see `docs/SPEC.md` section 7.
+ *
+ * This file has no sockets and no timers on purpose. It takes the current time
+ * as an argument and returns decisions, so every rule in it can be tested
+ * without a network.
+ */
+import {
+  MIN_STEP_INTERVAL_MS,
+  VIEW_MARGIN_TILES,
+  VIEW_RADIUS_TILES,
+  directionBetween,
+  isValidTile,
+  step as stepTile,
+  tileDistance,
+  type Direction,
+  type TilePos,
+} from '@atheriam/shared';
+import type { PlayerView, RejectReason } from '@atheriam/protocol';
+import type { GameMap } from './map.js';
+import { spawnPoint } from './map.js';
+import { canStep, findPath } from './pathfinding.js';
+
+/** A player as the server knows them. More than the client is ever told. */
+export interface PlayerState {
+  readonly id: string;
+  readonly name: string;
+  x: number;
+  y: number;
+  facing: Direction;
+  /** When this player last moved a tile, used to enforce the speed limit. */
+  lastStepAtMs: number;
+  /** Tiles still to walk, in order. Empty means standing still. */
+  path: TilePos[];
+}
+
+export type JoinResult =
+  { ok: true; player: PlayerState } | { ok: false; reason: 'name-taken' | 'server-full' };
+
+export interface WorldOptions {
+  /** Refuse new players past this many. Protects memory and bandwidth. */
+  readonly maxPlayers?: number;
+  /** Supplies player ids. Injectable so tests can be deterministic. */
+  readonly makeId?: () => string;
+}
+
+const DEFAULT_MAX_PLAYERS = 200;
+
+export class World {
+  readonly map: GameMap;
+  private readonly players = new Map<string, PlayerState>();
+  /** Lower-cased name -> id, so two players cannot share a name. */
+  private readonly namesInUse = new Map<string, string>();
+  private readonly maxPlayers: number;
+  private readonly makeId: () => string;
+  private currentTick = 0;
+  private currentRevision = 0;
+
+  constructor(map: GameMap, options: WorldOptions = {}) {
+    this.map = map;
+    this.maxPlayers = options.maxPlayers ?? DEFAULT_MAX_PLAYERS;
+    this.makeId = options.makeId ?? (() => crypto.randomUUID());
+  }
+
+  get tick(): number {
+    return this.currentTick;
+  }
+
+  /**
+   * Goes up by one every time anything a player could see changes: somebody
+   * joined, somebody left, somebody moved.
+   *
+   * The server uses it to answer "does this client's picture need refreshing?"
+   * without comparing whole snapshots. Phase 3 narrows this down per observer;
+   * for one district it is enough that any change refreshes everyone, because
+   * interest management already keeps each message small.
+   */
+  get revision(): number {
+    return this.currentRevision;
+  }
+
+  get playerCount(): number {
+    return this.players.size;
+  }
+
+  get(id: string): PlayerState | undefined {
+    return this.players.get(id);
+  }
+
+  /** Put a new player into the world at the spawn point. */
+  join(name: string, nowMs: number): JoinResult {
+    if (this.players.size >= this.maxPlayers) {
+      return { ok: false, reason: 'server-full' };
+    }
+    const nameKey = name.toLocaleLowerCase();
+    if (this.namesInUse.has(nameKey)) {
+      return { ok: false, reason: 'name-taken' };
+    }
+
+    const spawn = spawnPoint(this.map);
+    const player: PlayerState = {
+      id: this.makeId(),
+      name,
+      x: spawn.x,
+      y: spawn.y,
+      facing: 's',
+      // Dated in the past so a player may move as soon as they arrive.
+      lastStepAtMs: nowMs - MIN_STEP_INTERVAL_MS,
+      path: [],
+    };
+    this.players.set(player.id, player);
+    this.namesInUse.set(nameKey, player.id);
+    this.currentRevision += 1;
+    return { ok: true, player };
+  }
+
+  /** Take a player out of the world. Safe to call twice. */
+  leave(id: string): void {
+    const player = this.players.get(id);
+    if (player === undefined) return;
+    this.players.delete(id);
+    this.namesInUse.delete(player.name.toLocaleLowerCase());
+    this.currentRevision += 1;
+  }
+
+  /**
+   * "I want to take one step this way."
+   *
+   * Returns `null` when the step was taken, or the reason it was refused.
+   * Every refusal is a normal event: a slow connection produces them, and so
+   * does a modified client. They are treated the same way.
+   */
+  handleStep(id: string, direction: Direction, nowMs: number): RejectReason | null {
+    const player = this.players.get(id);
+    if (player === undefined) return 'not-joined';
+
+    if (nowMs - player.lastStepAtMs < MIN_STEP_INTERVAL_MS) return 'too-fast';
+
+    const from: TilePos = { x: player.x, y: player.y };
+    const to = stepTile(from, direction);
+
+    if (!isValidTile(to) || !this.map.contains(to)) return 'out-of-bounds';
+    if (!canStep(this.map, from, to)) return 'blocked';
+
+    // A manual step cancels whatever route the player was following.
+    player.path = [];
+    this.place(player, to, nowMs);
+    return null;
+  }
+
+  /**
+   * "I want to be over there."
+   *
+   * The server finds the route. The client is never asked for one, so it can
+   * never invent a route through a wall.
+   */
+  handleWalkTo(id: string, to: TilePos): RejectReason | null {
+    const player = this.players.get(id);
+    if (player === undefined) return 'not-joined';
+
+    if (!isValidTile(to)) return 'out-of-bounds';
+    if (!this.map.contains(to)) return 'out-of-bounds';
+    if (!this.map.isWalkable(to)) return 'blocked';
+
+    const path = findPath(this.map, { x: player.x, y: player.y }, to);
+    if (path === null) return 'no-path';
+
+    player.path = path;
+    return null;
+  }
+
+  /** "Stop where I am." Always allowed, for anyone who is in the world. */
+  handleStop(id: string): RejectReason | null {
+    const player = this.players.get(id);
+    if (player === undefined) return 'not-joined';
+    player.path = [];
+    return null;
+  }
+
+  /**
+   * Advance the simulation by one tick: every player following a route moves
+   * one tile, if enough time has passed since their last step.
+   *
+   * Returns the ids of the players who actually moved, so the caller only
+   * sends snapshots when something changed.
+   */
+  advance(nowMs: number): Set<string> {
+    this.currentTick += 1;
+    const moved = new Set<string>();
+
+    for (const player of this.players.values()) {
+      const next = player.path[0];
+      if (next === undefined) continue;
+      if (nowMs - player.lastStepAtMs < MIN_STEP_INTERVAL_MS) continue;
+
+      // The map cannot change today, but it will once doors exist, so the
+      // route is re-checked every single step rather than trusted.
+      if (!canStep(this.map, { x: player.x, y: player.y }, next)) {
+        player.path = [];
+        continue;
+      }
+
+      player.path.shift();
+      this.place(player, next, nowMs);
+      moved.add(player.id);
+    }
+
+    return moved;
+  }
+
+  /**
+   * What one player is allowed to know: themselves, and the players close
+   * enough to matter. Anyone further away is not sent at all, which keeps
+   * bandwidth flat as the city fills up and means a modified client cannot see
+   * across the map.
+   */
+  viewFor(id: string): { you: PlayerView; players: PlayerView[] } | null {
+    const me = this.players.get(id);
+    if (me === undefined) return null;
+
+    const limit = VIEW_RADIUS_TILES + VIEW_MARGIN_TILES;
+    const nearby: PlayerView[] = [];
+    for (const other of this.players.values()) {
+      if (other.id === me.id) continue;
+      if (tileDistance(me, other) > limit) continue;
+      nearby.push(toView(other));
+    }
+
+    return { you: toView(me), players: nearby };
+  }
+
+  private place(player: PlayerState, to: TilePos, nowMs: number): void {
+    const facing = directionBetween({ x: player.x, y: player.y }, to);
+    if (facing !== null) player.facing = facing;
+    player.x = to.x;
+    player.y = to.y;
+    player.lastStepAtMs = nowMs;
+    this.currentRevision += 1;
+  }
+}
+
+function toView(player: PlayerState): PlayerView {
+  return {
+    id: player.id,
+    name: player.name,
+    x: player.x,
+    y: player.y,
+    facing: player.facing,
+  };
+}

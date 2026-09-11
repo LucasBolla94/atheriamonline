@@ -13,6 +13,10 @@
   },
   "dependencies": {
     "@atheriam/protocol": "workspace:*",
-    "@atheriam/shared": "workspace:*"
+    "@atheriam/shared": "workspace:*",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.13"
   }
 }

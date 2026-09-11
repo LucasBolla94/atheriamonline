@@ -106,3 +106,19 @@ export function pixelToTile(pos: PixelPos): TilePos {
     y: Math.floor(pos.py / TILE_SIZE_PX),
   };
 }
+
+/**
+ * Which way you are facing after stepping from `from` to `to`.
+ *
+ * Returns `null` when the two tiles are not one step apart, because then there
+ * is no single direction that describes the move.
+ */
+export function directionBetween(from: TilePos, to: TilePos): Direction | null {
+  if (!isAdjacent(from, to)) return null;
+  const dx = Math.sign(to.x - from.x);
+  const dy = Math.sign(to.y - from.y);
+  for (const [direction, delta] of Object.entries(DIRECTION_STEPS)) {
+    if (delta.x === dx && delta.y === dy) return direction as Direction;
+  }
+  return null;
+}

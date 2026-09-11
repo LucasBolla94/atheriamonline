@@ -1,22 +1,38 @@
 /**
- * Atheriam world server.
+ * Atheriam world server — the process that runs the live city.
  *
- * This process is in charge of everything that happens live: where players are,
- * who can see whom, and what is said out loud. It keeps all of that in memory
- * and never writes a database row per movement step.
- *
- * The real server is built in Phase 1. For now this file only proves that the
- * process starts and that the shared constants are wired up correctly.
+ * It keeps every player's position in memory and never writes a database row
+ * per step. Durable saving is a separate, slower job that arrives in Phase 2.
  */
-import { TICK_HZ, TICK_MS, VIEW_RADIUS_TILES } from '@atheriam/shared';
+import { TICK_HZ, VIEW_RADIUS_TILES } from '@atheriam/shared';
 import { PROTOCOL_VERSION } from '@atheriam/protocol';
+import { starterDistrict } from './map.js';
+import { World } from './world.js';
+import { WorldServer } from './server.js';
 
-function main(): void {
-  console.warn(
-    `[world] Atheriam world server — protocol v${PROTOCOL_VERSION}, ` +
-      `${TICK_HZ} Hz (${TICK_MS} ms per tick), view radius ${VIEW_RADIUS_TILES} tiles.`,
-  );
-  console.warn('[world] Not listening yet. The WebSocket server arrives in Phase 1.');
+const host = process.env['WORLD_HOST'] ?? '0.0.0.0';
+const port = Number(process.env['WORLD_PORT'] ?? 3002);
+
+if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+  console.error(`[world] WORLD_PORT is not a usable port: ${String(process.env['WORLD_PORT'])}`);
+  process.exit(1);
 }
 
-main();
+const world = new World(starterDistrict);
+const server = new WorldServer({ host, port, world });
+server.start();
+
+console.warn(
+  `[world] listening on ws://${host}:${port} — protocol v${PROTOCOL_VERSION}, ` +
+    `${TICK_HZ} Hz, view radius ${VIEW_RADIUS_TILES} tiles, ` +
+    `map ${starterDistrict.width}x${starterDistrict.height} tiles.`,
+);
+
+async function shutdown(signal: string): Promise<void> {
+  console.warn(`[world] ${signal} received, telling players goodbye.`);
+  await server.stop();
+  process.exit(0);
+}
+
+process.on('SIGINT', () => void shutdown('SIGINT'));
+process.on('SIGTERM', () => void shutdown('SIGTERM'));

@@ -1,0 +1,205 @@
+/**
+ * Every message that travels between the browser and the world server.
+ *
+ * The rule from `docs/SPEC.md` that shapes this whole file:
+ *
+ *   The client sends **intents** ("I want to walk there").
+ *   The server sends **facts** ("this is where everyone is").
+ *
+ * There is deliberately no message in which the client tells the server that
+ * something has already happened. If you ever feel the need to add one, the
+ * design is wrong.
+ *
+ * Every message is validated with zod before it is trusted, on both sides.
+ */
+import { z } from 'zod';
+
+/** Bumped whenever a message shape changes in a way old clients cannot read. */
+export const PROTOCOL_VERSION = 1;
+
+/** The eight directions a player may step in. */
+export const directionSchema = z.enum(['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw']);
+
+/** A whole-tile coordinate. Fractions are rejected: there is no half a tile. */
+const tileCoordinateSchema = z.number().int().min(-1_000_000).max(1_000_000);
+
+export const tilePosSchema = z.object({
+  x: tileCoordinateSchema,
+  y: tileCoordinateSchema,
+});
+
+/**
+ * A number the client increases with every intent it sends. The server echoes
+ * it back when it refuses one, so the client knows exactly which intent failed
+ * instead of guessing.
+ */
+const sequenceSchema = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
+
+/**
+ * A display name. Kept deliberately narrow: letters, digits, spaces and a few
+ * separators. This is the first line of defence against names used to fake
+ * system messages or to smuggle markup into other players' screens.
+ */
+export const displayNameSchema = z
+  .string()
+  .trim()
+  .min(3)
+  .max(20)
+  .regex(/^[\p{L}\p{N}][\p{L}\p{N} _-]*$/u, 'Letters and numbers only, may contain spaces.');
+
+// ---------------------------------------------------------------------------
+// Client -> Server. Intents only.
+// ---------------------------------------------------------------------------
+
+/** Ask to enter the world. In Phase 2 this carries a real session ticket. */
+export const joinIntentSchema = z.object({
+  t: z.literal('join'),
+  name: displayNameSchema,
+});
+
+/** Ask to take exactly one step. Sent by the keyboard controls. */
+export const stepIntentSchema = z.object({
+  t: z.literal('step'),
+  seq: sequenceSchema,
+  dir: directionSchema,
+});
+
+/**
+ * Ask to walk to a tile. The server finds the path and walks it one tile per
+ * tick. The client never decides the route: that is gameplay, and gameplay
+ * belongs to the server.
+ */
+export const walkToIntentSchema = z.object({
+  t: z.literal('walkTo'),
+  seq: sequenceSchema,
+  to: tilePosSchema,
+});
+
+/** Ask to stop walking now. */
+export const stopIntentSchema = z.object({
+  t: z.literal('stop'),
+  seq: sequenceSchema,
+});
+
+/** Round-trip timing. `ts` is the client's clock and is echoed back untouched. */
+export const pingSchema = z.object({
+  t: z.literal('ping'),
+  ts: z.number().int(),
+});
+
+export const clientMessageSchema = z.discriminatedUnion('t', [
+  joinIntentSchema,
+  stepIntentSchema,
+  walkToIntentSchema,
+  stopIntentSchema,
+  pingSchema,
+]);
+
+export type ClientMessage = z.infer<typeof clientMessageSchema>;
+export type JoinIntent = z.infer<typeof joinIntentSchema>;
+export type StepIntent = z.infer<typeof stepIntentSchema>;
+export type WalkToIntent = z.infer<typeof walkToIntentSchema>;
+
+// ---------------------------------------------------------------------------
+// Server -> Client. Facts only.
+// ---------------------------------------------------------------------------
+
+/**
+ * A small map sent whole. Phase 3 replaces this with streamed chunks; the
+ * shape is kept simple on purpose so that Phase 1 has something to stand on.
+ *
+ * Each row is a string, one character per tile:
+ *   '.' grass      walkable
+ *   ',' road       walkable
+ *   '#' wall       blocked
+ *   '~' water      blocked
+ */
+export const mapPatchSchema = z.object({
+  width: z.number().int().min(1).max(4096),
+  height: z.number().int().min(1).max(4096),
+  rows: z.array(z.string()).min(1).max(4096),
+});
+
+export type MapPatch = z.infer<typeof mapPatchSchema>;
+
+/** One other player, as seen by this client. */
+export const playerViewSchema = z.object({
+  id: z.string().min(1).max(64),
+  name: displayNameSchema,
+  x: tileCoordinateSchema,
+  y: tileCoordinateSchema,
+  facing: directionSchema,
+});
+
+export type PlayerView = z.infer<typeof playerViewSchema>;
+
+/** Sent once, right after a successful join. */
+export const welcomeSchema = z.object({
+  t: z.literal('welcome'),
+  protocolVersion: z.number().int(),
+  playerId: z.string().min(1).max(64),
+  /** How long one server tick lasts, so the client can smooth movement. */
+  tickMs: z.number().int().positive(),
+  spawn: tilePosSchema,
+  map: mapPatchSchema,
+});
+
+/**
+ * The state of the world around this player, sent every tick in which
+ * something the player can see has changed.
+ *
+ * `you` is separate from `players` so the client always knows which body is
+ * its own without searching by id.
+ */
+export const snapshotSchema = z.object({
+  t: z.literal('snapshot'),
+  tick: z.number().int().nonnegative(),
+  you: playerViewSchema,
+  players: z.array(playerViewSchema).max(500),
+});
+
+/**
+ * An intent the server refused. The client must snap back to the position in
+ * the next snapshot. This is not an error to show the player; it is normal
+ * when the network is slow.
+ */
+export const rejectSchema = z.object({
+  t: z.literal('reject'),
+  seq: sequenceSchema,
+  reason: z.enum([
+    'not-joined',
+    'not-adjacent',
+    'blocked',
+    'too-fast',
+    'out-of-bounds',
+    'no-path',
+    'malformed',
+  ]),
+});
+
+/** The connection is being closed, with a reason a human can read. */
+export const byeSchema = z.object({
+  t: z.literal('bye'),
+  reason: z.enum(['name-taken', 'server-full', 'kicked', 'shutdown', 'protocol-error', 'idle']),
+});
+
+export const pongSchema = z.object({
+  t: z.literal('pong'),
+  ts: z.number().int(),
+  serverTick: z.number().int().nonnegative(),
+});
+
+export const serverMessageSchema = z.discriminatedUnion('t', [
+  welcomeSchema,
+  snapshotSchema,
+  rejectSchema,
+  byeSchema,
+  pongSchema,
+]);
+
+export type ServerMessage = z.infer<typeof serverMessageSchema>;
+export type Welcome = z.infer<typeof welcomeSchema>;
+export type Snapshot = z.infer<typeof snapshotSchema>;
+export type Reject = z.infer<typeof rejectSchema>;
+export type RejectReason = Reject['reason'];
+export type Bye = z.infer<typeof byeSchema>;

@@ -10,6 +10,7 @@ import {
   tileDistance,
   tileToPixel,
   tileWithinChunk,
+  directionBetween,
   type Direction,
 } from './tile.js';
 
@@ -134,5 +135,23 @@ describe('tileToPixel and pixelToTile', () => {
 
   it('works on the negative side of the map', () => {
     expect(pixelToTile({ px: -1, py: -1 })).toEqual({ x: -1, y: -1 });
+  });
+});
+
+describe('directionBetween', () => {
+  it('names the direction of every single step', () => {
+    const origin = { x: 10, y: 10 };
+    const directions: Direction[] = ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'];
+    for (const direction of directions) {
+      expect(directionBetween(origin, step(origin, direction))).toBe(direction);
+    }
+  });
+
+  it('has no answer for standing still', () => {
+    expect(directionBetween({ x: 1, y: 1 }, { x: 1, y: 1 })).toBeNull();
+  });
+
+  it('has no answer for a jump of more than one tile', () => {
+    expect(directionBetween({ x: 1, y: 1 }, { x: 5, y: 1 })).toBeNull();
   });
 });
