@@ -1,1 +1,77 @@
 # Atheriam Online
+
+A browser multiplayer social world set in an original medieval kingdom-city.
+Top-down 2D tiles, one continuous open world, for adults (18+).
+
+**Site:** https://atheriam.online
+
+---
+
+## Where to read first
+
+| File                                               | What it is for                                                    |
+| -------------------------------------------------- | ----------------------------------------------------------------- |
+| [`docs/SPEC.md`](docs/SPEC.md)                     | The source of truth. What the game is and the rules it must obey. |
+| [`docs/PROGRESS.md`](docs/PROGRESS.md)             | Where the project is right now and what happens next.             |
+| [`docs/DECISIONS.md`](docs/DECISIONS.md)           | Decisions taken, why, and what they would cost to change.         |
+| [`docs/OPEN_QUESTIONS.md`](docs/OPEN_QUESTIONS.md) | Questions waiting for the owner.                                  |
+
+## Getting started
+
+You need **Node.js 22 or newer** and **pnpm**.
+
+1. Install the project's dependencies:
+   ```bash
+   pnpm install
+   ```
+2. Copy the example settings file and fill it in:
+   ```bash
+   cp .env.example .env
+   ```
+3. Start the database and cache (needs Docker):
+   ```bash
+   docker compose -f infra/docker-compose.yml up -d
+   ```
+4. Run everything in development mode:
+   ```bash
+   pnpm dev
+   ```
+
+## Checking the code is healthy
+
+```bash
+pnpm typecheck   # TypeScript, strict mode
+pnpm lint        # ESLint
+pnpm test        # Vitest
+```
+
+All three must pass before any change is finished.
+
+## How the project is arranged
+
+```
+apps/
+  client/    the browser game (Phaser + Vite + React)   — arrives in Phase 1
+  world/     the live world server (WebSocket)          — positions in memory
+  api/       the HTTP API (Fastify)                     — accounts, money, items
+packages/
+  protocol/  the messages the client and servers exchange
+  db/        the database schema and migrations
+  economy/   money, the double-entry ledger, idempotency
+  shared/    small helpers used by everything
+infra/
+  docker-compose.yml   PostgreSQL and Redis for local development
+  caddy/               the production reverse proxy
+docs/                  the documents listed above
+```
+
+## The rules that never bend
+
+- The **server decides everything**. The browser only asks.
+- Player positions live in **memory**, never a database write per step.
+- Money is a **double-entry ledger** in whole minor units. No floating point.
+- An item exists in **exactly one place**. Items are never copied.
+- **No blockchain, no crypto, no private keys.**
+- **No assets or names taken from any commercial game**, and no asset with an
+  unclear or NonCommercial licence.
+- **No secrets in the repository.**

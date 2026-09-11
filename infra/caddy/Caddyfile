@@ -1,0 +1,41 @@
+# Production reverse proxy for Atheriam.
+#
+# Caddy gets and renews the HTTPS certificate on its own. Point the domain's
+# DNS at this machine first, then start Caddy.
+#
+#   caddy run --config infra/caddy/Caddyfile
+
+atheriam.online, www.atheriam.online {
+	encode zstd gzip
+
+	# The live game connection (WebSocket) goes to the world server.
+	handle /ws* {
+		reverse_proxy 127.0.0.1:3002
+	}
+
+	# Everything under /api goes to the Fastify server.
+	handle /api/* {
+		reverse_proxy 127.0.0.1:3001
+	}
+
+	# Everything else is the built browser client.
+	handle {
+		root * /srv/atheriam/client
+		try_files {path} /index.html
+		file_server
+	}
+
+	header {
+		# Do not let the site be framed by anyone else.
+		X-Frame-Options "DENY"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# Ask browsers to always use HTTPS for this domain.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	}
+
+	log {
+		output file /var/log/caddy/atheriam.log
+		format json
+	}
+}

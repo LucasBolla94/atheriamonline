@@ -1,0 +1,20 @@
+{
+  "name": "@atheriam/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "HTTP API. Owns accounts, money and items — everything that must be durable.",
+  "main": "./dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc --build",
+    "start": "node dist/index.js",
+    "clean": "rm -rf dist *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@atheriam/db": "workspace:*",
+    "@atheriam/economy": "workspace:*",
+    "@atheriam/protocol": "workspace:*",
+    "@atheriam/shared": "workspace:*"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "name": "@atheriam/world",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Authoritative world server. Live player positions live here, in memory.",
+  "main": "./dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc --build",
+    "start": "node dist/index.js",
+    "clean": "rm -rf dist *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@atheriam/protocol": "workspace:*",
+    "@atheriam/shared": "workspace:*"
+  }
+}
