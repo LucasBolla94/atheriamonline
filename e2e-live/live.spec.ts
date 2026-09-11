@@ -15,18 +15,46 @@ function throwawayName(): string {
 
 const PASSWORD = 'correct horse battery staple';
 
+/**
+ * Make an account on the real site and walk in.
+ *
+ * The live site allows ten registrations a minute from one address, and that
+ * limit is deliberately low because it is where passwords get guessed. This
+ * suite makes more accounts than that, from one address, so it waits and tries
+ * again rather than failing — and the limit is never loosened to suit a test,
+ * because then the test would stop checking the thing that matters.
+ */
 async function createAccountAndEnter(page: Page): Promise<string> {
-  const name = throwawayName();
-  await page.goto('/');
-  await page.getByRole('tab', { name: 'Create an account' }).click();
-  await page.getByLabel('Email address').fill(`${name.toLowerCase()}@example.com`);
-  await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
-  await page.getByLabel('Your name in the city').fill(name);
-  await page.getByLabel('Date of birth').fill('1990-05-04');
-  await page.getByRole('checkbox').check();
-  await page.getByRole('button', { name: 'Create my account' }).click();
-  await expect(page.locator('.hud')).toContainText(name);
-  return name;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const name = throwawayName();
+
+    await page.goto('/');
+    await page.getByRole('tab', { name: 'Create an account' }).click();
+    await page.getByLabel('Email address').fill(`${name.toLowerCase()}@example.com`);
+    await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
+    await page.getByLabel('Your name in the city').fill(name);
+    await page.getByLabel('Date of birth').fill('1990-05-04');
+    await page.getByRole('checkbox').check();
+    await page.getByRole('button', { name: 'Create my account' }).click();
+
+    const arrived = page.locator('.hud').filter({ hasText: name });
+    const refused = page.getByRole('alert');
+    await expect(arrived.or(refused).first()).toBeVisible({ timeout: 20_000 });
+
+    if (await arrived.isVisible()) return name;
+
+    const why = (await refused.innerText()).toLowerCase();
+    if (!why.includes('rate') && !why.includes('too many') && !why.includes('retry')) {
+      throw new Error(
+        `The site refused the account for a reason that is not the rate limit: ${why}`,
+      );
+    }
+
+    // The window is a minute, so waiting most of one is enough.
+    await page.waitForTimeout(35_000);
+  }
+
+  throw new Error('Could not make an account: the rate limit held for three attempts.');
 }
 
 test('the site is served over HTTPS and asks people in', async ({ page }) => {

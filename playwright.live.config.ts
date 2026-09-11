@@ -15,7 +15,10 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: './e2e-live',
   testMatch: '**/*.spec.ts',
-  timeout: 60_000,
+  // Long, because making an account can have to wait out the live site's
+  // registration rate limit — which is a real limit doing its job, not a
+  // problem to be configured away.
+  timeout: 150_000,
   expect: { timeout: 20_000 },
   fullyParallel: false,
   workers: 1,
