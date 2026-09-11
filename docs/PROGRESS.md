@@ -10,11 +10,9 @@ Last updated: 2026-09-11
 
 ## Current phase
 
-**Phase 9 — Production** — done. **The game is live at
+**Phase 5 — Items and the ledger** — done. **The game is live at
 https://atheriam.online.**
-Next up: **Phase 5 — Items and the ledger**, then trading (6) and houses (7).
-Those three were left until after the site was live, because the owner asked
-for a working site first.
+Next up: **Phase 6 — Trading**, then **Phase 7 — Houses**.
 
 ## Phase list
 
@@ -70,12 +68,18 @@ charge.
 - [x] Moderation audit log, written in the same transaction as the punishment
 - [x] Moderator routes: mute, unmute, kick, ban, unban, and the report queue
 
-### Phase 5 — Items and the ledger
+### Phase 5 — Items and the ledger — DONE
 
-- [ ] `packages/economy`: money type, double-entry ledger, idempotency
-- [ ] Item definitions and item instances
-- [ ] Inventory UI
-- [ ] Conservation tests (money and items can never be created or lost)
+- [x] `packages/economy`: money as bigint minor units, the double-entry
+      ledger, and what makes repeating a request safe
+- [x] Item definitions and item instances, with one holder each
+- [x] Inventory and purse in the interface, opened from the readout
+- [x] Money enters the world in two places only: a welcome purse and a daily
+      reward, both minted and audited
+- [x] Conservation tests: the whole ledger always sums to zero, five identical
+      requests pay once, two payments racing from one purse leave it at zero
+      and only one of them lands, and an item moved thirty times is still one
+      item
 
 ### Phase 6 — Trading
 
@@ -190,6 +194,9 @@ you can walk into.
 
 Press **Enter** to talk, or use the box in the bottom-left corner. Only people
 within about twelve tiles hear you, so walk closer to join a conversation.
+
+You start with **50 Crowns** and three things to your name. Click **Purse** in
+the readout to see them, and to collect ten Crowns once a day.
 
 Click somebody's name in the chat to **stop hearing them** (they are never
 told) or to **report them** to a moderator.

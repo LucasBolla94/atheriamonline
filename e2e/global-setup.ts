@@ -19,6 +19,17 @@ export const E2E_DATABASE_NAME = 'atheriam_e2e';
 export const E2E_REDIS_DB = 14;
 
 /**
+ * Ports of their own.
+ *
+ * The live game runs on this machine too, on 3001 and 3002. Without separate
+ * ports the browser tests either refuse to start or, worse, quietly drive the
+ * real servers and make test accounts in the real city.
+ */
+export const E2E_API_PORT = 3101;
+export const E2E_WORLD_PORT = 3102;
+export const E2E_CLIENT_PORT = 5273;
+
+/**
  * Read `.env` without adding a dependency.
  *
  * Only `KEY=value` lines matter; anything else is a comment or blank.
@@ -60,7 +71,14 @@ export function e2eEnv(): Record<string, string> {
     LOG_LEVEL: 'warn',
     DATABASE_URL: databaseUrl.toString(),
     REDIS_URL: redisUrl.toString(),
-    PUBLIC_ORIGIN: 'http://127.0.0.1:5173',
+    API_PORT: String(E2E_API_PORT),
+    WORLD_PORT: String(E2E_WORLD_PORT),
+    PUBLIC_ORIGIN: `http://127.0.0.1:${E2E_CLIENT_PORT}`,
+    // The browser has to be told where these are, or it would use the
+    // development defaults and talk to whatever else is on this machine.
+    VITE_API_URL: `http://127.0.0.1:${E2E_API_PORT}`,
+    VITE_WORLD_URL: `ws://127.0.0.1:${E2E_WORLD_PORT}`,
+    VITE_PORT: String(E2E_CLIENT_PORT),
     // Every browser test comes from the same address and makes an account, so
     // the real limits would stop the suite rather than an attacker. The limits
     // themselves are tested directly in routes.integration.test.ts.
@@ -69,7 +87,14 @@ export function e2eEnv(): Record<string, string> {
   };
 }
 
-export default async function globalSetup(): Promise<void> {
+/**
+ * Build the test database from nothing.
+ *
+ * This is run by `pretest:e2e`, **before** Playwright starts any servers.
+ * That order matters: the API reads from the database as it starts, and it
+ * used to start against a database that was about to be dropped from under it.
+ */
+export async function prepareDatabase(): Promise<void> {
   const base = readEnvFile();
   const adminUrl = base['DATABASE_URL'];
   if (adminUrl === undefined) {
@@ -88,6 +113,29 @@ export default async function globalSetup(): Promise<void> {
   const sql = postgres(target, { max: 1, onnotice: () => {} });
   try {
     await migrate(drizzle(sql), { migrationsFolder: join(root, 'packages', 'db', 'migrations') });
+  } finally {
+    await sql.end({ timeout: 5 });
+  }
+}
+
+/**
+ * Check the servers Playwright started are talking to a database that exists.
+ *
+ * Nothing is dropped here. By the time this runs the API is already connected,
+ * and pulling the database out from under a running server is how you get an
+ * error about a missing table instead of an error about the real problem.
+ */
+export default async function globalSetup(): Promise<void> {
+  const target = e2eEnv()['DATABASE_URL'] ?? '';
+  const sql = postgres(target, { max: 1, onnotice: () => {} });
+  try {
+    await sql`SELECT 1 FROM item_definitions LIMIT 1`;
+  } catch {
+    throw new Error(
+      `The test database ${E2E_DATABASE_NAME} is not ready. ` +
+        'Run `pnpm test:e2e`, which prepares it first, rather than calling ' +
+        'playwright directly.',
+    );
   } finally {
     await sql.end({ timeout: 5 });
   }

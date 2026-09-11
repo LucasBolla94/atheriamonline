@@ -4,7 +4,9 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   server: {
-    port: 5173,
+    // The browser tests run their own copy on another port, so that they never
+    // collide with — or quietly drive — the live game on this machine.
+    port: Number(process.env['VITE_PORT'] ?? 5173),
     strictPort: true,
   },
   build: {

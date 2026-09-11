@@ -13,6 +13,7 @@ import type { Database } from '@atheriam/db';
 import { SessionStore } from './auth/sessions.js';
 import { registerRoutes } from './routes.js';
 import { redisWorldLink, type WorldLink } from './worldLink.js';
+import { ensureCatalogue } from './items.js';
 import type { Config } from './config.js';
 import { isProduction } from './config.js';
 
@@ -62,6 +63,11 @@ export async function buildServer(options: BuildOptions): Promise<FastifyInstanc
     redis,
     keyGenerator: (request) => request.ip,
   });
+
+  // Every kind of thing the game knows about is written down at start-up, so
+  // adding one is a line of code rather than a line of SQL somebody has to
+  // remember to run on the server.
+  await ensureCatalogue(db);
 
   await registerRoutes(app, {
     db,

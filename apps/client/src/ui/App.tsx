@@ -26,6 +26,7 @@ import { AuthScreen } from './AuthScreen.js';
 import { ChatPanel } from './ChatPanel.js';
 import { Hud } from './Hud.js';
 import { PlayerActions } from './PlayerActions.js';
+import { Pouch } from './Pouch.js';
 import { errorMessage, strings } from './strings.js';
 
 /** Where the world server is. In production Caddy serves it under /ws. */
@@ -50,6 +51,11 @@ export function App(): JSX.Element {
   const [chosenPlayer, setChosenPlayer] = useState<string | null>(null);
   const [blocked, setBlocked] = useState<readonly string[]>([]);
   const [safetyBusy, setSafetyBusy] = useState(false);
+  const [pouchOpen, setPouchOpen] = useState(false);
+  const [purse, setPurse] = useState<api.Purse | null>(null);
+  const [items, setItems] = useState<readonly api.InventoryItem[]>([]);
+  const [pouchNotice, setPouchNotice] = useState<string | null>(null);
+  const [pouchBusy, setPouchBusy] = useState(false);
 
   const connectionRef = useRef<WorldConnection | null>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
@@ -100,6 +106,34 @@ export function App(): JSX.Element {
       if (result.ok) setBlocked(result.data.names);
     })();
   }, []);
+
+  /** Ask the server what we own. The browser never works this out itself. */
+  const refreshPouch = useCallback(() => {
+    void (async () => {
+      const [balance, carried] = await Promise.all([api.purse(), api.inventory()]);
+      if (balance.ok) setPurse(balance.data);
+      if (carried.ok) setItems(carried.data.items);
+    })();
+  }, []);
+
+  const handleClaimDaily = useCallback(() => {
+    setPouchBusy(true);
+    setPouchNotice(null);
+    void (async () => {
+      const result = await api.claimDailyReward();
+      setPouchBusy(false);
+      if (!result.ok) {
+        setPouchNotice(result.message);
+        return;
+      }
+      setPouchNotice(
+        result.data.claimed
+          ? strings.pouch.claimed(result.data.display)
+          : strings.pouch.alreadyClaimed,
+      );
+      refreshPouch();
+    })();
+  }, [refreshPouch]);
 
   const handleSay = useCallback((text: string) => {
     setChatNotice(null);
@@ -160,6 +194,7 @@ export function App(): JSX.Element {
       if (cancelled) return;
       if (who.ok) {
         refreshBlocked();
+        refreshPouch();
         await enterCity();
       } else {
         setBusy(false);
@@ -168,7 +203,7 @@ export function App(): JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, [enterCity, refreshBlocked]);
+  }, [enterCity, refreshBlocked, refreshPouch]);
 
   const handleCreate = useCallback(
     (input: { email: string; password: string; dateOfBirth: string; characterName: string }) => {
@@ -181,10 +216,11 @@ export function App(): JSX.Element {
           setBusy(false);
           return;
         }
+        refreshPouch();
         await enterCity();
       })();
     },
-    [enterCity],
+    [enterCity, refreshPouch],
   );
 
   const handleLogIn = useCallback(
@@ -198,10 +234,12 @@ export function App(): JSX.Element {
           setBusy(false);
           return;
         }
+        refreshBlocked();
+        refreshPouch();
         await enterCity();
       })();
     },
-    [enterCity],
+    [enterCity, refreshBlocked, refreshPouch],
   );
 
   const handleLogOut = useCallback(() => {
@@ -215,6 +253,9 @@ export function App(): JSX.Element {
       setWorld(null);
       setChat([]);
       setChosenPlayer(null);
+      setPouchOpen(false);
+      setPurse(null);
+      setItems([]);
       setState('idle');
       setError(null);
       setBusy(false);
@@ -261,6 +302,12 @@ export function App(): JSX.Element {
           y={you.y}
           nearbyCount={nearbyCount}
           touch={touch}
+          purse={purse?.display ?? null}
+          onOpenPouch={() => {
+            setPouchNotice(null);
+            refreshPouch();
+            setPouchOpen(true);
+          }}
           onLogOut={handleLogOut}
         />
       )}
@@ -271,6 +318,16 @@ export function App(): JSX.Element {
           notice={chatNotice}
           onSay={handleSay}
           onChoosePlayer={setChosenPlayer}
+        />
+      )}
+      {pouchOpen && (
+        <Pouch
+          purse={purse}
+          items={items}
+          busy={pouchBusy}
+          notice={pouchNotice}
+          onClaimDaily={handleClaimDaily}
+          onClose={() => setPouchOpen(false)}
         />
       )}
       {chosenPlayer !== null && (

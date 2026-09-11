@@ -97,6 +97,46 @@ export async function me(): Promise<ApiResult<{ character: CharacterSummary }>> 
   return request('/api/me');
 }
 
+/** One movement of money in or out of the purse. */
+export interface PurseEntry {
+  readonly amount: string;
+  readonly display: string;
+  readonly reason: string;
+  readonly at: string;
+}
+
+export interface Purse {
+  /** Minor units, as a string. Never a number: JSON cannot be trusted with money. */
+  readonly amount: string;
+  readonly display: string;
+  readonly history: readonly PurseEntry[];
+}
+
+/** What is in your purse, and how it got there. */
+export async function purse(): Promise<ApiResult<Purse>> {
+  return request('/api/me/purse');
+}
+
+export interface InventoryItem {
+  readonly id: string;
+  readonly definitionId: string;
+  readonly name: string;
+  readonly kind: string;
+  readonly description: string;
+}
+
+/** Everything you are carrying. */
+export async function inventory(): Promise<ApiResult<{ items: InventoryItem[] }>> {
+  return request('/api/me/inventory');
+}
+
+/** Collect today's reward. Asking twice in a day is not a second payment. */
+export async function claimDailyReward(): Promise<
+  ApiResult<{ claimed: boolean; display: string; purse: string }>
+> {
+  return request('/api/me/daily-reward', { method: 'POST' });
+}
+
 /** "I do not want to hear from this person." Takes effect at once. */
 export async function blockPlayer(name: string): Promise<ApiResult<{ ok: true }>> {
   return request('/api/players/block', { method: 'POST', body: JSON.stringify({ name }) });

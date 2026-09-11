@@ -11,6 +11,7 @@
  *    on the character row and are updated on logout and by a slow job.
  */
 import {
+  bigint,
   boolean,
   date,
   index,
@@ -206,6 +207,113 @@ export const moderationLog = pgTable(
   ],
 );
 
+/**
+ * One movement of money: where from, where to, how much, and why.
+ *
+ * The two ledger rows that carry it out point at this. It exists so that the
+ * idempotency key has somewhere to be unique: asking twice with the same key
+ * fails the second insert, which is what makes a repeated request safe rather
+ * than a second payment.
+ */
+export const transfers = pgTable(
+  'transfers',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    /**
+     * Send the same key twice and the money moves once. The unique index is
+     * what enforces that — not code, which could race with itself.
+     */
+    idempotencyKey: text('idempotency_key').notNull(),
+    fromAccount: text('from_account').notNull(),
+    toAccount: text('to_account').notNull(),
+    /**
+     * Minor units. BIGINT, never a floating point number: see `docs/SPEC.md`
+     * section 3.3. Read back as a string by the driver and turned into a
+     * bigint, so no amount ever passes through a `number`.
+     */
+    amount: bigint('amount', { mode: 'bigint' }).notNull(),
+    reason: text('reason').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex('transfers_idempotency_key').on(table.idempotencyKey)],
+);
+
+/**
+ * The ledger itself. Rows are only ever added, never changed or deleted.
+ *
+ * A balance is the sum of an account's rows. Every row of the whole table,
+ * added together, must come to exactly zero — that is what proves no money has
+ * been invented or lost.
+ */
+export const ledgerEntries = pgTable(
+  'ledger_entries',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    transferId: uuid('transfer_id')
+      .notNull()
+      .references(() => transfers.id, { onDelete: 'restrict' }),
+    /** `player:<characterId>`, `system:mint`, `system:sink`, `escrow:trade:<id>`. */
+    account: text('account').notNull(),
+    /** Negative takes money out, positive puts it in. */
+    amount: bigint('amount', { mode: 'bigint' }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('ledger_entries_account_idx').on(table.account),
+    index('ledger_entries_transfer_idx').on(table.transferId),
+  ],
+);
+
+/** Where an item instance can be. Exactly one of these, at any moment. */
+export const itemHolder = pgEnum('item_holder', ['character', 'house', 'escrow']);
+
+/**
+ * A kind of thing: "an oak stool", not a particular oak stool.
+ *
+ * The id is a readable name rather than a number, because it appears in code,
+ * in tests and in bug reports, and `oak-stool` is easier to argue about than
+ * `47`.
+ */
+export const itemDefinitions = pgTable('item_definitions', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  /** What it is for: furniture goes in a house, a trinket is carried. */
+  kind: text('kind').notNull(),
+  description: text('description').notNull().default(''),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * One real object, owned by exactly one holder.
+ *
+ * The rule from `docs/SPEC.md` section 3.4 — an item is in exactly one place —
+ * is enforced by the shape of this table. There is one holder column pair, so
+ * being in two places at once is not something the database can express.
+ * Moving an item changes those two columns; nothing is ever copied.
+ */
+export const itemInstances = pgTable(
+  'item_instances',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    definitionId: text('definition_id')
+      .notNull()
+      .references(() => itemDefinitions.id, { onDelete: 'restrict' }),
+    holderKind: itemHolder('holder_kind').notNull(),
+    /** A character id, a house id, or a trade id, depending on the kind. */
+    holderId: uuid('holder_id').notNull(),
+    /** Where it stands, once it has been placed in a house. Phase 7. */
+    x: integer('x'),
+    y: integer('y'),
+    rotation: integer('rotation').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('item_instances_holder_idx').on(table.holderKind, table.holderId),
+    index('item_instances_definition_idx').on(table.definitionId),
+  ],
+);
+
 export type Account = typeof accounts.$inferSelect;
 export type NewAccount = typeof accounts.$inferInsert;
 export type Character = typeof characters.$inferSelect;
@@ -215,3 +323,7 @@ export type Report = typeof reports.$inferSelect;
 export type NewReport = typeof reports.$inferInsert;
 export type ModerationEntry = typeof moderationLog.$inferSelect;
 export type NewModerationEntry = typeof moderationLog.$inferInsert;
+export type Transfer = typeof transfers.$inferSelect;
+export type LedgerEntry = typeof ledgerEntries.$inferSelect;
+export type ItemDefinition = typeof itemDefinitions.$inferSelect;
+export type ItemInstance = typeof itemInstances.$inferSelect;

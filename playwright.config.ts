@@ -1,5 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
-import { e2eEnv } from './e2e/global-setup.js';
+import { E2E_API_PORT, E2E_CLIENT_PORT, E2E_WORLD_PORT, e2eEnv } from './e2e/global-setup.js';
 
 /**
  * Browser tests.
@@ -26,7 +26,7 @@ export default defineConfig({
   reporter: process.env['CI'] === undefined ? 'list' : [['list'], ['html', { open: 'never' }]],
 
   use: {
-    baseURL: 'http://127.0.0.1:5173',
+    baseURL: `http://127.0.0.1:${E2E_CLIENT_PORT}`,
     trace: 'retain-on-failure',
   },
 
@@ -38,7 +38,7 @@ export default defineConfig({
   webServer: [
     {
       command: 'pnpm --filter @atheriam/api dev',
-      port: 3001,
+      port: E2E_API_PORT,
       env,
       reuseExistingServer: false,
       stdout: 'pipe',
@@ -46,7 +46,7 @@ export default defineConfig({
     },
     {
       command: 'pnpm --filter @atheriam/world dev',
-      port: 3002,
+      port: E2E_WORLD_PORT,
       env,
       reuseExistingServer: false,
       stdout: 'pipe',
@@ -54,7 +54,7 @@ export default defineConfig({
     },
     {
       command: 'pnpm --filter @atheriam/client dev',
-      port: 5173,
+      port: E2E_CLIENT_PORT,
       env,
       reuseExistingServer: false,
       stdout: 'pipe',

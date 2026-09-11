@@ -38,6 +38,10 @@ import {
   type ModerationFailure,
 } from './moderation.js';
 import type { WorldLink } from './worldLink.js';
+import { formatAmount } from '@atheriam/economy';
+import { historyOf, purseOf } from './economy.js';
+import { inventoryOf } from './items.js';
+import { DAILY_CROWNS, grantDailyReward, grantWelcome } from './gifts.js';
 import { emailSchema } from './auth/email.js';
 import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH } from './auth/password.js';
 import { SESSION_TTL_SECONDS, type SessionStore } from './auth/sessions.js';
@@ -69,7 +73,11 @@ const loginBody = z.object({
 });
 
 /** What the player is told when something is refused. */
-const MESSAGES: Record<RegisterFailure | LoginFailure | ModerationFailure, string> = {
+const MESSAGES: Record<
+  RegisterFailure | LoginFailure | ModerationFailure | 'unknown-problem',
+  string
+> = {
+  'unknown-problem': 'Something went wrong. Please try again.',
   'no-such-character': 'Nobody in the city goes by that name.',
   'not-yourself': 'You cannot do that to yourself.',
   'not-a-moderator': 'Only a moderator may do that.',
@@ -173,6 +181,11 @@ export async function registerRoutes(app: FastifyInstance, options: RouteOptions
         .send({ error: result.reason, message: MESSAGES[result.reason] });
     }
 
+    // The purse and the few starter belongings. Done after the account, and
+    // again on every login, so that a failure here is put right next time
+    // rather than leaving somebody with nothing forever.
+    await grantWelcome(db, result.character.id);
+
     const token = await sessions.create({
       accountId: result.account.id,
       characterId: result.character.id,
@@ -199,6 +212,9 @@ export async function registerRoutes(app: FastifyInstance, options: RouteOptions
       const code = result.reason === 'wrong-credentials' ? 401 : 403;
       return reply.code(code).send({ error: result.reason, message: MESSAGES[result.reason] });
     }
+
+    // Cheap, and it repairs an account whose welcome gift never landed.
+    await grantWelcome(db, result.character.id);
 
     const token = await sessions.create({
       accountId: result.account.id,
@@ -257,6 +273,67 @@ export async function registerRoutes(app: FastifyInstance, options: RouteOptions
     });
 
     return reply.send({ ticket });
+  });
+
+  // ---------------------------------------------------------------------
+  // What you own: your purse and your belongings.
+  // ---------------------------------------------------------------------
+
+  /**
+   * What is in your purse, and how it got there.
+   *
+   * The amount is sent as a string, not a number. JSON has no integers big
+   * enough to be trusted with money, and a `number` is exactly what the whole
+   * economy is built to avoid.
+   */
+  app.get('/api/me/purse', async (request, reply) => {
+    const who = await requirePlayer(request, reply);
+    if (who === null) return reply;
+
+    const balance = await purseOf(db, who.character.id);
+    const history = await historyOf(db, who.character.id);
+
+    return reply.send({
+      amount: balance.toString(),
+      display: formatAmount(balance),
+      history: history.map((entry) => ({
+        amount: entry.amount.toString(),
+        display: formatAmount(entry.amount),
+        reason: entry.reason,
+        at: entry.at,
+      })),
+    });
+  });
+
+  /** Everything you are carrying. */
+  app.get('/api/me/inventory', async (request, reply) => {
+    const who = await requirePlayer(request, reply);
+    if (who === null) return reply;
+    return reply.send({ items: await inventoryOf(db, who.character.id) });
+  });
+
+  /**
+   * Collect today's reward.
+   *
+   * Asking twice on the same day is not an error and is not a second payment:
+   * the answer says it was already collected.
+   */
+  app.post('/api/me/daily-reward', async (request, reply) => {
+    const who = await requirePlayer(request, reply);
+    if (who === null) return reply;
+
+    const result = await grantDailyReward(db, who.character.id);
+    if (!result.ok) {
+      return reply.code(400).send({ error: result.reason, message: MESSAGES['unknown-problem'] });
+    }
+
+    const balance = await purseOf(db, who.character.id);
+    return reply.send({
+      claimed: !result.alreadyClaimed,
+      amount: DAILY_CROWNS.toString(),
+      display: formatAmount(DAILY_CROWNS),
+      purse: formatAmount(balance),
+    });
   });
 
   // ---------------------------------------------------------------------

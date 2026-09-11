@@ -456,3 +456,83 @@ nights is long enough that a problem noticed on a Monday can be undone back to
 the Monday before. An empty backup is worse than no backup, because it looks
 like one — hence the size check.
 **Cost to change:** None. Two numbers in one script.
+
+## D-041 — Money is a bigint from the database to the screen, and a string on the wire
+
+**Date:** 2026-09-11
+**Decision:** An amount is `bigint` minor units in the database, in the
+servers, and in `@atheriam/economy`. Over HTTP it travels as a **string**, and
+the browser shows it as text without ever turning it into a number.
+**Why:** JSON has no integer type — every number in it is a double, and a
+double cannot hold every value a `bigint` can. Sending money as a JSON number
+would quietly round large amounts at the one point in the system where nobody
+is looking. A string cannot be arithmetic'd by accident either, which is the
+second reason: the browser has no business doing sums with money.
+**Cost to change:** High, and there is no reason to.
+
+## D-042 — Repeating a request is made safe by a unique index, not by a check
+
+**Date:** 2026-09-11
+**Decision:** Every movement of money carries an idempotency key, and that key
+has a unique index on the `transfers` table. Asking twice writes once.
+**Why:** A check in code — "have we done this already?" — is a race: two
+requests can both look, both see nothing, and both pay. The database is the
+only thing that can answer that question for two transactions at once. There
+is a test that fires five identical requests at the same moment and checks the
+purse afterwards.
+**Cost to change:** None, and doing so would reintroduce the race.
+
+## D-043 — A balance is summed from the ledger, under an advisory lock
+
+**Date:** 2026-09-11
+**Decision:** A balance is `SUM(amount)` over an account's rows. Before a
+movement is written, the transaction takes a PostgreSQL advisory lock on each
+account involved, in sorted order.
+**Why:** A `balance` column would be faster and would be wrong eventually —
+and wrong quietly, with nothing to compare it against. Summing means the
+ledger is the only truth, and the books can always be checked. The lock is
+what stops the same Crown being spent twice by two requests that both read the
+balance before either wrote: sorted order is what stops two such transfers
+deadlocking against each other.
+**Cost to change:** Low. A cached balance can be added later as a cache, with
+a job that checks it against the ledger — which is what `docs/SPEC.md` section
+9 already describes.
+
+## D-044 — An item's holder is one pair of columns, so two places cannot be expressed
+
+**Date:** 2026-09-11
+**Decision:** `item_instances` has one `holder_kind` and one `holder_id`.
+Moving an item is an `UPDATE` whose `WHERE` clause names where it was.
+**Why:** "An item is in exactly one place" is a rule in `docs/SPEC.md` section
+3.4, and the cheapest way to keep a rule is to make breaking it
+unrepresentable. There is no join table that could hold two rows, and no
+insert anywhere that copies an instance. Naming the old holder in the `WHERE`
+makes the check and the move a single statement, so two people cannot both
+take the same item: the loser updates nothing and is told so.
+**Cost to change:** High. It is the shape of the table and the reason to trust
+it.
+
+## D-045 — Money is created in exactly two places, and the welcome repairs itself
+
+**Date:** 2026-09-11
+**Decision:** New money comes only from a welcome purse (50 Crowns, once per
+character) and a daily reward (10 Crowns, once per character per day), both
+minted from `system:mint` with a key that says who and when. The welcome is
+attempted again on every login.
+**Why:** `docs/SPEC.md` section 9 allows money to be created only by a named,
+audited operation, and the fewer of those there are the easier the economy is
+to reason about. Retrying the welcome on login costs one indexed lookup and
+means a gift that failed once is put right by the player simply coming back,
+rather than by somebody noticing.
+**Cost to change:** Low. They are two functions in `gifts.ts`.
+
+## D-046 — The browser tests run on ports of their own
+
+**Date:** 2026-09-11
+**Decision:** The browser tests start the API on 3101, the world server on
+3102 and the client on 5273, and the client is told where to find them.
+**Why:** The live game runs on this same machine on 3001 and 3002. The tests
+first refused to start because the port was taken — and the worse outcome was
+the one that nearly happened instead: the browser tests quietly driving the
+real servers and making test accounts in the real city.
+**Cost to change:** None.

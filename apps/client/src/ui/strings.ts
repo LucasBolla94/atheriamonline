@@ -86,6 +86,20 @@ export const strings = {
     tooChatty: 'That was a lot at once. Give it a moment.',
   },
 
+  pouch: {
+    title: 'Your purse',
+    open: 'Purse',
+    loading: '…',
+    claimDaily: "Collect today's reward",
+    claimed: (amount: string): string => `You collected ${amount}.`,
+    alreadyClaimed: 'You have already collected today. Come back tomorrow.',
+    carrying: (count: number): string =>
+      count === 1 ? 'You are carrying 1 thing' : `You are carrying ${count} things`,
+    empty: 'Your hands are empty.',
+    recently: 'Recently',
+    close: 'Close',
+  },
+
   safety: {
     title: (name: string): string => `What to do about ${name}`,
     subtitle: 'Blocking is private. Reporting goes to a moderator.',

@@ -15,6 +15,13 @@
       "when": 1789131412228,
       "tag": "0001_puzzling_caretaker",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789134400192,
+      "tag": "0002_curvy_george_stacy",
+      "breakpoints": true
     }
   ]
 }
