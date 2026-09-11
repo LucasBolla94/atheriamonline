@@ -48,6 +48,7 @@ function snapshot(x: number, y: number): ServerMessage {
     tick: 1,
     you: { id: 'p1', name: 'Aldric', x, y, facing: 's' },
     players: [],
+    gone: [],
   };
 }
 

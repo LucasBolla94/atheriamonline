@@ -81,8 +81,16 @@ export class WorldConnection {
 
   /** Where the player is, according to the server. Never set locally. */
   you: PlayerView | null = null;
-  others: PlayerView[] = [];
   playerId: string | null = null;
+
+  /**
+   * Everybody else the player can see, by character id.
+   *
+   * The server sends differences, not pictures: a snapshot names the people
+   * who moved and the people who left, and says nothing about anybody
+   * standing still. So this is built up over time rather than replaced.
+   */
+  private readonly nearby = new Map<string, PlayerView>();
   /** How big the city is. Sent once, on welcome. */
   world: WorldInfo | null = null;
 
@@ -122,6 +130,11 @@ export class WorldConnection {
 
   get currentState(): ConnectionState {
     return this.state;
+  }
+
+  /** Everybody else the player can see right now. */
+  get others(): PlayerView[] {
+    return [...this.nearby.values()];
   }
 
   /**
@@ -172,9 +185,10 @@ export class WorldConnection {
     if (this.state === 'closed') return;
     this.socket = null;
     this.pendingTicket = null;
-    // The map goes with the connection. Keeping it would mean a reconnection
-    // drew yesterday's city until the new chunks caught up.
+    // The map and the crowd go with the connection. Keeping either would mean
+    // a reconnection drew yesterday's city until the new messages caught up.
     this.chunks.clear();
+    this.nearby.clear();
     this.chunkRevision += 1;
     this.setState('closed');
     this.handlers.onClosed?.(reason);
@@ -239,8 +253,12 @@ export class WorldConnection {
       }
       case 'snapshot': {
         this.you = message.you;
-        this.others = message.players;
-        this.handlers.onSnapshot?.(message.you, message.players);
+        for (const player of message.players) this.nearby.set(player.id, player);
+        for (const id of message.gone) this.nearby.delete(id);
+        // The server never puts the player in their own list, but a client
+        // reconnecting mid-tick could see themselves once. Belt and braces.
+        this.nearby.delete(message.you.id);
+        this.handlers.onSnapshot?.(message.you, this.others);
         return;
       }
       case 'reject': {

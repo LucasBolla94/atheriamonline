@@ -3,7 +3,27 @@
 A browser multiplayer social world set in an original medieval kingdom-city.
 Top-down 2D tiles, one continuous open world, for adults (18+).
 
-**Site:** https://atheriam.online
+**Site:** https://atheriam.online — live, on desktop and on a phone in
+landscape.
+
+---
+
+## Running it on the server
+
+```bash
+./scripts/deploy.sh    # build, install, restart, check. Safe to run again.
+pnpm test:live         # drive a real browser against the real site
+```
+
+The two servers run as systemd services (`atheriam-api`, `atheriam-world`)
+behind Caddy, which holds the HTTPS certificate. PostgreSQL and Redis run in
+Docker and listen on this machine only. The database is backed up every night
+to `/var/backups/atheriam`, keeping fourteen nights.
+
+```bash
+systemctl status atheriam-api atheriam-world caddy
+journalctl -u atheriam-world -f
+```
 
 ---
 

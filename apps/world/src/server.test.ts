@@ -521,3 +521,141 @@ describe('talking over a real socket', () => {
     expect(bryn.latest('chat')).toBeUndefined();
   });
 });
+
+/**
+ * A snapshot is a difference, not a picture.
+ *
+ * This is what keeps a crowded square affordable. A load test of 150 players
+ * standing in one place measured 144 kB a second each, almost all of it
+ * repeating that nobody had moved. These tests are what stop that coming back.
+ */
+describe('snapshots only carry what changed', () => {
+  const field = new GameMap(Array.from({ length: 60 }, () => '.'.repeat(60)));
+  let server: WorldServer;
+  let world: World;
+  let tickets: FakeTickets;
+  let port: number;
+  const clients: TestClient[] = [];
+
+  beforeEach(async () => {
+    world = new World(field);
+    tickets = new FakeTickets();
+    server = new WorldServer({
+      host: '127.0.0.1',
+      port: 0,
+      world,
+      resolveTicket: tickets.spend,
+      savePosition: tickets.save,
+    });
+    server.start();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    port = server.port;
+  });
+
+  afterEach(async () => {
+    for (const client of clients) client.close();
+    clients.length = 0;
+    await server.stop();
+  });
+
+  async function joinAt(id: string, name: string, x: number, y: number): Promise<TestClient> {
+    const client = await TestClient.connect(port);
+    clients.push(client);
+    client.send({ t: 'join', ticket: tickets.issue(character(id, name, x, y)) });
+    await client.waitFor('snapshot');
+    return client;
+  }
+
+  function snapshots(client: TestClient): Array<Extract<ServerMessage, { t: 'snapshot' }>> {
+    return client.received.filter(
+      (message): message is Extract<ServerMessage, { t: 'snapshot' }> => message.t === 'snapshot',
+    );
+  }
+
+  /**
+   * Wait for the city to stop changing.
+   *
+   * Somebody else joining reaches the other players on the next tick, not on
+   * the one they arrived in. Without this pause a test clears its inbox
+   * half-way through being told about the person who just walked in, and then
+   * blames the difference for containing them.
+   */
+  async function settle(): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, 350));
+  }
+
+  it('tells a new player about everybody already standing there', async () => {
+    await joinAt('c-bryn', 'Bryn', 10, 11);
+    const aldric = await joinAt('c-aldric', 'Aldric', 10, 10);
+
+    const first = snapshots(aldric)[0];
+    expect(first?.players.map((player) => player.name)).toEqual(['Bryn']);
+  });
+
+  it('says nothing at all while a crowd stands still', async () => {
+    const aldric = await joinAt('c-aldric', 'Aldric', 10, 10);
+    await joinAt('c-bryn', 'Bryn', 11, 10);
+    await joinAt('c-cara', 'Cara', 12, 10);
+
+    // Let several ticks go by with nobody moving.
+    await settle();
+    aldric.clear();
+    await new Promise((resolve) => setTimeout(resolve, 700));
+
+    expect(snapshots(aldric)).toHaveLength(0);
+  });
+
+  it('names only the person who moved', async () => {
+    const aldric = await joinAt('c-aldric', 'Aldric', 10, 10);
+    await joinAt('c-bryn', 'Bryn', 11, 10);
+    const cara = await joinAt('c-cara', 'Cara', 12, 10);
+    await settle();
+    aldric.clear();
+
+    cara.send({ t: 'step', seq: 1, dir: 'e' });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    const heard = snapshots(aldric);
+    expect(heard.length).toBeGreaterThan(0);
+    for (const snapshot of heard) {
+      expect(snapshot.players.map((player) => player.name)).toEqual(['Cara']);
+    }
+  });
+
+  it('says who has gone when somebody leaves the city', async () => {
+    const aldric = await joinAt('c-aldric', 'Aldric', 10, 10);
+    const bryn = await joinAt('c-bryn', 'Bryn', 11, 10);
+    await settle();
+    aldric.clear();
+
+    bryn.close();
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    const gone = snapshots(aldric).flatMap((snapshot) => snapshot.gone);
+    expect(gone).toContain('c-bryn');
+  });
+
+  it('never puts the player themselves in the list of people who have gone', async () => {
+    const aldric = await joinAt('c-aldric', 'Aldric', 10, 10);
+
+    aldric.send({ t: 'step', seq: 1, dir: 'e' });
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    for (const snapshot of snapshots(aldric)) {
+      expect(snapshot.gone).not.toContain('c-aldric');
+    }
+  });
+
+  it('still corrects a player about themselves when they move', async () => {
+    const aldric = await joinAt('c-aldric', 'Aldric', 10, 10);
+    const start = snapshots(aldric)[0]?.you.x ?? 0;
+    await settle();
+    aldric.clear();
+
+    aldric.send({ t: 'step', seq: 1, dir: 'e' });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    const latest = aldric.latest('snapshot');
+    expect(latest?.you.x).toBe(start + 1);
+  });
+});

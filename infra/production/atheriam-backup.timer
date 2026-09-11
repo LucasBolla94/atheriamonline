@@ -1,0 +1,12 @@
+[Unit]
+Description=Back up the Atheriam database every night
+
+[Timer]
+# Half past three in the morning, and as soon as possible after a machine was
+# switched off at that time.
+OnCalendar=*-*-* 03:30:00
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

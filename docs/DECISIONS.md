@@ -400,3 +400,59 @@ cannot be reached at all, which is the same as the game not existing on a
 phone. A browser test now fills the form and clicks the button at phone size,
 so it cannot come back.
 **Cost to change:** None.
+
+## D-037 — A snapshot is a difference, not a picture
+
+**Date:** 2026-09-11
+**Decision:** A snapshot names only the people who have moved or just come
+into view, plus the ids of people who have left it. Anybody not mentioned is
+where the client already thinks they are. A tick in which nothing near a
+player changed sends that player nothing at all.
+**Why:** The load test measured it. A hundred and fifty players in one square
+cost **144 kB a second each**, almost all of it repeating that people were
+standing still. Sending differences halved that in the same pathological
+test — and in an ordinary square, where most people are not moving, it costs
+nothing at all. The worst round trip fell from 126 ms to 58 ms at the same
+time, because the server was doing less work per tick.
+**Cost to change:** Medium. It is the protocol, and the client now builds the
+crowd up over time rather than replacing it.
+
+## D-038 — Production runs as two systemd services behind Caddy
+
+**Date:** 2026-09-11
+**Decision:** The API and the world server run as ordinary systemd services on
+the host, as the `ubuntu` user, listening on 127.0.0.1 only. Caddy is the one
+thing the internet can reach. PostgreSQL and Redis stay in Docker, also on
+127.0.0.1. `scripts/deploy.sh` sets all of it up and is safe to run again.
+**Why:** Fewer moving parts than putting the servers in containers too, and
+the failure modes are the ones a person already knows: `systemctl status`,
+`journalctl -u`. The owner is not a developer, so one script that can be run
+twice beats a runbook. The servers listen on the loopback because there is no
+reason for anything else to reach them.
+**Cost to change:** Low. The units are twenty lines each.
+
+## D-039 — The database is not on the internet, and neither is anything else
+
+**Date:** 2026-09-11
+**Decision:** PostgreSQL and Redis publish to 127.0.0.1 rather than to every
+address, the database password was replaced with a generated one, and the
+firewall allows only SSH, HTTP and HTTPS.
+**Why:** They were listening on 0.0.0.0 on a machine with a public IP, which
+meant the whole internet could reach PostgreSQL — with the password from the
+example settings file. That is the single worst thing that was true of this
+project. It is fixed three ways at once because any one of them could be
+undone by accident.
+**Cost to change:** None, and it should not be changed.
+
+## D-040 — Every night, the database is backed up; nothing else is
+
+**Date:** 2026-09-11
+**Decision:** A systemd timer dumps `atheriam_live` at 03:30 and keeps
+fourteen nights in `/var/backups/atheriam`. A dump under a kilobyte is
+reported as a failure.
+**Why:** The code, the map and the client can all be built again from git.
+Accounts, characters, blocks, reports and the moderation log cannot. Fourteen
+nights is long enough that a problem noticed on a Monday can be undone back to
+the Monday before. An empty backup is worse than no backup, because it looks
+like one — hence the size check.
+**Cost to change:** None. Two numbers in one script.

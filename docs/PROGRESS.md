@@ -10,10 +10,11 @@ Last updated: 2026-09-11
 
 ## Current phase
 
-**Phase 8 — Mobile and polish** — done.
-Next up: **Phase 9 — Production**, to put the game on atheriam.online. Phases 5
-to 7 (items, trading and houses) come after that, because the owner asked for
-a working site first.
+**Phase 9 — Production** — done. **The game is live at
+https://atheriam.online.**
+Next up: **Phase 5 — Items and the ledger**, then trading (6) and houses (7).
+Those three were left until after the site was live, because the owner asked
+for a working site first.
 
 ## Phase list
 
@@ -102,11 +103,19 @@ charge.
       targets at least 44 pixels, reduced motion respected, the chat log
       announced to a screen reader
 
-### Phase 9 — Production
+### Phase 9 — Production — DONE
 
-- [ ] Caddy reverse proxy + TLS for atheriam.online
-- [ ] Deployment, backups, log collection
-- [ ] Load test with many simulated players
+- [x] Caddy reverse proxy + TLS for atheriam.online, certificate from Let's
+      Encrypt, renewed automatically
+- [x] `scripts/deploy.sh`: one command, safe to run again, does everything
+- [x] The two servers run as systemd services and come back after a reboot
+- [x] The database and cache listen on 127.0.0.1 only, with a generated
+      password, and the firewall allows only SSH, HTTP and HTTPS
+- [x] A nightly backup of the database, keeping fourteen nights
+- [x] Logs: the servers to journald, Caddy to /var/log/caddy, rolled at 20 MB
+- [x] Load test with 150 simulated players, which found a real problem — see
+      below — and then measured the fix
+- [x] `pnpm test:live`: a browser smoke test against the real site
 
 ---
 
@@ -142,9 +151,17 @@ Open a terminal in the project folder and run these, in order.
    pnpm test:e2e
    ```
 
-## Trying the game right now
+## The game is live
 
-Phase 4 is playable: real accounts, a real city, and people to talk to.
+**https://atheriam.online** — on a computer or on a phone held sideways.
+
+Everything below is about running it on your own machine. To put a change on
+the live site, run `./scripts/deploy.sh` and then `pnpm test:live` to check it
+worked.
+
+## Trying the game on your own machine
+
+Real accounts, a real city, and people to talk to.
 
 First, once:
 
@@ -186,6 +203,25 @@ SEED_MODERATOR_NAME=Aldric \
 SEED_MODERATOR_DOB=1990-05-04 \
 pnpm db:seed
 ```
+
+### How many people can it hold?
+
+Measured on this machine, with 150 pretend players walking around one square —
+which is far worse than anything real, because real players spread out:
+
+| What                            | Result         |
+| ------------------------------- | -------------- |
+| Players who got in              | 150 of 150     |
+| Slowest time to get in          | 1.8 seconds    |
+| Round trip, typical             | 3 ms           |
+| Round trip, worst one in 20     | 34 ms          |
+| Sent to each player             | 58 kB a second |
+| Memory used by the world server | 61 MB          |
+
+The city refuses player 201 with "The city is full right now" — see Q-006.
+
+To run it yourself: `PLAYERS=150 node scripts/load-test.mjs`, then
+`scripts/remove-load-test-accounts.sh` to tidy up after it.
 
 ### What a moderator can do
 

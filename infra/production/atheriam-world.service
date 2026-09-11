@@ -1,0 +1,47 @@
+# The world server: the live city. Player positions live in its memory.
+#
+# Install with `scripts/deploy.sh`, which copies this to /etc/systemd/system.
+
+[Unit]
+Description=Atheriam world server
+Documentation=https://atheriam.online
+After=network-online.target docker.service
+Wants=network-online.target
+
+# Give up after five crashes in a minute, so a broken deployment is loud
+# rather than a machine spinning at 100% CPU. These two belong to the unit,
+# not to the service, however much they read like service settings.
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/AtheriamOnline
+EnvironmentFile=/etc/atheriam/atheriam.env
+ExecStart=/usr/bin/node apps/world/dist/index.js
+
+# Come back up on its own after a crash.
+Restart=on-failure
+RestartSec=3
+
+# A web-facing process should be able to do as little as possible.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/ubuntu/AtheriamOnline
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=atheriam-world
+
+[Install]
+WantedBy=multi-user.target

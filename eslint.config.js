@@ -40,5 +40,30 @@ export default tseslint.config(
       'no-console': 'off',
     },
   },
+  {
+    /*
+     * Tools run by hand from a terminal.
+     *
+     * They are plain Node scripts, not part of the game, so they use the
+     * things a Node script uses: `process`, `fetch`, timers and `console`.
+     * Printing is the entire point of a load test.
+     */
+    files: ['scripts/**/*.mjs'],
+    languageOptions: {
+      globals: {
+        process: 'readonly',
+        console: 'readonly',
+        fetch: 'readonly',
+        WebSocket: 'readonly',
+        setInterval: 'readonly',
+        clearInterval: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+      },
+    },
+    rules: {
+      'no-console': 'off',
+    },
+  },
   prettier,
 );

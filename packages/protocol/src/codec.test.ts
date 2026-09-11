@@ -95,6 +95,7 @@ describe('decodeServerMessage', () => {
       tick: 10,
       you: { id: 'p1', name: 'Aldric', x: 1, y: 2, facing: 's' as const },
       players: [{ id: 'p2', name: 'Bryn', x: 3, y: 4, facing: 'n' as const }],
+      gone: ['p3'],
     };
     const result = decodeServerMessage(encode(snapshot));
     expect(result.ok).toBe(true);

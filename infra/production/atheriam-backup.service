@@ -1,0 +1,15 @@
+# A backup of everything that cannot be rebuilt: the database.
+#
+# The map, the code and the client can all be built again from git. Accounts,
+# characters, blocks, reports and the moderation log cannot.
+
+[Unit]
+Description=Back up the Atheriam database
+After=docker.service
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=ubuntu
+ExecStart=/home/ubuntu/AtheriamOnline/scripts/backup.sh
+SyslogIdentifier=atheriam-backup

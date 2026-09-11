@@ -39,6 +39,19 @@ Vitest + Playwright · Docker Compose · Caddy.
 - `pnpm install` · `pnpm dev` · `pnpm typecheck` · `pnpm lint` · `pnpm test`
 - `docker compose -f infra/docker-compose.yml up -d`
 - `pnpm db:migrate` · `pnpm db:seed`
+- `pnpm test:integration` (needs the database) · `pnpm test:e2e` (needs a browser)
+- `./scripts/deploy.sh` — put the current code on atheriam.online
+- `pnpm test:live` — drive a browser against the real site
+- `PLAYERS=150 node scripts/load-test.mjs` — then
+  `scripts/remove-load-test-accounts.sh`
+
+## Live
+
+The game is deployed on this machine at https://atheriam.online:
+`atheriam-api` and `atheriam-world` are systemd services, Caddy holds the
+certificate, PostgreSQL and Redis are in Docker on 127.0.0.1 only, and the
+live database is `atheriam_live`. Production settings live in
+`/etc/atheriam/atheriam.env` and are never committed.
 
 ## Machine notes
 

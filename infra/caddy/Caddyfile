@@ -1,14 +1,29 @@
-# Production reverse proxy for Atheriam.
+# The only thing on this machine the internet can reach.
 #
-# Caddy gets and renews the HTTPS certificate on its own. Point the domain's
-# DNS at this machine first, then start Caddy.
+# Caddy gets and renews the HTTPS certificate on its own. The domain's DNS must
+# point at this machine first, and ports 80 and 443 must be open — port 80 is
+# how Let's Encrypt proves the certificate belongs to us.
 #
-#   caddy run --config infra/caddy/Caddyfile
+# Installed by `scripts/deploy.sh`, which copies this file to
+# /etc/caddy/Caddyfile and reloads the service.
 
-atheriam.online, www.atheriam.online {
+{
+	# Where Let's Encrypt writes when something is wrong with a certificate.
+	# Change this to the owner's address when there is one to use.
+	email admin@atheriam.online
+}
+
+# One address for the game. Anybody who types www is sent to the short one, so
+# that a session cookie set on one is never missing on the other.
+www.atheriam.online {
+	redir https://atheriam.online{uri} permanent
+}
+
+atheriam.online {
 	encode zstd gzip
 
 	# The live game connection (WebSocket) goes to the world server.
+	# Caddy passes the upgrade through by itself; nothing extra is needed.
 	handle /ws* {
 		reverse_proxy 127.0.0.1:3002
 	}
@@ -21,6 +36,17 @@ atheriam.online, www.atheriam.online {
 	# Everything else is the built browser client.
 	handle {
 		root * /srv/atheriam/client
+
+		# Vite puts a hash in the name of every built file, so those names
+		# change whenever their contents do and may be cached for a year.
+		@immutable path /assets/*
+		header @immutable Cache-Control "public, max-age=31536000, immutable"
+
+		# index.html must never be cached, or a player keeps yesterday's game
+		# pointing at today's server.
+		@entry path / /index.html
+		header @entry Cache-Control "no-cache"
+
 		try_files {path} /index.html
 		file_server
 	}
@@ -32,10 +58,17 @@ atheriam.online, www.atheriam.online {
 		Referrer-Policy "strict-origin-when-cross-origin"
 		# Ask browsers to always use HTTPS for this domain.
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		# The game needs no camera, microphone or location, so it asks for none.
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		# Caddy's own name is nobody's business.
+		-Server
 	}
 
 	log {
-		output file /var/log/caddy/atheriam.log
+		output file /var/log/caddy/atheriam.log {
+			roll_size 20MiB
+			roll_keep 10
+		}
 		format json
 	}
 }

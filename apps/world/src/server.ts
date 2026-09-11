@@ -12,6 +12,7 @@ import {
   decodeClientMessage,
   encode,
   type Bye,
+  type PlayerView,
   type ServerMessage,
 } from '@atheriam/protocol';
 import { spawnPoint } from './map.js';
@@ -44,6 +45,15 @@ interface Connection {
    * never had a snapshot, so the first one is always sent.
    */
   lastSentRevision: number;
+  /**
+   * Where this client believes everybody is, by character id.
+   *
+   * A snapshot is a difference against this, so a crowd standing still costs
+   * nothing to keep on screen. Without it, a busy square repeats "nobody has
+   * moved" to every player ten times a second — measured at 144 kB a second
+   * each in a load test.
+   */
+  readonly believes: Map<string, string>;
   /**
    * The chunks of the map this client has been given, by key. A chunk is only
    * added once it has actually gone out, so a socket that dies mid-send is
@@ -143,6 +153,7 @@ export class WorldServer {
       windowStartedAtMs: nowMs,
       messagesInWindow: 0,
       lastSentRevision: -1,
+      believes: new Map<string, string>(),
       chunks: new Set<string>(),
       alive: true,
     };
@@ -382,20 +393,58 @@ export class WorldServer {
     }
   }
 
+  /**
+   * Tell one client what has changed around them.
+   *
+   * Everything this client already knows is left out. When nothing at all has
+   * changed — which is most ticks, for most players — no message is sent.
+   */
   private sendSnapshot(connection: Connection): void {
     if (connection.playerId === null) return;
     const view = this.world.viewFor(connection.playerId);
     if (view === null) return;
+
     // The ground goes out before the people standing on it, so the client
     // never has to draw a player over a chunk it has not been given.
     this.syncChunks(connection, view.you);
+
+    const changed: PlayerView[] = [];
+    const stillHere = new Set<string>();
+
+    for (const player of view.players) {
+      stillHere.add(player.id);
+      const signature = signatureOf(player);
+      if (connection.believes.get(player.id) === signature) continue;
+      connection.believes.set(player.id, signature);
+      changed.push(player);
+    }
+
+    const gone: string[] = [];
+    for (const id of connection.believes.keys()) {
+      if (stillHere.has(id)) continue;
+      // The observer is in `believes` too, so that their own corrections can
+      // be left out when nothing has changed. They have not left the city.
+      if (id === view.you.id) continue;
+      gone.push(id);
+      connection.believes.delete(id);
+    }
+
+    // A player is always told about themselves, but only when it has changed:
+    // being sure of your own position is what a correction is for.
+    const mySignature = signatureOf(view.you);
+    const meChanged = connection.believes.get(view.you.id) !== mySignature;
+    connection.believes.set(view.you.id, mySignature);
+
+    connection.lastSentRevision = this.world.revision;
+    if (!meChanged && changed.length === 0 && gone.length === 0) return;
+
     this.send(connection, {
       t: 'snapshot',
       tick: this.world.tick,
       you: view.you,
-      players: view.players,
+      players: changed,
+      gone,
     });
-    connection.lastSentRevision = this.world.revision;
   }
 
   /**
@@ -433,4 +482,14 @@ export class WorldServer {
     if (connection.socket.readyState !== connection.socket.OPEN) return;
     connection.socket.send(encode(message));
   }
+}
+
+/**
+ * Everything about a player that a client can see.
+ *
+ * Comparing these strings is how "has anything changed for this observer?" is
+ * answered without comparing whole objects ten times a second.
+ */
+function signatureOf(player: PlayerView): string {
+  return `${player.x},${player.y},${player.facing}`;
 }

@@ -22,6 +22,7 @@
     "db:migrate": "pnpm --filter @atheriam/db migrate",
     "db:seed": "pnpm --filter @atheriam/api seed",
     "test:e2e": "playwright test",
+    "test:live": "playwright test --config playwright.live.config.ts",
     "test:e2e:ui": "playwright test --ui",
     "test:integration": "vitest run --config vitest.integration.config.ts"
   },

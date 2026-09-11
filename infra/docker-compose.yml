@@ -1,4 +1,4 @@
-# Local development services for Atheriam.
+# The database and cache for Atheriam.
 #
 # Start them with:
 #   docker compose -f infra/docker-compose.yml up -d
@@ -6,7 +6,12 @@
 #   docker compose -f infra/docker-compose.yml down
 #
 # The data is kept in named volumes, so stopping the services does not delete
-# your local database.
+# anything.
+#
+# Both services are published to 127.0.0.1 only. They listened on every address
+# once, which on a machine with a public IP meant the whole internet could
+# reach the database. Nothing outside this machine needs them: the API and the
+# world server run here, and players only ever talk to Caddy.
 
 name: atheriam
 
@@ -20,7 +25,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-locally}
       POSTGRES_DB: ${POSTGRES_DB:-atheriam}
     ports:
-      - '${POSTGRES_PORT:-5432}:5432'
+      - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -35,7 +40,7 @@ services:
     restart: unless-stopped
     command: ['redis-server', '--appendonly', 'yes']
     ports:
-      - '${REDIS_PORT:-6379}:6379'
+      - '127.0.0.1:${REDIS_PORT:-6379}:6379'
     volumes:
       - redis-data:/data
     healthcheck:

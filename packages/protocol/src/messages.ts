@@ -23,8 +23,10 @@ import { CHUNK_SIZE_TILES, MAX_CHAT_LENGTH } from '@atheriam/shared';
  * 3: the map is no longer sent whole. The server streams the 32x32 chunks
  *    around the player and tells the client when to forget one.
  * 4: players can talk to the people near them.
+ * 5: a snapshot carries only what changed for this player, plus the people
+ *    who have gone. A crowd standing still now costs nothing.
  */
-export const PROTOCOL_VERSION = 4;
+export const PROTOCOL_VERSION = 5;
 
 /** The eight directions a player may step in. */
 export const directionSchema = z.enum(['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw']);
@@ -191,17 +193,27 @@ export const welcomeSchema = z.object({
 });
 
 /**
- * The state of the world around this player, sent every tick in which
- * something the player can see has changed.
+ * What has changed around this player.
  *
- * `you` is separate from `players` so the client always knows which body is
- * its own without searching by id.
+ * This is a difference, not a picture. `players` holds only the people who
+ * have moved or who have just come into view; `gone` holds the ids of people
+ * who have left it. Anybody not mentioned is exactly where the client already
+ * thinks they are.
+ *
+ * It is written this way because of what a load test showed: sending everyone
+ * in view on every tick cost 144 kB a second per player in a crowded square,
+ * most of it repeating that people were standing still. See D-037.
+ *
+ * `you` is separate so the client always knows which body is its own without
+ * searching by id, and it is always sent: a player must never be left guessing
+ * about themselves.
  */
 export const snapshotSchema = z.object({
   t: z.literal('snapshot'),
   tick: z.number().int().nonnegative(),
   you: playerViewSchema,
   players: z.array(playerViewSchema).max(500),
+  gone: z.array(z.string().min(1).max(64)).max(500),
 });
 
 /**
