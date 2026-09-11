@@ -30,14 +30,32 @@ export const colorTokens = {
   /** Something went wrong. */
   danger: 0xb4472e,
 
-  // World tiles. These are flat colours for Phase 1; Phase 3 replaces them
-  // with real artwork, and the names stay the same.
+  // World tiles: one colour per kind of ground, matching the alphabet in
+  // `@atheriam/shared`. These are flat colours, not artwork — no image enters
+  // the repository before `docs/ASSETS.md` can record its licence.
   tileGrass: 0x3f5137,
   tileGrassAlt: 0x445839,
   tileRoad: 0x6b5c45,
   tileRoadAlt: 0x73644b,
   tileWall: 0x2b2521,
+  tileWallAlt: 0x332c27,
   tileWater: 0x2c4a5c,
+  tileWaterAlt: 0x315265,
+  tilePavement: 0x6e6862,
+  tilePavementAlt: 0x77716a,
+  tileShore: 0x8a7c5f,
+  tileShoreAlt: 0x93856a,
+  tileBridge: 0x7a5f3c,
+  tileBridgeAlt: 0x836745,
+  tileFloor: 0x6b4f34,
+  tileFloorAlt: 0x74573b,
+  tileDoor: 0x9c6b35,
+  tileTree: 0x2f4326,
+  tileFence: 0x5a4630,
+  tileStall: 0x8c4a3a,
+  tileWell: 0x4a4440,
+  /** Ground we have not been sent. Drawn as the night outside the walls. */
+  tileUnknown: 0x0d0b0a,
 
   /** Your own character. */
   self: 0xc9a227,

@@ -2,22 +2,27 @@
  * The Phaser scene that draws the world.
  *
  * What this file may do: draw what the server said, and turn what the player
- * does with the mouse and keyboard into intents.
+ * does with the mouse, the keyboard or a finger into intents.
  *
  * What this file may never do: decide that the player moved. The character on
  * screen slides towards the position in the last snapshot. If the server says
  * something different, the character slides there instead — that is a
  * correction, and it is meant to happen.
  *
- * Phase 1 draws flat coloured tiles rather than artwork. That is deliberate:
- * it keeps the walking skeleton honest, and it means no image enters the
- * repository before `docs/ASSETS.md` can record its licence.
+ * The map arrives in 32x32 chunks and can be taken away again, so nothing here
+ * assumes the whole city is known. A chunk we have not been given is drawn as
+ * darkness, because that is honestly what the client knows about it.
  */
 import Phaser from 'phaser';
-import { MIN_STEP_INTERVAL_MS, TILE_SIZE_PX, type Direction } from '@atheriam/shared';
-import type { MapPatch, PlayerView } from '@atheriam/protocol';
+import {
+  CHUNK_SIZE_TILES,
+  MIN_STEP_INTERVAL_MS,
+  TILE_SIZE_PX,
+  type Direction,
+} from '@atheriam/shared';
+import type { PlayerView, WorldInfo } from '@atheriam/protocol';
 import { colorTokens, fontFamilyTokens, fontSizeTokens } from '../tokens/tokens.js';
-import type { WorldConnection } from '../net/connection.js';
+import type { HeldChunk, WorldConnection } from '../net/connection.js';
 
 /** How quickly a character catches up with where the server says it is. */
 const MOVE_LERP_PER_MS = 0.012;
@@ -25,11 +30,28 @@ const MOVE_LERP_PER_MS = 0.012;
 /** Below this distance in pixels we simply snap, to avoid endless creeping. */
 const SNAP_DISTANCE_PX = 0.5;
 
-const TILE_COLORS: Readonly<Record<string, number>> = {
-  '.': colorTokens.tileGrass,
-  ',': colorTokens.tileRoad,
-  '#': colorTokens.tileWall,
-  '~': colorTokens.tileWater,
+/** How far the camera may be zoomed out and in, on a pinch or a wheel. */
+const MIN_ZOOM = 0.6;
+const MAX_ZOOM = 2.2;
+
+/**
+ * One colour per kind of ground, and a second, slightly different one so the
+ * grid reads without drawing lines on it.
+ */
+const TILE_COLORS: Readonly<Record<string, readonly [number, number]>> = {
+  '.': [colorTokens.tileGrass, colorTokens.tileGrassAlt],
+  ',': [colorTokens.tileRoad, colorTokens.tileRoadAlt],
+  p: [colorTokens.tilePavement, colorTokens.tilePavementAlt],
+  b: [colorTokens.tileBridge, colorTokens.tileBridgeAlt],
+  d: [colorTokens.tileFloor, colorTokens.tileFloorAlt],
+  '+': [colorTokens.tileDoor, colorTokens.tileDoor],
+  s: [colorTokens.tileShore, colorTokens.tileShoreAlt],
+  '#': [colorTokens.tileWall, colorTokens.tileWallAlt],
+  '~': [colorTokens.tileWater, colorTokens.tileWaterAlt],
+  T: [colorTokens.tileTree, colorTokens.tileTree],
+  F: [colorTokens.tileFence, colorTokens.tileFence],
+  M: [colorTokens.tileStall, colorTokens.tileStall],
+  W: [colorTokens.tileWell, colorTokens.tileWell],
 };
 
 const KEY_DIRECTIONS: ReadonlyArray<readonly [string, Direction]> = [
@@ -51,15 +73,18 @@ interface Avatar {
 
 export interface WorldSceneData {
   readonly connection: WorldConnection;
-  readonly map: MapPatch;
+  readonly world: WorldInfo;
 }
 
 export class WorldScene extends Phaser.Scene {
   static readonly KEY = 'world';
 
   private connection!: WorldConnection;
-  private mapPatch!: MapPatch;
+  private world!: WorldInfo;
   private avatars = new Map<string, Avatar>();
+  /** One drawn square of ground per chunk we hold, by `cx:cy`. */
+  private chunkImages = new Map<string, Phaser.GameObjects.RenderTexture>();
+  private drawnChunkRevision = -1;
   private keys = new Map<Direction, Phaser.Input.Keyboard.Key[]>();
   private lastStepSentAtMs = 0;
 
@@ -69,12 +94,11 @@ export class WorldScene extends Phaser.Scene {
 
   init(data: WorldSceneData): void {
     this.connection = data.connection;
-    this.mapPatch = data.map;
+    this.world = data.world;
   }
 
   create(): void {
-    this.cameras.main.setBackgroundColor(colorTokens.backdrop);
-    this.drawMap();
+    this.cameras.main.setBackgroundColor(colorTokens.tileUnknown);
     this.setUpCamera();
     this.setUpKeyboard();
     this.setUpPointer();
@@ -82,51 +106,73 @@ export class WorldScene extends Phaser.Scene {
 
   override update(_time: number, delta: number): void {
     this.pollKeyboard();
+    this.syncChunks();
     this.syncAvatars();
     this.easeAvatars(delta);
   }
 
-  // -- drawing ------------------------------------------------------------
+  // -- the ground ---------------------------------------------------------
 
   /**
-   * The map never changes during Phase 1, so it is drawn once into a single
-   * texture. Drawing a thousand rectangles every frame would be the easiest
-   * way to miss the 60 fps target on a phone.
+   * Make the ground on screen match the chunks the connection holds.
+   *
+   * This runs every frame but does nothing at all unless a chunk has arrived
+   * or been dropped, which is what the revision counter is for.
    */
-  private drawMap(): void {
-    const { width, height, rows } = this.mapPatch;
+  private syncChunks(): void {
+    if (this.connection.chunkRevision === this.drawnChunkRevision) return;
+    this.drawnChunkRevision = this.connection.chunkRevision;
+
+    for (const [key, chunk] of this.connection.chunks) {
+      if (this.chunkImages.has(key)) continue;
+      this.chunkImages.set(key, this.drawChunk(chunk));
+    }
+
+    for (const [key, image] of this.chunkImages) {
+      if (this.connection.chunks.has(key)) continue;
+      image.destroy();
+      this.chunkImages.delete(key);
+    }
+  }
+
+  /**
+   * Draw one chunk into a single texture.
+   *
+   * A chunk is a thousand tiles. Drawing them as a thousand rectangles every
+   * frame is the easiest way to miss the 60 fps target on a phone, so they are
+   * drawn once, here, and then moved around as one image.
+   */
+  private drawChunk(chunk: HeldChunk): Phaser.GameObjects.RenderTexture {
+    const size = CHUNK_SIZE_TILES * TILE_SIZE_PX;
     const graphics = this.add.graphics();
 
-    for (let y = 0; y < height; y += 1) {
-      const row = rows[y];
+    for (let y = 0; y < CHUNK_SIZE_TILES; y += 1) {
+      const row = chunk.rows[y];
       if (row === undefined) continue;
-      for (let x = 0; x < width; x += 1) {
+      for (let x = 0; x < CHUNK_SIZE_TILES; x += 1) {
         const char = row[x] ?? '#';
-        const base = TILE_COLORS[char] ?? colorTokens.tileWall;
-        // A faint checker makes the grid readable without drawing gridlines.
-        const shade = (x + y) % 2 === 0 ? base : this.lighten(base, char);
-        graphics.fillStyle(shade, 1);
+        const pair = TILE_COLORS[char] ?? TILE_COLORS['#'];
+        const [base, alt] = pair ?? [colorTokens.tileUnknown, colorTokens.tileUnknown];
+        graphics.fillStyle((x + y) % 2 === 0 ? base : alt, 1);
         graphics.fillRect(x * TILE_SIZE_PX, y * TILE_SIZE_PX, TILE_SIZE_PX, TILE_SIZE_PX);
       }
     }
 
-    const texture = this.add.renderTexture(0, 0, width * TILE_SIZE_PX, height * TILE_SIZE_PX);
+    const texture = this.add.renderTexture(chunk.cx * size, chunk.cy * size, size, size);
     texture.setOrigin(0, 0);
     texture.draw(graphics, 0, 0);
     texture.setDepth(0);
     graphics.destroy();
-  }
-
-  private lighten(base: number, char: string): number {
-    if (char === '.') return colorTokens.tileGrassAlt;
-    if (char === ',') return colorTokens.tileRoadAlt;
-    return base;
+    return texture;
   }
 
   private setUpCamera(): void {
-    const worldWidth = this.mapPatch.width * TILE_SIZE_PX;
-    const worldHeight = this.mapPatch.height * TILE_SIZE_PX;
-    this.cameras.main.setBounds(0, 0, worldWidth, worldHeight);
+    this.cameras.main.setBounds(
+      0,
+      0,
+      this.world.width * TILE_SIZE_PX,
+      this.world.height * TILE_SIZE_PX,
+    );
     this.cameras.main.setRoundPixels(true);
   }
 
@@ -148,6 +194,8 @@ export class WorldScene extends Phaser.Scene {
     this.input.on(Phaser.Input.Events.POINTER_UP, (pointer: Phaser.Input.Pointer) => {
       // A drag is a camera gesture, not a walk order.
       if (pointer.getDistance() > TILE_SIZE_PX / 2) return;
+      // While two fingers are down the player is pinching, not tapping.
+      if (this.input.pointer2.isDown) return;
 
       const world = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
       this.connection.walkTo({
@@ -155,6 +203,38 @@ export class WorldScene extends Phaser.Scene {
         y: Math.floor(world.y / TILE_SIZE_PX),
       });
     });
+
+    // Pinch to zoom on a phone, wheel to zoom on a desktop. Both are clamped,
+    // so nobody can zoom far enough out to see the whole city at once.
+    this.input.addPointer(1);
+    this.input.on(
+      Phaser.Input.Events.POINTER_MOVE,
+      (_pointer: Phaser.Input.Pointer, _x: number, _y: number) => {
+        const [first, second] = [this.input.pointer1, this.input.pointer2];
+        if (!first.isDown || !second.isDown) return;
+
+        const current = Phaser.Math.Distance.Between(first.x, first.y, second.x, second.y);
+        const previous = Phaser.Math.Distance.Between(
+          first.prevPosition.x,
+          first.prevPosition.y,
+          second.prevPosition.x,
+          second.prevPosition.y,
+        );
+        if (previous === 0) return;
+        this.setZoom(this.cameras.main.zoom * (current / previous));
+      },
+    );
+
+    this.input.on(
+      Phaser.Input.Events.POINTER_WHEEL,
+      (_pointer: Phaser.Input.Pointer, _over: unknown, _dx: number, dy: number) => {
+        this.setZoom(this.cameras.main.zoom * (dy > 0 ? 0.9 : 1.1));
+      },
+    );
+  }
+
+  private setZoom(value: number): void {
+    this.cameras.main.setZoom(Phaser.Math.Clamp(value, MIN_ZOOM, MAX_ZOOM));
   }
 
   /**

@@ -6,7 +6,7 @@
  * allowed to know. All the game rules live in `world.ts`; none live here.
  */
 import { WebSocketServer, type WebSocket } from 'ws';
-import { TICK_MS } from '@atheriam/shared';
+import { CHUNK_SIZE_TILES, TICK_MS, chunkKey } from '@atheriam/shared';
 import {
   PROTOCOL_VERSION,
   decodeClientMessage,
@@ -15,6 +15,7 @@ import {
   type ServerMessage,
 } from '@atheriam/protocol';
 import { spawnPoint } from './map.js';
+import { chunksInView, diffChunks } from './streaming.js';
 import type { JoiningCharacter, World } from './world.js';
 
 /**
@@ -43,6 +44,12 @@ interface Connection {
    * never had a snapshot, so the first one is always sent.
    */
   lastSentRevision: number;
+  /**
+   * The chunks of the map this client has been given, by key. A chunk is only
+   * added once it has actually gone out, so a socket that dies mid-send is
+   * simply sent it again rather than left with a hole in the world.
+   */
+  readonly chunks: Set<string>;
   alive: boolean;
 }
 
@@ -134,6 +141,7 @@ export class WorldServer {
       windowStartedAtMs: nowMs,
       messagesInWindow: 0,
       lastSentRevision: -1,
+      chunks: new Set<string>(),
       alive: true,
     };
     this.connections.set(socket, connection);
@@ -259,7 +267,11 @@ export class WorldServer {
       playerId: result.player.id,
       tickMs: TICK_MS,
       spawn: spawnPoint(this.world.map),
-      map: this.world.map.toPatch(),
+      world: {
+        width: this.world.map.width,
+        height: this.world.map.height,
+        chunkSize: CHUNK_SIZE_TILES,
+      },
     });
     this.sendSnapshot(connection);
   }
@@ -308,6 +320,9 @@ export class WorldServer {
     if (connection.playerId === null) return;
     const view = this.world.viewFor(connection.playerId);
     if (view === null) return;
+    // The ground goes out before the people standing on it, so the client
+    // never has to draw a player over a chunk it has not been given.
+    this.syncChunks(connection, view.you);
     this.send(connection, {
       t: 'snapshot',
       tick: this.world.tick,
@@ -315,6 +330,31 @@ export class WorldServer {
       players: view.players,
     });
     connection.lastSentRevision = this.world.revision;
+  }
+
+  /**
+   * Give this client the chunks its player can now see, and take back the ones
+   * it has walked away from.
+   *
+   * Called every time a snapshot goes out. Working it out again costs a
+   * handful of comparisons and means there is exactly one place that decides
+   * what a client is allowed to know about the map.
+   */
+  private syncChunks(connection: Connection, centre: { x: number; y: number }): void {
+    const wanted = chunksInView(this.world.map, centre);
+    const { toSend, toDrop } = diffChunks(connection.chunks, wanted);
+
+    for (const chunk of toDrop) {
+      this.send(connection, { t: 'chunkDrop', cx: chunk.cx, cy: chunk.cy });
+      connection.chunks.delete(chunkKey(chunk));
+    }
+
+    for (const chunk of toSend) {
+      const rows = this.world.map.chunkRows(chunk);
+      if (rows === null) continue;
+      this.send(connection, { t: 'chunk', cx: chunk.cx, cy: chunk.cy, rows: [...rows] });
+      connection.chunks.add(chunkKey(chunk));
+    }
   }
 
   private disconnect(connection: Connection, reason: Bye['reason']): void {

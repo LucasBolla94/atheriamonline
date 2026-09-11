@@ -151,13 +151,17 @@ describe('the world server over a real socket', () => {
     return client;
   }
 
-  it('welcomes a player and sends them the map', async () => {
+  it('welcomes a player and streams them the ground under their feet', async () => {
     const client = await connect();
     client.send({ t: 'join', ticket: tickets.issue(character('c-aldric', 'Aldric')) });
 
     const welcome = await client.waitFor('welcome');
-    expect(welcome.map.rows).toHaveLength(openField.height);
+    expect(welcome.world.width).toBe(openField.width);
+    expect(welcome.world.height).toBe(openField.height);
     expect(welcome.tickMs).toBeGreaterThan(0);
+
+    const chunk = await client.waitFor('chunk');
+    expect(chunk.rows).toHaveLength(32);
 
     const snapshot = await client.waitFor('snapshot');
     expect(snapshot.you.name).toBe('Aldric');
@@ -291,5 +295,84 @@ describe('the world server over a real socket', () => {
     // Exactly one write, on the way out — not one per step.
     expect(tickets.saved).toHaveLength(1);
     expect(tickets.saved[0]).toMatchObject({ id: 'c-aldric', x: 11, y: 10 });
+  });
+});
+
+/**
+ * The map arrives in pieces, and each player gets only their own pieces.
+ *
+ * These run on a city-sized map, because the whole point of streaming is what
+ * happens when the world is bigger than one screen.
+ */
+describe('streaming the map over a real socket', () => {
+  const bigCity = new GameMap(Array.from({ length: 128 }, () => '.'.repeat(128)));
+  let server: WorldServer;
+  let world: World;
+  let tickets: FakeTickets;
+  let port: number;
+  const clients: TestClient[] = [];
+
+  beforeEach(async () => {
+    world = new World(bigCity);
+    tickets = new FakeTickets();
+    server = new WorldServer({
+      host: '127.0.0.1',
+      port: 0,
+      world,
+      resolveTicket: tickets.spend,
+      savePosition: tickets.save,
+    });
+    server.start();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    port = server.port;
+  });
+
+  afterEach(async () => {
+    for (const client of clients) client.close();
+    clients.length = 0;
+    await server.stop();
+  });
+
+  async function joinAt(id: string, name: string, x: number, y: number): Promise<TestClient> {
+    const client = await TestClient.connect(port);
+    clients.push(client);
+    client.send({ t: 'join', ticket: tickets.issue(character(id, name, x, y)) });
+    await client.waitFor('snapshot');
+    return client;
+  }
+
+  function chunksReceived(client: TestClient): string[] {
+    return client.received
+      .filter((message): message is Extract<ServerMessage, { t: 'chunk' }> => message.t === 'chunk')
+      .map((message) => `${message.cx}:${message.cy}`);
+  }
+
+  it('sends a player the ground around them and not the whole city', async () => {
+    const client = await joinAt('c-aldric', 'Aldric', 16, 16);
+    const chunks = chunksReceived(client);
+
+    expect(chunks).toContain('0:0');
+    // Sixteen chunks exist; nobody standing in a corner is given all of them.
+    expect(chunks.length).toBeLessThan(16);
+    expect(chunks).not.toContain('3:3');
+  });
+
+  it('gives two players in different quarters different ground', async () => {
+    const north = await joinAt('c-aldric', 'Aldric', 16, 16);
+    const south = await joinAt('c-bryn', 'Bryn', 112, 112);
+
+    expect(chunksReceived(north)).not.toContain('3:3');
+    expect(chunksReceived(south)).toContain('3:3');
+    expect(chunksReceived(south)).not.toContain('0:0');
+  });
+
+  it('never sends the same chunk to one player twice', async () => {
+    const client = await joinAt('c-aldric', 'Aldric', 64, 64);
+    // Walk a few tiles, which re-checks what they can see on every snapshot.
+    client.send({ t: 'walkTo', seq: 1, to: { x: 70, y: 64 } });
+    await new Promise((resolve) => setTimeout(resolve, 800));
+
+    const chunks = chunksReceived(client);
+    expect(new Set(chunks).size).toBe(chunks.length);
   });
 });

@@ -25,12 +25,17 @@ const TICKET = 'ticket-for-the-tests-0123456789';
 
 const WELCOME: ServerMessage = {
   t: 'welcome',
-  protocolVersion: 1,
+  protocolVersion: 3,
   playerId: 'p1',
   tickMs: 100,
   spawn: { x: 2, y: 2 },
-  map: { width: 3, height: 3, rows: ['...', '...', '...'] },
+  world: { width: 128, height: 128, chunkSize: 32 },
 };
+
+/** A chunk of plain grass, which is all the renderer needs to be handed. */
+function chunk(cx: number, cy: number): ServerMessage {
+  return { t: 'chunk', cx, cy, rows: Array.from({ length: 32 }, () => '.'.repeat(32)) };
+}
 
 function snapshot(x: number, y: number): ServerMessage {
   return {
@@ -71,11 +76,36 @@ describe('WorldConnection', () => {
     expect(socket.parsed()[0]).toEqual({ t: 'join', ticket: TICKET });
   });
 
-  it('starts playing when the server welcomes it, and remembers the map', () => {
+  it('starts playing when the server welcomes it, and remembers how big the city is', () => {
     join();
     expect(connection.currentState).toBe('playing');
     expect(connection.playerId).toBe('p1');
-    expect(connection.map?.rows).toHaveLength(3);
+    expect(connection.world?.width).toBe(128);
+  });
+
+  it('keeps the chunks it is sent, and forgets the ones it is told to drop', () => {
+    join();
+    const before = connection.chunkRevision;
+
+    connection.handleMessage(encode(chunk(1, 2)));
+    expect(connection.chunks.get('1:2')?.rows).toHaveLength(32);
+    expect(connection.chunkRevision).toBeGreaterThan(before);
+
+    connection.handleMessage(encode({ t: 'chunkDrop', cx: 1, cy: 2 }));
+    expect(connection.chunks.has('1:2')).toBe(false);
+  });
+
+  it('ignores a chunk that is not the size the protocol promises', () => {
+    join();
+    connection.handleMessage(JSON.stringify({ t: 'chunk', cx: 0, cy: 0, rows: ['..'] }));
+    expect(connection.chunks.size).toBe(0);
+  });
+
+  it('throws the map away when the connection closes', () => {
+    join();
+    connection.handleMessage(encode(chunk(0, 0)));
+    connection.handleClose('you left');
+    expect(connection.chunks.size).toBe(0);
   });
 
   it('refuses to send intents before it is playing', () => {

@@ -56,12 +56,34 @@ describe('the starter district', () => {
     expect(starterDistrict.isWalkable(spawn)).toBe(true);
   });
 
-  it('sends the same map it uses', () => {
-    const patch = starterDistrict.toPatch();
-    expect(patch.rows).toHaveLength(starterDistrict.height);
-    for (const row of patch.rows) {
-      expect(row.length).toBe(starterDistrict.width);
+  it('cuts every chunk to exactly the size the protocol promises', () => {
+    const across = starterDistrict.chunksAcross;
+    for (let cy = 0; cy < across.cy; cy += 1) {
+      for (let cx = 0; cx < across.cx; cx += 1) {
+        const rows = starterDistrict.chunkRows({ cx, cy });
+        expect(rows).toHaveLength(CHUNK_SIZE_TILES);
+        for (const row of rows ?? []) expect(row.length).toBe(CHUNK_SIZE_TILES);
+      }
     }
+  });
+
+  it('has no chunk outside its own edges', () => {
+    const across = starterDistrict.chunksAcross;
+    expect(starterDistrict.chunkRows({ cx: across.cx, cy: 0 })).toBeNull();
+    expect(starterDistrict.chunkRows({ cx: 0, cy: -1 })).toBeNull();
+  });
+
+  it('gives the same chunk back, so cutting it twice costs nothing', () => {
+    const first = starterDistrict.chunkRows({ cx: 1, cy: 1 });
+    expect(starterDistrict.chunkRows({ cx: 1, cy: 1 })).toBe(first);
+  });
+
+  it('pads a chunk that runs past the edge of a small map with stone', () => {
+    const map = new GameMap(['...', '...']);
+    const rows = map.chunkRows({ cx: 0, cy: 0 });
+    expect(rows).toHaveLength(CHUNK_SIZE_TILES);
+    expect(rows?.[0]).toBe('...' + '#'.repeat(CHUNK_SIZE_TILES - 3));
+    expect(rows?.[CHUNK_SIZE_TILES - 1]).toBe('#'.repeat(CHUNK_SIZE_TILES));
   });
 });
 

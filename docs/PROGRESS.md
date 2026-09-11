@@ -10,8 +10,8 @@ Last updated: 2026-09-11
 
 ## Current phase
 
-**Phase 2 — Accounts** — done.
-Next up: **Phase 3 — The city**.
+**Phase 3 — The city** — done.
+Next up: **Phase 4 — Talking**.
 
 ## Phase list
 
@@ -29,32 +29,35 @@ Goal: an empty but real project that installs, builds, type-checks and tests.
 - [x] `.env.example` and `.gitignore`
 - [x] `pnpm install` / `typecheck` / `lint` / `test` all green
 
-### Phase 1 — Walking skeleton
+### Phase 1 — Walking skeleton — DONE
 
 Goal: one player can open the site and walk on a tiny map, with the server in
 charge.
 
-- [ ] `packages/protocol`: message types + zod schemas
-- [ ] `apps/world`: ws server, 10 Hz tick, positions in memory
-- [ ] `apps/client`: Phaser scene drawing a tile map, WASD + click to move
-- [ ] Client sends intents only; server sends corrections
-- [ ] Playwright test: page loads, character moves
+- [x] `packages/protocol`: message types + zod schemas
+- [x] `apps/world`: ws server, 10 Hz tick, positions in memory
+- [x] `apps/client`: Phaser scene drawing a tile map, WASD + click to move
+- [x] Client sends intents only; server sends corrections
+- [x] Playwright test: page loads, character moves
 
-### Phase 2 — Accounts
+### Phase 2 — Accounts — DONE
 
-- [ ] `apps/api` (Fastify) with health route
-- [ ] `packages/db`: Drizzle schema + migrations for accounts
-- [ ] Sign up / log in, argon2id passwords, 18+ age gate
-- [ ] Redis sessions, HttpOnly cookies
-- [ ] Short-lived WebSocket ticket
-- [ ] Character created on first login, position saved on logout
+- [x] `apps/api` (Fastify) with health route
+- [x] `packages/db`: Drizzle schema + migrations for accounts
+- [x] Sign up / log in, argon2id passwords, 18+ age gate
+- [x] Redis sessions, HttpOnly cookies
+- [x] Short-lived WebSocket ticket
+- [x] Character created on first login, position saved on logout
 
-### Phase 3 — The city
+### Phase 3 — The city — DONE
 
-- [ ] Chunked map format (32x32 tiles) and a map loader
-- [ ] Original hand-made starter district
-- [ ] Chunk streaming and interest management
-- [ ] Collision from the map, server-side validation
+- [x] Chunked map format (32x32 tiles) and a map loader
+- [x] Original hand-made starter district — 128x128 tiles, walled, with a
+      square, a market, a park and a lake, and two streets of houses
+- [x] Chunk streaming and interest management: a player is sent only the
+      chunks they can see, and is told when to forget one
+- [x] Collision from the map, server-side validation
+- [x] A test walks the whole city and fails if any tile is unreachable
 
 ### Phase 4 — Talking
 
@@ -130,7 +133,7 @@ Open a terminal in the project folder and run these, in order.
 
 ## Trying the game right now
 
-Phase 2 is playable, with real accounts.
+Phase 3 is playable: real accounts, and a real city to walk around.
 
 First, once:
 
@@ -150,8 +153,12 @@ Open http://localhost:5173, choose **Create an account**, and fill in the
 form. You need to be 18 or over. Open a second browser window and make a
 second account to see two people in the same place.
 
-Click a tile to walk there, or use WASD. Your position is saved when you log
-out, so you come back where you left. There is no chat yet — that is Phase 4.
+Click a tile to walk there, or use WASD. On a phone, tap a tile and pinch to
+zoom. Your position is saved when you log out, so you come back where you left.
+
+You start on the Crown Square, by the well. North-west is the park and its
+lake, north-east the market, and south of the square are two streets of houses
+you can walk into. There is no chat yet — that is Phase 4.
 
 ### Making yourself a moderator
 

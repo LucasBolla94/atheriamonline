@@ -221,3 +221,68 @@ and it never changes an account that already exists.
 **Why:** A seed script with a built-in password is a way in that nobody
 remembers leaving open.
 **Cost to change:** None.
+
+## D-023 — One tile is one character, and the alphabet is shared
+
+**Date:** 2026-09-11
+**Decision:** A map is rows of text, one character per tile. What each
+character means — grass, wall, water, a doorway — is defined once, in
+`packages/shared/src/terrain.ts`, and read by the world server and the browser
+alike. A character nobody recognises is treated as solid.
+**Why:** The server decides what may be walked on and the client decides what
+colour to paint; if those two lists ever disagreed, a player would see a floor
+and be stopped by a wall. Having one table makes that disagreement impossible.
+Treating the unknown as solid means a typo in a map blocks a tile instead of
+quietly opening a hole in the city wall.
+**Cost to change:** Low. Adding a kind of ground is one line in one table.
+
+## D-024 — The starter district is drawn by code, not stored as a picture
+
+**Date:** 2026-09-11
+**Decision:** `apps/world/src/city.ts` draws the city with named functions —
+walls, streets, the square, the market, the homes — and always produces exactly
+the same tiles. There is no map file and nothing random.
+**Why:** A 128-line wall of text cannot be reviewed or edited: widening a street
+means counting characters on 128 rows. As code, a street is one line with a
+name. "Always the same tiles" matters because two servers must build the same
+city, and because the tests check the real map, not a sample of it.
+**Cost to change:** Low now, higher once the city is large enough to want a map
+editor — at which point this becomes the loader for whatever that editor saves.
+
+## D-025 — The client is only ever given the ground it is standing near
+
+**Date:** 2026-09-11
+**Decision:** The world server streams the 32x32 chunks within the player's view
+radius plus a margin, and sends an explicit "forget this one" when a player
+walks away. The map is never sent whole.
+**Why:** Three reasons, in order of importance. A modified client cannot read a
+map it was never sent, so the city cannot be scraped by standing in the square.
+Bandwidth then depends on how far a player can see, not on how big the world
+is, so the city can grow without the traffic growing. And the margin is what
+stops a chunk being sent, dropped and sent again while somebody paces across a
+boundary.
+**Cost to change:** Low. It is one function, `syncChunks`, and two messages.
+
+## D-026 — The starter district is 128x128 tiles
+
+**Date:** 2026-09-11
+**Decision:** The city is four chunks by four chunks: 128 by 128 tiles, walled
+on all four sides.
+**Why:** It is the working assumption already written against Q-003, and it is
+big enough that a player crosses several chunk boundaries walking across it —
+which is what makes the streaming real rather than theoretical. It is small
+enough that the whole map can be checked, tile by tile, in a millisecond.
+**Cost to change:** Low. The city is drawn from one constant, and nothing in
+the client or the protocol knows how big the world is until the server says so.
+
+## D-027 — Every walkable tile must be reachable, and a test proves it
+
+**Date:** 2026-09-11
+**Decision:** A test floods the whole city from the spawn point and fails if a
+single tile somebody could stand on cannot be walked to — using the same
+diagonal rule the server enforces.
+**Why:** A street drawn one tile short, a house with its door inside a wall, a
+lake that swallows a road: all of them look fine on screen and are only found
+by walking the entire city. A machine can do that in a millisecond, on every
+change, forever.
+**Cost to change:** None. It is a test.

@@ -13,7 +13,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type Phaser from 'phaser';
-import type { MapPatch, PlayerView } from '@atheriam/protocol';
+import type { PlayerView, WorldInfo } from '@atheriam/protocol';
 import * as api from '../net/api.js';
 import { connectToWorld, type ConnectionState, type WorldConnection } from '../net/connection.js';
 import { createGame } from '../game/createGame.js';
@@ -37,7 +37,7 @@ export function App(): JSX.Element {
   const [busy, setBusy] = useState(true);
   const [you, setYou] = useState<PlayerView | null>(null);
   const [nearbyCount, setNearbyCount] = useState(0);
-  const [map, setMap] = useState<MapPatch | null>(null);
+  const [world, setWorld] = useState<WorldInfo | null>(null);
 
   const connectionRef = useRef<WorldConnection | null>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
@@ -60,11 +60,11 @@ export function App(): JSX.Element {
         setYou(self);
         setNearbyCount(others.length);
       },
-      onWelcome: (worldMap) => setMap(worldMap),
+      onWelcome: (info) => setWorld(info),
       onClosed: (reason) => {
         setError(errorMessage(reason));
         setYou(null);
-        setMap(null);
+        setWorld(null);
         setBusy(false);
         gameRef.current?.destroy(true);
         gameRef.current = null;
@@ -131,7 +131,7 @@ export function App(): JSX.Element {
       gameRef.current = null;
       await api.logOut();
       setYou(null);
-      setMap(null);
+      setWorld(null);
       setState('idle');
       setError(null);
       setBusy(false);
@@ -146,13 +146,13 @@ export function App(): JSX.Element {
    * never recovers — the game looks like it failed to load.
    */
   useEffect(() => {
-    if (!playing || map === null) return;
+    if (!playing || world === null) return;
     const parent = stageRef.current;
     const connection = connectionRef.current;
     if (parent === null || connection === null || gameRef.current !== null) return;
 
-    gameRef.current = createGame({ parent, connection, map });
-  }, [playing, map]);
+    gameRef.current = createGame({ parent, connection, world });
+  }, [playing, world]);
 
   // Leave the city tidily if the tab goes away, so the server does not have to
   // wait for a timeout to notice — and so the player's position is saved.

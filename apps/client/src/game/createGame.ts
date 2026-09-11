@@ -5,7 +5,7 @@
  * player actually enters the world, and destroyed cleanly when they leave.
  */
 import Phaser from 'phaser';
-import type { MapPatch } from '@atheriam/protocol';
+import type { WorldInfo } from '@atheriam/protocol';
 import { colorTokens } from '../tokens/tokens.js';
 import type { WorldConnection } from '../net/connection.js';
 import { WorldScene, type WorldSceneData } from './WorldScene.js';
@@ -13,7 +13,7 @@ import { WorldScene, type WorldSceneData } from './WorldScene.js';
 export interface CreateGameOptions {
   readonly parent: HTMLElement;
   readonly connection: WorldConnection;
-  readonly map: MapPatch;
+  readonly world: WorldInfo;
 }
 
 export function createGame(options: CreateGameOptions): Phaser.Game {
@@ -31,7 +31,7 @@ export function createGame(options: CreateGameOptions): Phaser.Game {
     scene: [WorldScene],
   });
 
-  const sceneData: WorldSceneData = { connection: options.connection, map: options.map };
+  const sceneData: WorldSceneData = { connection: options.connection, world: options.world };
   game.scene.start(WorldScene.KEY, sceneData);
   return game;
 }

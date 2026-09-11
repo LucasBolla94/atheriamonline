@@ -16,12 +16,19 @@ import {
   decodeServerMessage,
   encode,
   type ClientMessage,
-  type MapPatch,
   type PlayerView,
   type RejectReason,
   type ServerMessage,
+  type WorldInfo,
 } from '@atheriam/protocol';
-import type { Direction, TilePos } from '@atheriam/shared';
+import { chunkKey, type Direction, type TilePos } from '@atheriam/shared';
+
+/** One square of the map, as the client holds it. */
+export interface HeldChunk {
+  readonly cx: number;
+  readonly cy: number;
+  readonly rows: readonly string[];
+}
 
 /** Just enough of a WebSocket for this file to use, so tests can fake it. */
 export interface SocketLike {
@@ -32,7 +39,7 @@ export interface SocketLike {
 /** How the connection reports back. Every field is optional. */
 export interface ConnectionHandlers {
   onStateChange?: (state: ConnectionState) => void;
-  onWelcome?: (map: MapPatch, playerId: string) => void;
+  onWelcome?: (world: WorldInfo, playerId: string) => void;
   onSnapshot?: (you: PlayerView, others: PlayerView[]) => void;
   onReject?: (reason: RejectReason) => void;
   onClosed?: (reason: string) => void;
@@ -60,8 +67,25 @@ export class WorldConnection {
   /** Where the player is, according to the server. Never set locally. */
   you: PlayerView | null = null;
   others: PlayerView[] = [];
-  map: MapPatch | null = null;
   playerId: string | null = null;
+  /** How big the city is. Sent once, on welcome. */
+  world: WorldInfo | null = null;
+
+  /**
+   * The pieces of the map we have been given, by `cx:cy`.
+   *
+   * The client holds only what the server has sent it: the chunks around the
+   * player. Anything not in here is unknown ground, and the renderer draws
+   * nothing there rather than guessing.
+   */
+  readonly chunks = new Map<string, HeldChunk>();
+
+  /**
+   * Goes up whenever a chunk arrives or is dropped. The renderer compares it
+   * with the last value it drew, which is cheaper than diffing the map every
+   * frame and means the two never need to be wired together with events.
+   */
+  chunkRevision = 0;
 
   constructor(handlers: ConnectionHandlers = {}, now: () => number = () => Date.now()) {
     this.handlers = handlers;
@@ -120,6 +144,10 @@ export class WorldConnection {
     if (this.state === 'closed') return;
     this.socket = null;
     this.pendingTicket = null;
+    // The map goes with the connection. Keeping it would mean a reconnection
+    // drew yesterday's city until the new chunks caught up.
+    this.chunks.clear();
+    this.chunkRevision += 1;
     this.setState('closed');
     this.handlers.onClosed?.(reason);
   }
@@ -149,9 +177,24 @@ export class WorldConnection {
     switch (message.t) {
       case 'welcome': {
         this.playerId = message.playerId;
-        this.map = message.map;
+        this.world = message.world;
         this.setState('playing');
-        this.handlers.onWelcome?.(message.map, message.playerId);
+        this.handlers.onWelcome?.(message.world, message.playerId);
+        return;
+      }
+      case 'chunk': {
+        this.chunks.set(chunkKey({ cx: message.cx, cy: message.cy }), {
+          cx: message.cx,
+          cy: message.cy,
+          rows: message.rows,
+        });
+        this.chunkRevision += 1;
+        return;
+      }
+      case 'chunkDrop': {
+        if (this.chunks.delete(chunkKey({ cx: message.cx, cy: message.cy }))) {
+          this.chunkRevision += 1;
+        }
         return;
       }
       case 'snapshot': {
@@ -211,12 +254,12 @@ export class WorldConnection {
 /** Wrap a real browser WebSocket so it drives a `WorldConnection`. */
 export function connectToWorld(
   url: string,
-  name: string,
+  ticket: string,
   handlers: ConnectionHandlers,
 ): WorldConnection {
   const connection = new WorldConnection(handlers);
   const socket = new WebSocket(url);
-  connection.attach(socket, name);
+  connection.attach(socket, ticket);
   socket.addEventListener('open', () => connection.handleOpen());
   socket.addEventListener('message', (event: MessageEvent<unknown>) => {
     connection.handleMessage(String(event.data));

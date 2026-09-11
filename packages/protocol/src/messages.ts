@@ -13,14 +13,17 @@
  * Every message is validated with zod before it is trusted, on both sides.
  */
 import { z } from 'zod';
+import { CHUNK_SIZE_TILES } from '@atheriam/shared';
 
 /**
  * Bumped whenever a message shape changes in a way old clients cannot read.
  *
  * 2: joining takes a world ticket from the API instead of a bare name, so the
  *    world server knows which account is connecting.
+ * 3: the map is no longer sent whole. The server streams the 32x32 chunks
+ *    around the player and tells the client when to forget one.
  */
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 
 /** The eight directions a player may step in. */
 export const directionSchema = z.enum(['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw']);
@@ -116,22 +119,39 @@ export type WalkToIntent = z.infer<typeof walkToIntentSchema>;
 // ---------------------------------------------------------------------------
 
 /**
- * A small map sent whole. Phase 3 replaces this with streamed chunks; the
- * shape is kept simple on purpose so that Phase 1 has something to stand on.
+ * One 32x32 square of the map.
  *
- * Each row is a string, one character per tile:
- *   '.' grass      walkable
- *   ',' road       walkable
- *   '#' wall       blocked
- *   '~' water      blocked
+ * The client is never sent the whole city: it is sent the chunks around the
+ * player and forgets the rest, which is what keeps the world one continuous
+ * space instead of a set of rooms (`docs/SPEC.md` section 7).
+ *
+ * Each row is a string, one character per tile. What each character means is
+ * defined once, in `@atheriam/shared`.
  */
-export const mapPatchSchema = z.object({
-  width: z.number().int().min(1).max(4096),
-  height: z.number().int().min(1).max(4096),
-  rows: z.array(z.string()).min(1).max(4096),
+export const chunkSchema = z.object({
+  t: z.literal('chunk'),
+  cx: z.number().int().min(-32_768).max(32_768),
+  cy: z.number().int().min(-32_768).max(32_768),
+  rows: z.array(z.string().length(CHUNK_SIZE_TILES)).length(CHUNK_SIZE_TILES),
 });
 
-export type MapPatch = z.infer<typeof mapPatchSchema>;
+export type ChunkMessage = z.infer<typeof chunkSchema>;
+
+/** Forget this chunk: the player has walked out of range of it. */
+export const chunkDropSchema = z.object({
+  t: z.literal('chunkDrop'),
+  cx: z.number().int().min(-32_768).max(32_768),
+  cy: z.number().int().min(-32_768).max(32_768),
+});
+
+/** How big the world is, so the client can size its camera and its minimap. */
+export const worldInfoSchema = z.object({
+  width: z.number().int().min(1).max(65_536),
+  height: z.number().int().min(1).max(65_536),
+  chunkSize: z.number().int().min(1).max(256),
+});
+
+export type WorldInfo = z.infer<typeof worldInfoSchema>;
 
 /** One other player, as seen by this client. */
 export const playerViewSchema = z.object({
@@ -152,7 +172,7 @@ export const welcomeSchema = z.object({
   /** How long one server tick lasts, so the client can smooth movement. */
   tickMs: z.number().int().positive(),
   spawn: tilePosSchema,
-  map: mapPatchSchema,
+  world: worldInfoSchema,
 });
 
 /**
@@ -210,6 +230,8 @@ export const pongSchema = z.object({
 
 export const serverMessageSchema = z.discriminatedUnion('t', [
   welcomeSchema,
+  chunkSchema,
+  chunkDropSchema,
   snapshotSchema,
   rejectSchema,
   byeSchema,
