@@ -247,6 +247,9 @@ The city refuses player 201 with "The city is full right now" — see Q-006.
 To run it yourself: `PLAYERS=150 node scripts/load-test.mjs`, then
 `scripts/remove-load-test-accounts.sh` to tidy up after it.
 
+`pnpm test:live` also leaves a few throwaway accounts behind, called
+`Smoke…`; `scripts/remove-smoke-accounts.sh` removes those.
+
 ### What a moderator can do
 
 There is no moderator screen yet — these are web addresses the browser asks

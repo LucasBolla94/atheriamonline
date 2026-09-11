@@ -76,6 +76,50 @@ test('two people can talk to each other on the live site', async ({ browser }) =
   }
 });
 
+test('a new player really has a purse, belongings and a house', async ({ page }) => {
+  await createAccountAndEnter(page);
+
+  await expect(page.locator('.hud')).toContainText('50.00 c');
+
+  await page.getByRole('button', { name: /Purse/ }).click();
+  await expect(page.getByRole('dialog')).toContainText('You are carrying 3 things');
+  await page.getByRole('dialog').getByRole('button', { name: 'Close' }).click();
+
+  await page.getByRole('button', { name: 'Go home' }).click();
+  await expect(page.getByRole('dialog')).toContainText('Your house');
+  await page.getByRole('dialog').getByRole('button', { name: 'Step outside' }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+});
+
+test('two people can really trade on the live site', async ({ browser }) => {
+  const first = await browser.newPage();
+  const second = await browser.newPage();
+  try {
+    const one = await createAccountAndEnter(first);
+    await createAccountAndEnter(second);
+
+    await first.getByLabel('Say something').fill('Trade?');
+    await first.getByRole('button', { name: 'Say' }).click();
+    await expect(second.locator('.chat__log')).toContainText('Trade?');
+
+    await second.getByRole('button', { name: one }).first().click();
+    await second.getByRole('button', { name: 'Offer to trade' }).click();
+    await expect(first.getByRole('dialog')).toContainText('Trading with');
+
+    await second
+      .getByRole('button', { name: /Oak stool.*put on the table/ })
+      .first()
+      .click();
+    await expect(first.getByRole('dialog')).toContainText('Oak stool');
+
+    await second.getByRole('button', { name: 'Call it off' }).click();
+    await expect(second.getByRole('dialog')).toHaveCount(0);
+  } finally {
+    await first.close();
+    await second.close();
+  }
+});
+
 test('the certificate covers www too, and sends people to the short name', async ({ page }) => {
   const response = await page.goto('https://www.atheriam.online/');
   expect(response?.status()).toBe(200);

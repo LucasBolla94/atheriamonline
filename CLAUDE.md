@@ -44,6 +44,7 @@ Vitest + Playwright · Docker Compose · Caddy.
 - `pnpm test:live` — drive a browser against the real site
 - `PLAYERS=150 node scripts/load-test.mjs` — then
   `scripts/remove-load-test-accounts.sh`
+- `scripts/remove-smoke-accounts.sh` — tidy up after `pnpm test:live`
 
 ## Live
 
