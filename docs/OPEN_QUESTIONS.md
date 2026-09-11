@@ -40,3 +40,19 @@ few hundred players to feel busy.
 **Working assumption:** only the owner's account has moderator rights.
 **What we need from you:** a list of accounts that should be moderators, when
 you have one.
+
+## Q-006 — What should happen when the city is full?
+
+The server refuses player 201 with "The city is full right now."
+**Working assumption:** 200 players in one world server, and no queue.
+**What we need from you:** is a queue worth building, or should a second
+district open instead?
+
+## Q-007 — Should names be reserved, or first-come-first-served?
+
+Today a name is only taken while that player is connected. When they log off,
+anyone may use it.
+**Working assumption:** first-come-first-served, until accounts exist in
+Phase 2 — after which a name belongs to an account permanently.
+**What we need from you:** confirm that a name should be permanent once
+somebody has registered it.

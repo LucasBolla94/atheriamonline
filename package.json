@@ -2,7 +2,7 @@
   "name": "atheriam",
   "version": "0.0.0",
   "private": true,
-  "description": "Atheriam — a browser multiplayer social world set in an original medieval kingdom-city.",
+  "description": "Atheriam \u2014 a browser multiplayer social world set in an original medieval kingdom-city.",
   "license": "UNLICENSED",
   "type": "module",
   "engines": {
@@ -12,7 +12,7 @@
   "scripts": {
     "dev": "pnpm -r --parallel dev",
     "build": "pnpm -r build",
-    "typecheck": "tsc --build --force",
+    "typecheck": "tsc --build --force && pnpm --filter @atheriam/client typecheck",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
@@ -20,10 +20,13 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "db:migrate": "pnpm --filter @atheriam/db migrate",
-    "db:seed": "pnpm --filter @atheriam/db seed"
+    "db:seed": "pnpm --filter @atheriam/db seed",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui"
   },
   "devDependencies": {
     "@eslint/js": "^9.18.0",
+    "@playwright/test": "^1.63.0",
     "@types/node": "^22.10.5",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^9.1.0",

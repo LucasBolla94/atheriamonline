@@ -1,0 +1,227 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { encode, type ServerMessage } from '@atheriam/protocol';
+import { MAX_INTENTS_PER_SECOND, WorldConnection, type SocketLike } from './connection.js';
+
+class FakeSocket implements SocketLike {
+  readonly sent: string[] = [];
+  closed = false;
+
+  send(data: string): void {
+    this.sent.push(data);
+  }
+
+  close(): void {
+    this.closed = true;
+  }
+
+  /** The messages this socket was asked to send, already parsed. */
+  parsed(): Array<Record<string, unknown>> {
+    return this.sent.map((raw) => JSON.parse(raw) as Record<string, unknown>);
+  }
+}
+
+const WELCOME: ServerMessage = {
+  t: 'welcome',
+  protocolVersion: 1,
+  playerId: 'p1',
+  tickMs: 100,
+  spawn: { x: 2, y: 2 },
+  map: { width: 3, height: 3, rows: ['...', '...', '...'] },
+};
+
+function snapshot(x: number, y: number): ServerMessage {
+  return {
+    t: 'snapshot',
+    tick: 1,
+    you: { id: 'p1', name: 'Aldric', x, y, facing: 's' },
+    players: [],
+  };
+}
+
+describe('WorldConnection', () => {
+  let socket: FakeSocket;
+  let connection: WorldConnection;
+  let clock: number;
+
+  beforeEach(() => {
+    socket = new FakeSocket();
+    clock = 0;
+    connection = new WorldConnection({}, () => clock);
+  });
+
+  function join(): void {
+    connection.attach(socket, 'Aldric');
+    connection.handleOpen();
+    connection.handleMessage(encode(WELCOME));
+  }
+
+  it('starts idle and sends nothing', () => {
+    expect(connection.currentState).toBe('idle');
+    expect(socket.sent).toEqual([]);
+  });
+
+  it('asks to join as soon as the socket opens', () => {
+    connection.attach(socket, 'Aldric');
+    expect(connection.currentState).toBe('connecting');
+    connection.handleOpen();
+    expect(connection.currentState).toBe('joining');
+    expect(socket.parsed()[0]).toEqual({ t: 'join', name: 'Aldric' });
+  });
+
+  it('starts playing when the server welcomes it, and remembers the map', () => {
+    join();
+    expect(connection.currentState).toBe('playing');
+    expect(connection.playerId).toBe('p1');
+    expect(connection.map?.rows).toHaveLength(3);
+  });
+
+  it('refuses to send intents before it is playing', () => {
+    connection.attach(socket, 'Aldric');
+    connection.handleOpen();
+    socket.sent.length = 0;
+
+    connection.step('n');
+    connection.walkTo({ x: 1, y: 1 });
+    connection.stop();
+
+    expect(socket.sent).toEqual([]);
+  });
+
+  it('sends a step intent and nothing more', () => {
+    join();
+    socket.sent.length = 0;
+
+    connection.step('e');
+
+    expect(socket.parsed()).toEqual([{ t: 'step', seq: 1, dir: 'e' }]);
+  });
+
+  it('numbers its intents so a rejection can be matched to one', () => {
+    join();
+    socket.sent.length = 0;
+
+    connection.step('e');
+    connection.step('e');
+    connection.walkTo({ x: 1, y: 1 });
+
+    expect(socket.parsed().map((m) => m['seq'])).toEqual([1, 2, 3]);
+  });
+
+  it('never moves the player on its own — only a snapshot does that', () => {
+    join();
+    connection.handleMessage(encode(snapshot(2, 2)));
+    expect(connection.you).toMatchObject({ x: 2, y: 2 });
+
+    connection.step('e');
+    // The intent was sent, but the position has not changed: the server has
+    // not spoken yet. This is the whole point of a server-authoritative game.
+    expect(connection.you).toMatchObject({ x: 2, y: 2 });
+
+    connection.handleMessage(encode(snapshot(3, 2)));
+    expect(connection.you).toMatchObject({ x: 3, y: 2 });
+  });
+
+  it('snaps back when the server disagrees', () => {
+    join();
+    connection.handleMessage(encode(snapshot(5, 5)));
+    expect(connection.you).toMatchObject({ x: 5, y: 5 });
+
+    // The server refuses the move and repeats where the player really is.
+    const onReject = vi.fn();
+    const listening = new WorldConnection({ onReject }, () => clock);
+    listening.attach(socket, 'Aldric');
+    listening.handleOpen();
+    listening.handleMessage(encode(WELCOME));
+    listening.handleMessage(encode({ t: 'reject', seq: 1, reason: 'blocked' }));
+    expect(onReject).toHaveBeenCalledWith('blocked');
+  });
+
+  it('ignores a message it cannot understand instead of acting on it', () => {
+    join();
+    connection.handleMessage(encode(snapshot(4, 4)));
+
+    connection.handleMessage('not json');
+    connection.handleMessage('{"t":"somethingNew","x":1}');
+    connection.handleMessage('{"t":"snapshot","tick":-5}');
+
+    expect(connection.you).toMatchObject({ x: 4, y: 4 });
+    expect(connection.currentState).toBe('playing');
+  });
+
+  it('closes when the server says goodbye, and reports why', () => {
+    const onClosed = vi.fn();
+    const c = new WorldConnection({ onClosed }, () => clock);
+    c.attach(socket, 'Aldric');
+    c.handleOpen();
+    c.handleMessage(encode(WELCOME));
+
+    c.handleMessage(encode({ t: 'bye', reason: 'name-taken' }));
+
+    expect(c.currentState).toBe('closed');
+    expect(onClosed).toHaveBeenCalledWith('name-taken');
+  });
+
+  it('stops sending before the server would consider it flooding', () => {
+    join();
+    socket.sent.length = 0;
+
+    for (let i = 0; i < 100; i += 1) {
+      connection.step('e');
+    }
+
+    expect(socket.sent.length).toBe(MAX_INTENTS_PER_SECOND);
+  });
+
+  it('is allowed to send again in the next second', () => {
+    join();
+    socket.sent.length = 0;
+
+    for (let i = 0; i < 100; i += 1) connection.step('e');
+    const afterFirstSecond = socket.sent.length;
+
+    clock += 1000;
+    connection.step('e');
+
+    expect(socket.sent.length).toBe(afterFirstSecond + 1);
+  });
+
+  it('tells the caller about every state it passes through', () => {
+    const onStateChange = vi.fn();
+    const c = new WorldConnection({ onStateChange }, () => clock);
+    c.attach(socket, 'Aldric');
+    c.handleOpen();
+    c.handleMessage(encode(WELCOME));
+    c.handleClose();
+
+    expect(onStateChange.mock.calls.map((call) => call[0])).toEqual([
+      'connecting',
+      'joining',
+      'playing',
+      'closed',
+    ]);
+  });
+
+  it('closes the socket when the player leaves on purpose', () => {
+    join();
+    connection.disconnect();
+    expect(socket.closed).toBe(true);
+    expect(connection.currentState).toBe('closed');
+  });
+
+  it('keeps the first reason it was given for closing', () => {
+    // The server says goodbye and then closes the socket. Without care, the
+    // socket's own close event overwrites the real reason and the player is
+    // told "connection lost" instead of "that name is taken".
+    const onClosed = vi.fn();
+    const c = new WorldConnection({ onClosed }, () => clock);
+    c.attach(socket, 'Aldric');
+    c.handleOpen();
+    c.handleMessage(encode(WELCOME));
+
+    c.handleMessage(encode({ t: 'bye', reason: 'name-taken' }));
+    c.handleClose();
+
+    expect(onClosed).toHaveBeenCalledTimes(1);
+    expect(onClosed).toHaveBeenCalledWith('name-taken');
+  });
+});

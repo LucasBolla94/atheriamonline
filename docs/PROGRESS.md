@@ -10,8 +10,8 @@ Last updated: 2026-09-11
 
 ## Current phase
 
-**Phase 0 — Foundations** — done.
-Next up: **Phase 1 — Walking skeleton**.
+**Phase 1 — Walking skeleton** — done.
+Next up: **Phase 2 — Accounts**.
 
 ## Phase list
 
@@ -118,3 +118,23 @@ Open a terminal in the project folder and run these, in order.
    pnpm lint
    pnpm test
    ```
+5. To test it in a real browser (slower, needs the browser downloaded once
+   with `pnpm exec playwright install chromium`):
+   ```
+   pnpm test:e2e
+   ```
+
+## Trying the game right now
+
+Phase 1 is playable. Two terminals:
+
+```
+pnpm --filter @atheriam/world dev     # the city
+pnpm --filter @atheriam/client dev    # the browser game
+```
+
+Then open http://localhost:5173, type a name, and press **Enter the city**.
+Open a second browser window to see two people in the same place.
+
+Click a tile to walk there, or use WASD. There is no chat yet — that is
+Phase 4.

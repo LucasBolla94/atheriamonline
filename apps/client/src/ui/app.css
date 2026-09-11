@@ -1,0 +1,196 @@
+/*
+ * Interface styling.
+ *
+ * Every value here comes from a design token. If you need a colour or a size
+ * that is not in `tokens.css`, add it there first — that is the rule from
+ * `docs/SPEC.md`, and it is what keeps the game looking like one product.
+ */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--color-backdrop);
+  color: var(--color-text);
+  font-family: var(--font-family-ui);
+  font-size: var(--font-size-md);
+  /* The game is a fixed viewport, not a document: never bounce or scroll. */
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+.screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: var(--space-md);
+}
+
+.panel {
+  width: 100%;
+  max-width: 380px;
+  padding: var(--space-lg);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.panel__title {
+  margin: 0 0 var(--space-xs);
+  font-size: var(--font-size-xl);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.panel__subtitle {
+  margin: 0 0 var(--space-lg);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-md);
+}
+
+.field {
+  display: block;
+  margin-bottom: var(--space-md);
+}
+
+.field__label {
+  display: block;
+  margin-bottom: var(--space-xs);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.field__input {
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: var(--font-size-md);
+}
+
+.field__input:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.button {
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--color-accent);
+  color: var(--color-accent-text);
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.button:focus-visible {
+  outline: 2px solid var(--color-text);
+  outline-offset: 2px;
+}
+
+.notice {
+  margin-top: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+}
+
+.notice--error {
+  background: color-mix(in srgb, var(--color-danger) 22%, transparent);
+  border: 1px solid var(--color-danger);
+}
+
+.notice--quiet {
+  color: var(--color-text-muted);
+}
+
+.stage {
+  position: relative;
+  height: 100%;
+  width: 100%;
+}
+
+.stage__canvas {
+  height: 100%;
+  width: 100%;
+}
+
+.hud {
+  position: absolute;
+  top: var(--space-md);
+  left: var(--space-md);
+  display: flex;
+  gap: var(--space-sm);
+  align-items: center;
+  padding: var(--space-xs) var(--space-md);
+  background: color-mix(in srgb, var(--color-surface) 85%, transparent);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  font-size: var(--font-size-sm);
+  pointer-events: none;
+}
+
+.hud__dot {
+  width: var(--space-sm);
+  height: var(--space-sm);
+  border-radius: var(--radius-pill);
+  background: var(--color-accent);
+}
+
+.hud__muted {
+  color: var(--color-text-muted);
+}
+
+.hint {
+  position: absolute;
+  bottom: var(--space-md);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: var(--space-xs) var(--space-md);
+  background: color-mix(in srgb, var(--color-surface) 85%, transparent);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* A phone held upright cannot show the world properly, so we say so. */
+@media (orientation: portrait) and (max-width: 900px) {
+  .stage::after {
+    content: 'Turn your phone sideways to play.';
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-xl);
+    background: var(--color-backdrop);
+    color: var(--color-text);
+    text-align: center;
+  }
+}

@@ -97,3 +97,52 @@ economy: an array lookup that is actually undefined, an optional field that is
 silently set to undefined, a function that forgets to return on one path.
 **Cost to change:** Low now, high later. Turning them on after the code exists
 means fixing hundreds of errors at once, which is why they are on from day one.
+
+## D-011 — Phase 1 draws flat colours, not artwork
+
+**Date:** 2026-09-11
+**Decision:** The world is drawn with coloured rectangles from the design
+tokens. No image file exists in the repository yet.
+**Why:** It proves the game loop works before any art exists, and it means no
+asset can enter the project before `docs/ASSETS.md` can record its licence.
+**Cost to change:** None. The tile colours are already named `tileGrass`,
+`tileRoad` and so on, so artwork replaces them without renaming anything.
+
+## D-012 — The client asks "I want to be there", not "here is my route"
+
+**Date:** 2026-09-11
+**Decision:** Clicking a tile sends the destination. The server finds the path
+and walks it one tile per tick.
+**Why:** If the client sent a route, a modified client could send a route
+through a wall. Asking only for a destination means there is nothing to cheat
+with: the server is the only thing that has ever seen a path.
+**Cost to change:** Low, but there is no reason to.
+
+## D-013 — Design tokens exist twice, and a test keeps them honest
+
+**Date:** 2026-09-11
+**Decision:** Colours and sizes live in `tokens.css` for React and in
+`tokens.ts` for Phaser, and `tokens.test.ts` fails if the two disagree.
+**Why:** Phaser needs numbers and CSS needs strings, so one copy is not
+possible. Two copies that drift apart is how the interface slowly stops
+matching the game, and nobody notices until a screenshot looks wrong.
+**Cost to change:** Low.
+
+## D-014 — The client limits its own sending rate
+
+**Date:** 2026-09-11
+**Decision:** The browser sends at most 15 intents per second; the server
+disconnects anyone above 40.
+**Why:** The gap is deliberate. A stuck key or a fast-clicking player should
+never be mistaken for an attack and kicked out of the game.
+**Cost to change:** None. Both numbers are constants.
+
+## D-015 — Phaser starts only once its container is visible
+
+**Date:** 2026-09-11
+**Decision:** The game is created in an effect that waits for the stage to be
+on screen, not in the "welcome" handler.
+**Why:** Phaser measures its parent when it starts. A hidden parent measures
+zero, and the result is a 0x0 canvas that never recovers — the game simply
+looks broken. This was a real bug, found by the browser tests.
+**Cost to change:** None.

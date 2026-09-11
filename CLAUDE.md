@@ -47,3 +47,6 @@ Vitest + Playwright · Docker Compose · Caddy.
 - This machine's Node is not compiled with TypeScript support, so dev scripts
   run through `tsx`, not `node --experimental-strip-types`. See D-008.
 - Docker is not installed yet. See Q-001.
+- Playwright's browser system libraries are installed. Re-running
+  `sudo npx playwright install-deps chromium` needs
+  `DEBIAN_FRONTEND=noninteractive`, or apt stops on a prompt.

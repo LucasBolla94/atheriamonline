@@ -1,0 +1,38 @@
+/*
+ * Design tokens for the interface.
+ *
+ * Keep every value here in step with `tokens.ts`. `tokens.test.ts` fails if
+ * they drift apart, so this is checked, not just asked for politely.
+ */
+
+:root {
+  /* colour */
+  --color-backdrop: #14110f;
+  --color-surface: #241f1b;
+  --color-surface-raised: #342c26;
+  --color-border: #4a3f36;
+  --color-text: #f2e9dd;
+  --color-text-muted: #a89880;
+  --color-accent: #c9a227;
+  --color-accent-text: #1a1510;
+  --color-danger: #b4472e;
+
+  /* spacing */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 40px;
+
+  /* type */
+  --font-size-sm: 12px;
+  --font-size-md: 14px;
+  --font-size-lg: 18px;
+  --font-size-xl: 28px;
+  --font-family-ui: 'Segoe UI', Roboto, system-ui, -apple-system, sans-serif;
+
+  /* shape */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-pill: 999px;
+}

@@ -1,0 +1,27 @@
+{
+  "name": "@atheriam/client",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The browser game: Phaser draws the world, React draws the interface.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@atheriam/protocol": "workspace:*",
+    "@atheriam/shared": "workspace:*",
+    "phaser": "^3.87.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^5.4.11"
+  }
+}
