@@ -80,6 +80,9 @@ export const strings = {
     empty: 'Nobody nearby has said anything yet.',
     nameTitle: (name: string): string => `What to do about ${name}`,
     muted: 'A moderator has stopped you talking for now.',
+    hide: 'Hide chat',
+    show: (unread: number, more: boolean): string =>
+      unread === 0 ? 'Show chat' : `Show chat (${unread}${more ? '+' : ''})`,
     tooChatty: 'That was a lot at once. Give it a moment.',
   },
 

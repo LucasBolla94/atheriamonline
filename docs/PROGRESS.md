@@ -10,8 +10,10 @@ Last updated: 2026-09-11
 
 ## Current phase
 
-**Phase 4 — Talking** — done.
-Next up: **Phase 5 — Items and the ledger**.
+**Phase 8 — Mobile and polish** — done.
+Next up: **Phase 9 — Production**, to put the game on atheriam.online. Phases 5
+to 7 (items, trading and houses) come after that, because the owner asked for
+a working site first.
 
 ## Phase list
 
@@ -86,11 +88,19 @@ charge.
 - [ ] Place and rotate furniture (moves the instance, never copies)
 - [ ] Access control: nobody / friends / everyone
 
-### Phase 8 — Mobile and polish
+### Phase 8 — Mobile and polish — DONE
 
-- [ ] Landscape layout, touch controls, pinch zoom
-- [ ] Performance pass: 60 fps on a mid-range phone
-- [ ] Accessibility pass on the UI
+- [x] Landscape layout, touch controls, pinch zoom
+- [x] The sign-up form can be reached on a screen under 400 pixels tall
+- [x] The chat folds away so it does not cover the city on a small screen
+- [x] Safe-area insets, so nothing hides behind a notch
+- [x] Performance pass: the ground is drawn once per chunk and at most one
+      chunk per frame, and a browser test fails if anything blocks the main
+      thread for a tenth of a second — but 60 fps on a real phone is still
+      unmeasured here, see Q-001
+- [x] Accessibility pass: every control reachable by keyboard (tested), touch
+      targets at least 44 pixels, reduced motion respected, the chat log
+      announced to a screen reader
 
 ### Phase 9 — Production
 

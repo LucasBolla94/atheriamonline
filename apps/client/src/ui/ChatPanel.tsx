@@ -22,6 +22,9 @@ export interface ChatPanelProps {
   readonly onChoosePlayer: (name: string) => void;
 }
 
+/** How many unread remarks the folded button will count up to. */
+const MAX_UNREAD_SHOWN = 9;
+
 export function ChatPanel({
   entries,
   myPlayerId,
@@ -30,8 +33,12 @@ export function ChatPanel({
   onChoosePlayer,
 }: ChatPanelProps): JSX.Element {
   const [draft, setDraft] = useState('');
+  const [folded, setFolded] = useState(false);
+  const [readCount, setReadCount] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const logRef = useRef<HTMLDivElement | null>(null);
+
+  const unread = folded ? entries.length - readCount : 0;
 
   // Enter opens the chat box from anywhere, the way it does in every game
   // with a chat box. Escape gives the keyboard back to the city, so the
@@ -43,6 +50,9 @@ export function ChatPanel({
 
       if (event.key === 'Enter' && document.activeElement !== input) {
         event.preventDefault();
+        // Opening the chat with the keyboard also unfolds it, or the box the
+        // player just asked for would not be on screen.
+        setFolded(false);
         input.focus();
         return;
       }
@@ -62,7 +72,7 @@ export function ChatPanel({
     if (log === null) return;
     const nearBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
     if (nearBottom) log.scrollTop = log.scrollHeight;
-  }, [entries.length]);
+  }, [entries.length, folded]);
 
   function submit(event: React.FormEvent): void {
     event.preventDefault();
@@ -72,8 +82,22 @@ export function ChatPanel({
     setDraft('');
   }
 
+  function toggleFolded(): void {
+    setFolded((wasFolded) => {
+      if (wasFolded) return false;
+      setReadCount(entries.length);
+      return true;
+    });
+  }
+
   return (
-    <div className="chat">
+    <div className={folded ? 'chat chat--folded' : 'chat'}>
+      <button type="button" className="chat__toggle" aria-expanded={!folded} onClick={toggleFolded}>
+        {folded
+          ? strings.chat.show(Math.min(unread, MAX_UNREAD_SHOWN), unread > MAX_UNREAD_SHOWN)
+          : strings.chat.hide}
+      </button>
+
       <div className="chat__log" ref={logRef} role="log" aria-label={strings.chat.logLabel}>
         {entries.length === 0 && <p className="chat__empty">{strings.chat.empty}</p>}
         {entries.map((entry) => (

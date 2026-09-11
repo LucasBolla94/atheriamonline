@@ -93,6 +93,16 @@ export class WorldScene extends Phaser.Scene {
   private avatars = new Map<string, Avatar>();
   /** One drawn square of ground per chunk we hold, by `cx:cy`. */
   private chunkImages = new Map<string, Phaser.GameObjects.RenderTexture>();
+  /**
+   * Chunks that have arrived but have not been drawn yet.
+   *
+   * Walking into a new part of the city can bring several chunks at once, and
+   * each one is a thousand tiles painted into a texture. Doing all of them in
+   * one frame is a visible stutter on a phone, so they are queued and drawn
+   * one per frame — by the time the player has walked far enough to see the
+   * new ground, it is there.
+   */
+  private readonly pendingChunks: HeldChunk[] = [];
   private drawnChunkRevision = -1;
   private shownChatRevision = 0;
   private keys = new Map<Direction, Phaser.Input.Keyboard.Key[]>();
@@ -131,19 +141,31 @@ export class WorldScene extends Phaser.Scene {
    * or been dropped, which is what the revision counter is for.
    */
   private syncChunks(): void {
-    if (this.connection.chunkRevision === this.drawnChunkRevision) return;
-    this.drawnChunkRevision = this.connection.chunkRevision;
+    if (this.connection.chunkRevision !== this.drawnChunkRevision) {
+      this.drawnChunkRevision = this.connection.chunkRevision;
 
-    for (const [key, chunk] of this.connection.chunks) {
-      if (this.chunkImages.has(key)) continue;
-      this.chunkImages.set(key, this.drawChunk(chunk));
+      for (const [key, chunk] of this.connection.chunks) {
+        if (this.chunkImages.has(key)) continue;
+        if (this.pendingChunks.some((queued) => chunkKeyOf(queued) === key)) continue;
+        this.pendingChunks.push(chunk);
+      }
+
+      for (const [key, image] of this.chunkImages) {
+        if (this.connection.chunks.has(key)) continue;
+        image.destroy();
+        this.chunkImages.delete(key);
+      }
     }
 
-    for (const [key, image] of this.chunkImages) {
-      if (this.connection.chunks.has(key)) continue;
-      image.destroy();
-      this.chunkImages.delete(key);
-    }
+    // One chunk per frame, however many are waiting.
+    const next = this.pendingChunks.shift();
+    if (next === undefined) return;
+
+    const key = chunkKeyOf(next);
+    // It may have been taken away again while it sat in the queue.
+    if (!this.connection.chunks.has(key)) return;
+    if (this.chunkImages.has(key)) return;
+    this.chunkImages.set(key, this.drawChunk(next));
   }
 
   /**
@@ -437,4 +459,8 @@ export class WorldScene extends Phaser.Scene {
 
 function toHex(value: number): string {
   return `#${value.toString(16).padStart(6, '0')}`;
+}
+
+function chunkKeyOf(chunk: HeldChunk): string {
+  return `${chunk.cx}:${chunk.cy}`;
 }

@@ -7,6 +7,18 @@ from this file.
 
 ---
 
+## Q-001 — Has anybody played it on a real phone yet?
+
+The game is built and tested for a phone in landscape, and the browser tests
+run at phone size on every change. But this machine has no GPU, so no test
+here can honestly say the game holds 60 frames a second on a real mid-range
+phone — see D-035.
+**Working assumption:** it is fast enough. The client draws each piece of
+ground once rather than every frame, and never does more than one piece per
+frame, which is what the target asks for.
+**What we need from you:** open https://atheriam.online on your phone,
+sideways, walk around for a minute, and say whether it feels smooth.
+
 ## Q-002 — How do players pay, if at all?
 
 The spec forbids blockchain and loot boxes, but does not say how the game earns

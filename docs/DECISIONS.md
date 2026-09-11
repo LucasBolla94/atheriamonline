@@ -359,3 +359,44 @@ attacking". Reading the badge every time means taking it away takes effect at
 once, rather than whenever that person next logs in — which is the moment you
 would most want it gone.
 **Cost to change:** None.
+
+## D-034 — The ground is drawn one chunk per frame
+
+**Date:** 2026-09-11
+**Decision:** Chunks that arrive are put in a queue, and the client draws at
+most one of them per frame.
+**Why:** Walking into a new part of the city can bring three or four chunks at
+once, and each one is a thousand tiles painted into a texture. Doing them all
+in one frame is a visible stutter — measured at nearly half a second in the
+browser tests. Spread over four frames it is invisible, and by the time the
+player has walked far enough to see the new ground, it is there.
+**Cost to change:** None. It is a queue and a `shift()`.
+
+## D-035 — Frame rate is not asserted in the browser tests; blocking is
+
+**Date:** 2026-09-11
+**Decision:** The browser tests do not measure frames per second. They measure
+long tasks — any single piece of work holding the main thread — and only on
+the phone-sized run.
+**Why:** This machine has no GPU, so a headless browser rasterises in
+software: a desktop-sized canvas costs about a tenth of a second per frame
+whatever is drawn on it. A frame-rate test here would measure the software
+rasteriser, pass or fail for reasons unrelated to the game, and teach us to
+ignore it. Long tasks are honest: they catch work we do, which is the part we
+control. The 60 fps target in `docs/SPEC.md` section 11 still stands and still
+needs measuring on a real phone — that is written down in
+`docs/OPEN_QUESTIONS.md` rather than pretended about here.
+**Cost to change:** None.
+
+## D-036 — The sign-up form scrolls, because a phone in landscape is short
+
+**Date:** 2026-09-11
+**Decision:** The screen behind the sign-up panel scrolls, even though the
+body never does, and the panel sits at the top rather than centred on a short
+screen.
+**Why:** A phone held sideways is under 400 pixels tall and the create-account
+form is taller than that. Without this the tick box and the button below it
+cannot be reached at all, which is the same as the game not existing on a
+phone. A browser test now fills the form and clicks the button at phone size,
+so it cannot come back.
+**Cost to change:** None.

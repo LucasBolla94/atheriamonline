@@ -34,6 +34,21 @@ body {
   justify-content: center;
   height: 100%;
   padding: var(--space-md);
+  /*
+   * A phone in landscape is under 400 pixels tall, and the create-account form
+   * is taller than that. Without this the tick box and the button are simply
+   * unreachable — the page cannot scroll, because the body must not.
+   */
+  overflow-y: auto;
+  padding-left: max(var(--space-md), env(safe-area-inset-left));
+  padding-right: max(var(--space-md), env(safe-area-inset-right));
+}
+
+/* On a short screen the form starts at the top instead of being centred. */
+@media (max-height: 560px) {
+  .screen {
+    align-items: flex-start;
+  }
 }
 
 .panel {
@@ -131,6 +146,14 @@ body {
   position: relative;
   height: 100%;
   width: 100%;
+  /*
+   * The city handles its own gestures: dragging is the camera and pinching is
+   * the zoom. Without this the browser also scrolls the page, zooms the whole
+   * interface on a double tap, and swallows the second finger.
+   */
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .stage__canvas {
@@ -140,8 +163,8 @@ body {
 
 .hud {
   position: absolute;
-  top: var(--space-md);
-  left: var(--space-md);
+  top: max(var(--space-md), env(safe-area-inset-top));
+  left: max(var(--space-md), env(safe-area-inset-left));
   display: flex;
   gap: var(--space-sm);
   align-items: center;
@@ -272,8 +295,8 @@ body {
  */
 .chat {
   position: absolute;
-  bottom: var(--space-md);
-  left: var(--space-md);
+  bottom: max(var(--space-md), env(safe-area-inset-bottom));
+  left: max(var(--space-md), env(safe-area-inset-left));
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
@@ -406,5 +429,64 @@ body {
 
   .chat {
     max-height: 34vh;
+  }
+}
+
+/*
+ * Getting the chat out of the way.
+ *
+ * On a phone the chat covers a quarter of the city. The toggle folds it down
+ * to its own button, so the player can see where they are walking.
+ */
+.chat__toggle {
+  align-self: flex-start;
+  padding: var(--space-xs) var(--space-md);
+  background: color-mix(in srgb, var(--color-surface) 85%, transparent);
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+.chat__toggle:hover {
+  color: var(--color-text);
+}
+
+.chat__toggle:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.chat--folded .chat__log,
+.chat--folded .chat__form,
+.chat--folded .chat__notice {
+  display: none;
+}
+
+/*
+ * Somebody who has asked their system for less movement gets less movement.
+ * The game still updates; it simply stops easing things around.
+ */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Touch targets must be big enough to hit with a thumb. */
+@media (pointer: coarse) {
+  .chat__send,
+  .chat__toggle,
+  .hud__button,
+  .button,
+  .tab {
+    min-height: 44px;
+  }
+
+  .chat__who {
+    padding: var(--space-xs) 0;
   }
 }
