@@ -12,13 +12,7 @@
  * assumes an answer.
  */
 import { and, eq } from 'drizzle-orm';
-import {
-  itemDefinitions,
-  itemInstances,
-  type Database,
-  type ItemDefinition,
-  type ItemInstance,
-} from '@atheriam/db';
+import { itemDefinitions, itemInstances, type Database, type ItemInstance } from '@atheriam/db';
 
 /** Any database handle: the pool, or a transaction already in progress. */
 type Executor = Database | Parameters<Parameters<Database['transaction']>[0]>[0];
@@ -220,17 +214,4 @@ export async function moveItem(
 export async function countItems(db: Executor): Promise<number> {
   const rows = await db.select({ id: itemInstances.id }).from(itemInstances);
   return rows.length;
-}
-
-/** One definition, by id. */
-export async function definitionOf(
-  db: Executor,
-  definitionId: string,
-): Promise<ItemDefinition | null> {
-  const found = await db
-    .select()
-    .from(itemDefinitions)
-    .where(eq(itemDefinitions.id, definitionId))
-    .limit(1);
-  return found[0] ?? null;
 }

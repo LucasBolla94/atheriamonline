@@ -17,7 +17,7 @@
  * Nothing here trusts an item id from a browser. Every offer is checked
  * against who actually holds the item, in the same statement that moves it.
  */
-import { and, eq, inArray, lt, or, sql } from 'drizzle-orm';
+import { and, eq, lt, or, sql } from 'drizzle-orm';
 import { itemInstances, tradeItems, trades, type Database, type Trade } from '@atheriam/db';
 import { formatAmount, playerAccount, tradeEscrow, type Money } from '@atheriam/economy';
 import { moveWithin, purseOf } from './economy.js';
@@ -538,27 +538,6 @@ async function definitionNames(db: Executor, ids: readonly string[]): Promise<Ma
   return new Map(rows.map((row) => [row.id, row.name]));
 }
 
-/** Everything not used above, exported so the routes can name a trade's parts. */
-export { sideOf };
-
-/** The ids of items a trade is holding, for tests. */
-export async function itemsInTrade(db: Executor, tradeId: string): Promise<string[]> {
-  const rows = await db
-    .select({ id: itemInstances.id })
-    .from(itemInstances)
-    .where(and(eq(itemInstances.holderKind, 'escrow'), eq(itemInstances.holderId, tradeId)));
-  return rows.map((row) => row.id);
-}
-
-/** Used when a trade's items must be checked against a list. */
-export async function itemsOwnedBy(db: Executor, characterId: string): Promise<string[]> {
-  const rows = await db
-    .select({ id: itemInstances.id })
-    .from(itemInstances)
-    .where(and(eq(itemInstances.holderKind, 'character'), eq(itemInstances.holderId, characterId)));
-  return rows.map((row) => row.id);
-}
-
 /** Cancel every open trade somebody is in. Called when they leave. */
 export async function cancelTradesOf(db: Database, characterId: string): Promise<void> {
   const open = await db
@@ -580,33 +559,4 @@ export async function cancelTradesOf(db: Database, characterId: string): Promise
 export async function tradeById(db: Executor, tradeId: string): Promise<Trade | null> {
   const found = await db.select().from(trades).where(eq(trades.id, tradeId)).limit(1);
   return found[0] ?? null;
-}
-
-/** Items on the table, by trade, for the tests. */
-export async function offeredItemIds(db: Executor, tradeId: string): Promise<string[]> {
-  const rows = await db
-    .select({ itemId: tradeItems.itemId })
-    .from(tradeItems)
-    .where(eq(tradeItems.tradeId, tradeId));
-  return rows.map((row) => row.itemId);
-}
-
-/** True when these item ids are all held by this character. */
-export async function allHeldBy(
-  db: Executor,
-  characterId: string,
-  itemIds: readonly string[],
-): Promise<boolean> {
-  if (itemIds.length === 0) return true;
-  const rows = await db
-    .select({ id: itemInstances.id })
-    .from(itemInstances)
-    .where(
-      and(
-        inArray(itemInstances.id, [...itemIds]),
-        eq(itemInstances.holderKind, 'character'),
-        eq(itemInstances.holderId, characterId),
-      ),
-    );
-  return rows.length === itemIds.length;
 }
