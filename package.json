@@ -20,16 +20,20 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "db:migrate": "pnpm --filter @atheriam/db migrate",
-    "db:seed": "pnpm --filter @atheriam/db seed",
+    "db:seed": "pnpm --filter @atheriam/api seed",
     "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui"
+    "test:e2e:ui": "playwright test --ui",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.18.0",
     "@playwright/test": "^1.63.0",
     "@types/node": "^22.10.5",
+    "drizzle-orm": "^0.38.3",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^9.1.0",
+    "ioredis": "^5.4.2",
+    "postgres": "^3.4.5",
     "prettier": "^3.4.2",
     "tsx": "^4.23.13",
     "typescript": "^5.7.3",

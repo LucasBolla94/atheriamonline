@@ -52,7 +52,7 @@ export class WorldConnection {
   private readonly handlers: ConnectionHandlers;
   private readonly now: () => number;
   private state: ConnectionState = 'idle';
-  private pendingName: string | null = null;
+  private pendingTicket: string | null = null;
   private seq = 0;
   private windowStartedAtMs = 0;
   private intentsInWindow = 0;
@@ -73,23 +73,28 @@ export class WorldConnection {
   }
 
   /**
-   * Attach an already-open socket and ask to join under this name.
+   * Attach an already-open socket and ask to join with this ticket.
+   *
+   * The ticket comes from the API and stands for a logged-in account. The
+   * client never says who it is: it presents the ticket and the server decides.
    *
    * The socket is passed in rather than created here so that the same class
    * works in a test with a fake one.
    */
-  attach(socket: SocketLike, name: string): void {
+  attach(socket: SocketLike, ticket: string): void {
     this.socket = socket;
-    this.pendingName = name;
+    this.pendingTicket = ticket;
     this.setState('connecting');
   }
 
   /** Call when the socket opens. Sends the join intent. */
   handleOpen(): void {
-    const name = this.pendingName;
-    if (name === null) return;
+    const ticket = this.pendingTicket;
+    if (ticket === null) return;
+    // A ticket is good for one use, so it is dropped the moment it is spent.
+    this.pendingTicket = null;
     this.setState('joining');
-    this.sendRaw({ t: 'join', name });
+    this.sendRaw({ t: 'join', ticket });
   }
 
   /** Call with every raw message the socket delivers. */
@@ -114,7 +119,7 @@ export class WorldConnection {
   handleClose(reason = 'connection lost'): void {
     if (this.state === 'closed') return;
     this.socket = null;
-    this.pendingName = null;
+    this.pendingTicket = null;
     this.setState('closed');
     this.handlers.onClosed?.(reason);
   }

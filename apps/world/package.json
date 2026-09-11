@@ -14,7 +14,10 @@
   "dependencies": {
     "@atheriam/protocol": "workspace:*",
     "@atheriam/shared": "workspace:*",
-    "ws": "^8.18.0"
+    "ws": "^8.18.0",
+    "@atheriam/db": "workspace:*",
+    "drizzle-orm": "^0.38.3",
+    "ioredis": "^5.4.2"
   },
   "devDependencies": {
     "@types/ws": "^8.5.13"

@@ -14,8 +14,13 @@
  */
 import { z } from 'zod';
 
-/** Bumped whenever a message shape changes in a way old clients cannot read. */
-export const PROTOCOL_VERSION = 1;
+/**
+ * Bumped whenever a message shape changes in a way old clients cannot read.
+ *
+ * 2: joining takes a world ticket from the API instead of a bare name, so the
+ *    world server knows which account is connecting.
+ */
+export const PROTOCOL_VERSION = 2;
 
 /** The eight directions a player may step in. */
 export const directionSchema = z.enum(['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw']);
@@ -51,10 +56,16 @@ export const displayNameSchema = z
 // Client -> Server. Intents only.
 // ---------------------------------------------------------------------------
 
-/** Ask to enter the world. In Phase 2 this carries a real session ticket. */
+/**
+ * Ask to enter the world, using a ticket obtained from the API.
+ *
+ * The client does not say who it is — it hands over a ticket, and the world
+ * server asks the API's store who that ticket belongs to. A client cannot
+ * choose its own name, its own character or its own account.
+ */
 export const joinIntentSchema = z.object({
   t: z.literal('join'),
-  name: displayNameSchema,
+  ticket: z.string().min(16).max(256),
 });
 
 /** Ask to take exactly one step. Sent by the keyboard controls. */
@@ -180,7 +191,15 @@ export const rejectSchema = z.object({
 /** The connection is being closed, with a reason a human can read. */
 export const byeSchema = z.object({
   t: z.literal('bye'),
-  reason: z.enum(['name-taken', 'server-full', 'kicked', 'shutdown', 'protocol-error', 'idle']),
+  reason: z.enum([
+    'bad-ticket',
+    'already-online',
+    'server-full',
+    'kicked',
+    'shutdown',
+    'protocol-error',
+    'idle',
+  ]),
 });
 
 export const pongSchema = z.object({

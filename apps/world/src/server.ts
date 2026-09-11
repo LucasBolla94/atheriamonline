@@ -15,7 +15,7 @@ import {
   type ServerMessage,
 } from '@atheriam/protocol';
 import { spawnPoint } from './map.js';
-import type { World } from './world.js';
+import type { JoiningCharacter, World } from './world.js';
 
 /**
  * The most messages one connection may send per second. A normal player sends
@@ -46,10 +46,32 @@ interface Connection {
   alive: boolean;
 }
 
+/**
+ * How the world server reaches the things it does not own.
+ *
+ * Both of these are passed in rather than imported, so that the tests can run
+ * the real server against simple stand-ins, and so that this file never grows
+ * a database connection of its own.
+ */
 export interface WorldServerOptions {
   readonly host: string;
   readonly port: number;
   readonly world: World;
+  /**
+   * Spend a ticket and say which character it belongs to. A ticket works
+   * once; a second attempt with the same one must return null.
+   */
+  readonly resolveTicket: (ticket: string) => Promise<JoiningCharacter | null>;
+  /**
+   * Write a character's position down. Called when they leave, never per
+   * step — see `docs/SPEC.md` section 7.
+   */
+  readonly savePosition: (character: {
+    id: string;
+    x: number;
+    y: number;
+    facing: JoiningCharacter['facing'];
+  }) => Promise<void>;
   /** Injectable clock, so tests do not depend on the wall clock. */
   readonly now?: () => number;
 }
@@ -59,12 +81,16 @@ export class WorldServer {
   private readonly world: World;
   private readonly connections = new Map<WebSocket, Connection>();
   private readonly now: () => number;
+  private readonly resolveTicket: WorldServerOptions['resolveTicket'];
+  private readonly savePosition: WorldServerOptions['savePosition'];
   private tickTimer: NodeJS.Timeout | null = null;
   private heartbeatTimer: NodeJS.Timeout | null = null;
 
   constructor(options: WorldServerOptions) {
     this.world = options.world;
     this.now = options.now ?? (() => Date.now());
+    this.resolveTicket = options.resolveTicket;
+    this.savePosition = options.savePosition;
     this.wss = new WebSocketServer({ host: options.host, port: options.port });
     this.wss.on('connection', (socket) => this.onConnection(socket));
   }
@@ -121,9 +147,25 @@ export class WorldServer {
   }
 
   private onClose(connection: Connection): void {
-    if (connection.playerId !== null) {
-      this.world.leave(connection.playerId);
+    const playerId = connection.playerId;
+    if (playerId !== null) {
+      const player = this.world.get(playerId);
       connection.playerId = null;
+      this.world.leave(playerId);
+
+      if (player !== undefined) {
+        // Where they stood is written down now, once, as they leave. A failure
+        // here must not take the server down with it: the worst case is that
+        // one player starts tomorrow a few tiles from where they stopped.
+        void this.savePosition({
+          id: player.id,
+          x: player.x,
+          y: player.y,
+          facing: player.facing,
+        }).catch((error: unknown) => {
+          console.error('[world] could not save a position on disconnect:', error);
+        });
+      }
     }
     this.connections.delete(connection.socket);
   }
@@ -153,7 +195,7 @@ export class WorldServer {
     }
 
     if (message.t === 'join') {
-      this.handleJoin(connection, message.name, nowMs);
+      void this.handleJoin(connection, message.ticket, nowMs);
       return;
     }
 
@@ -182,14 +224,29 @@ export class WorldServer {
     this.sendSnapshot(connection);
   }
 
-  private handleJoin(connection: Connection, name: string, nowMs: number): void {
+  private async handleJoin(connection: Connection, ticket: string, nowMs: number): Promise<void> {
     if (connection.playerId !== null) {
       // Joining twice on one socket is not a thing. Ignore it quietly rather
       // than leaving a player behind in the world with nobody driving them.
       return;
     }
 
-    const result = this.world.join(name, nowMs);
+    let character: JoiningCharacter | null = null;
+    try {
+      character = await this.resolveTicket(ticket);
+    } catch (error: unknown) {
+      console.error('[world] could not check a ticket:', error);
+    }
+
+    if (character === null) {
+      this.disconnect(connection, 'bad-ticket');
+      return;
+    }
+
+    // The socket may have gone away while we were asking about the ticket.
+    if (!this.connections.has(connection.socket)) return;
+
+    const result = this.world.join(character, nowMs);
     if (!result.ok) {
       this.disconnect(connection, result.reason);
       return;

@@ -1,17 +1,25 @@
 import { defineConfig, devices } from '@playwright/test';
+import { e2eEnv } from './e2e/global-setup.js';
 
 /**
  * Browser tests.
  *
- * These start the real world server and the real client, then drive an actual
- * browser. They are slow compared with the Vitest suite, so they cover only
- * the things that cannot be proved any other way: that the page loads, that a
- * player can enter the city, and that the character moves when asked.
+ * These start the real API, the real world server and the real client, then
+ * drive an actual browser. They are slow compared with the Vitest suite, so
+ * they cover only what cannot be proved any other way: that a person can make
+ * an account, enter the city, and walk.
+ *
+ * They need PostgreSQL and Redis running:
+ *   docker compose -f infra/docker-compose.yml up -d
  */
+const env = e2eEnv();
+
 export default defineConfig({
   testDir: './e2e',
-  timeout: 30_000,
-  expect: { timeout: 10_000 },
+  testMatch: '**/*.spec.ts',
+  globalSetup: './e2e/global-setup.ts',
+  timeout: 45_000,
+  expect: { timeout: 15_000 },
   fullyParallel: false,
   workers: 1,
   retries: process.env['CI'] === undefined ? 0 : 1,
@@ -24,24 +32,31 @@ export default defineConfig({
 
   projects: [
     { name: 'desktop', use: { ...devices['Desktop Chrome'] } },
-    {
-      name: 'mobile-landscape',
-      use: { ...devices['Pixel 5 landscape'] },
-    },
+    { name: 'mobile-landscape', use: { ...devices['Pixel 5 landscape'] } },
   ],
 
   webServer: [
     {
+      command: 'pnpm --filter @atheriam/api dev',
+      port: 3001,
+      env,
+      reuseExistingServer: false,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    },
+    {
       command: 'pnpm --filter @atheriam/world dev',
       port: 3002,
-      reuseExistingServer: true,
+      env,
+      reuseExistingServer: false,
       stdout: 'pipe',
       stderr: 'pipe',
     },
     {
       command: 'pnpm --filter @atheriam/client dev',
       port: 5173,
-      reuseExistingServer: true,
+      env,
+      reuseExistingServer: false,
       stdout: 'pipe',
       stderr: 'pipe',
     },

@@ -20,6 +20,9 @@ class FakeSocket implements SocketLike {
   }
 }
 
+/** A ticket long enough to satisfy the protocol's length rule. */
+const TICKET = 'ticket-for-the-tests-0123456789';
+
 const WELCOME: ServerMessage = {
   t: 'welcome',
   protocolVersion: 1,
@@ -50,7 +53,7 @@ describe('WorldConnection', () => {
   });
 
   function join(): void {
-    connection.attach(socket, 'Aldric');
+    connection.attach(socket, TICKET);
     connection.handleOpen();
     connection.handleMessage(encode(WELCOME));
   }
@@ -61,11 +64,11 @@ describe('WorldConnection', () => {
   });
 
   it('asks to join as soon as the socket opens', () => {
-    connection.attach(socket, 'Aldric');
+    connection.attach(socket, TICKET);
     expect(connection.currentState).toBe('connecting');
     connection.handleOpen();
     expect(connection.currentState).toBe('joining');
-    expect(socket.parsed()[0]).toEqual({ t: 'join', name: 'Aldric' });
+    expect(socket.parsed()[0]).toEqual({ t: 'join', ticket: TICKET });
   });
 
   it('starts playing when the server welcomes it, and remembers the map', () => {
@@ -76,7 +79,7 @@ describe('WorldConnection', () => {
   });
 
   it('refuses to send intents before it is playing', () => {
-    connection.attach(socket, 'Aldric');
+    connection.attach(socket, TICKET);
     connection.handleOpen();
     socket.sent.length = 0;
 
@@ -129,7 +132,7 @@ describe('WorldConnection', () => {
     // The server refuses the move and repeats where the player really is.
     const onReject = vi.fn();
     const listening = new WorldConnection({ onReject }, () => clock);
-    listening.attach(socket, 'Aldric');
+    listening.attach(socket, TICKET);
     listening.handleOpen();
     listening.handleMessage(encode(WELCOME));
     listening.handleMessage(encode({ t: 'reject', seq: 1, reason: 'blocked' }));
@@ -151,14 +154,14 @@ describe('WorldConnection', () => {
   it('closes when the server says goodbye, and reports why', () => {
     const onClosed = vi.fn();
     const c = new WorldConnection({ onClosed }, () => clock);
-    c.attach(socket, 'Aldric');
+    c.attach(socket, TICKET);
     c.handleOpen();
     c.handleMessage(encode(WELCOME));
 
-    c.handleMessage(encode({ t: 'bye', reason: 'name-taken' }));
+    c.handleMessage(encode({ t: 'bye', reason: 'already-online' }));
 
     expect(c.currentState).toBe('closed');
-    expect(onClosed).toHaveBeenCalledWith('name-taken');
+    expect(onClosed).toHaveBeenCalledWith('already-online');
   });
 
   it('stops sending before the server would consider it flooding', () => {
@@ -188,7 +191,7 @@ describe('WorldConnection', () => {
   it('tells the caller about every state it passes through', () => {
     const onStateChange = vi.fn();
     const c = new WorldConnection({ onStateChange }, () => clock);
-    c.attach(socket, 'Aldric');
+    c.attach(socket, TICKET);
     c.handleOpen();
     c.handleMessage(encode(WELCOME));
     c.handleClose();
@@ -214,14 +217,14 @@ describe('WorldConnection', () => {
     // told "connection lost" instead of "that name is taken".
     const onClosed = vi.fn();
     const c = new WorldConnection({ onClosed }, () => clock);
-    c.attach(socket, 'Aldric');
+    c.attach(socket, TICKET);
     c.handleOpen();
     c.handleMessage(encode(WELCOME));
 
-    c.handleMessage(encode({ t: 'bye', reason: 'name-taken' }));
+    c.handleMessage(encode({ t: 'bye', reason: 'already-online' }));
     c.handleClose();
 
     expect(onClosed).toHaveBeenCalledTimes(1);
-    expect(onClosed).toHaveBeenCalledWith('name-taken');
+    expect(onClosed).toHaveBeenCalledWith('already-online');
   });
 });

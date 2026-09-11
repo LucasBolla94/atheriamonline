@@ -10,20 +10,43 @@ export const strings = {
   appName: 'Atheriam',
   tagline: 'A city that only exists while people are in it.',
 
-  join: {
-    nameLabel: 'Your name',
+  auth: {
+    createTab: 'Create an account',
+    loginTab: 'Log in',
+
+    nameLabel: 'Your name in the city',
     namePlaceholder: 'Aldric',
     nameHelp: 'Three to twenty letters or numbers. Spaces are fine.',
-    submit: 'Enter the city',
-    submitting: 'Entering…',
+
+    emailLabel: 'Email address',
+    emailPlaceholder: 'you@example.com',
+
+    passwordLabel: 'Password',
+    passwordHelp: 'At least ten characters. Longer is better than complicated.',
+
+    birthdayLabel: 'Date of birth',
+    birthdayHelp: 'We ask because Atheriam is for adults only.',
+
+    adultLabel: 'I confirm that I am 18 or over.',
+
+    createSubmit: 'Create my account',
+    loginSubmit: 'Enter the city',
+    working: 'One moment…',
+
     ageNotice: 'Atheriam is for adults. You must be 18 or over to play.',
+    logOut: 'Log out',
   },
 
   errors: {
     nameTooShort: 'That name is too short — three letters at least.',
     nameTooLong: 'That name is too long — twenty letters at most.',
     nameBadCharacters: 'Please use only letters, numbers, spaces, - and _.',
-    'name-taken': 'Somebody in the city is already called that. Try another name.',
+    passwordTooShort: 'Your password must be at least ten characters.',
+    notAnEmail: 'That does not look like an email address.',
+    noBirthday: 'Please tell us your date of birth.',
+    notConfirmedAdult: 'Please confirm that you are 18 or over.',
+    'bad-ticket': 'Your pass to the city expired. Please try again.',
+    'already-online': 'That character is already in the city.',
     'server-full': 'The city is full right now. Please try again in a moment.',
     kicked: 'A moderator removed you from the city.',
     shutdown: 'The city is restarting. Come back shortly.',

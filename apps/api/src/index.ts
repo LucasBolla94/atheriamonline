@@ -2,22 +2,40 @@
  * Atheriam HTTP API.
  *
  * This process owns everything that must survive a restart and must never be
- * half-done: accounts, money and items. Every economic operation here happens
- * in one database transaction and carries an idempotency key.
- *
- * The real server is built in Phase 2. For now this file only proves that the
- * process starts and that the workspace packages are wired up correctly.
+ * half-done: accounts, and later money and items. Every operation that touches
+ * two rows happens in one database transaction.
  */
-import { CURRENCY_NAME, MINOR_UNITS_PER_CROWN } from '@atheriam/economy';
-import { SCHEMA_VERSION } from '@atheriam/db';
-import { PROTOCOL_VERSION } from '@atheriam/protocol';
+import { Redis } from 'ioredis';
+import { connect } from '@atheriam/db';
+import { readConfig } from './config.js';
+import { buildServer } from './server.js';
 
-function main(): void {
-  console.warn(
-    `[api] Atheriam API — protocol v${PROTOCOL_VERSION}, schema v${SCHEMA_VERSION}, ` +
-      `currency ${CURRENCY_NAME} (${MINOR_UNITS_PER_CROWN} minor units each).`,
-  );
-  console.warn('[api] Not listening yet. Fastify and the database arrive in Phase 2.');
+const config = readConfig();
+const database = connect(config.databaseUrl);
+const redis = new Redis(config.redisUrl, { maxRetriesPerRequest: 3 });
+
+const app = await buildServer({ config, db: database.db, redis });
+
+try {
+  await app.listen({ host: config.host, port: config.port });
+} catch (error: unknown) {
+  app.log.error(error, 'The API could not start.');
+  await shutdown();
+  process.exit(1);
 }
 
-main();
+async function shutdown(): Promise<void> {
+  await app.close();
+  redis.disconnect();
+  await database.close();
+}
+
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+  process.on(signal, () => {
+    void (async () => {
+      app.log.info(`${signal} received, shutting down.`);
+      await shutdown();
+      process.exit(0);
+    })();
+  });
+}

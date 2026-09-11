@@ -11,9 +11,10 @@ export interface HudProps {
   readonly y: number;
   readonly nearbyCount: number;
   readonly touch: boolean;
+  readonly onLogOut: () => void;
 }
 
-export function Hud({ name, x, y, nearbyCount, touch }: HudProps): JSX.Element {
+export function Hud({ name, x, y, nearbyCount, touch, onLogOut }: HudProps): JSX.Element {
   return (
     <>
       <div className="hud">
@@ -21,6 +22,9 @@ export function Hud({ name, x, y, nearbyCount, touch }: HudProps): JSX.Element {
         <strong>{name}</strong>
         <span className="hud__muted">{strings.hud.position(x, y)}</span>
         <span className="hud__muted">{strings.hud.playersNearby(nearbyCount)}</span>
+        <button type="button" className="hud__button" onClick={onLogOut}>
+          {strings.auth.logOut}
+        </button>
       </div>
       <p className="hint">{touch ? strings.hints.touch : strings.hints.desktop}</p>
     </>

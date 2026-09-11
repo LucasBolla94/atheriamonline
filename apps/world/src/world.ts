@@ -39,14 +39,26 @@ export interface PlayerState {
   path: TilePos[];
 }
 
+/**
+ * Who is entering the world.
+ *
+ * The world server never invents this. It comes from the ticket the player
+ * presented, which the API issued to a logged-in account.
+ */
+export interface JoiningCharacter {
+  readonly id: string;
+  readonly name: string;
+  readonly x: number;
+  readonly y: number;
+  readonly facing: Direction;
+}
+
 export type JoinResult =
-  { ok: true; player: PlayerState } | { ok: false; reason: 'name-taken' | 'server-full' };
+  { ok: true; player: PlayerState } | { ok: false; reason: 'already-online' | 'server-full' };
 
 export interface WorldOptions {
   /** Refuse new players past this many. Protects memory and bandwidth. */
   readonly maxPlayers?: number;
-  /** Supplies player ids. Injectable so tests can be deterministic. */
-  readonly makeId?: () => string;
 }
 
 const DEFAULT_MAX_PLAYERS = 200;
@@ -57,14 +69,12 @@ export class World {
   /** Lower-cased name -> id, so two players cannot share a name. */
   private readonly namesInUse = new Map<string, string>();
   private readonly maxPlayers: number;
-  private readonly makeId: () => string;
   private currentTick = 0;
   private currentRevision = 0;
 
   constructor(map: GameMap, options: WorldOptions = {}) {
     this.map = map;
     this.maxPlayers = options.maxPlayers ?? DEFAULT_MAX_PLAYERS;
-    this.makeId = options.makeId ?? (() => crypto.randomUUID());
   }
 
   get tick(): number {
@@ -92,23 +102,33 @@ export class World {
     return this.players.get(id);
   }
 
-  /** Put a new player into the world at the spawn point. */
-  join(name: string, nowMs: number): JoinResult {
+  /**
+   * Put a character into the world, where they last stood.
+   *
+   * A character who is somehow already connected is refused rather than
+   * duplicated: two copies of one person would be two inventories later, and
+   * that is how items get duplicated.
+   */
+  join(character: JoiningCharacter, nowMs: number): JoinResult {
     if (this.players.size >= this.maxPlayers) {
       return { ok: false, reason: 'server-full' };
     }
-    const nameKey = name.toLocaleLowerCase();
-    if (this.namesInUse.has(nameKey)) {
-      return { ok: false, reason: 'name-taken' };
+    const nameKey = character.name.toLocaleLowerCase();
+    if (this.namesInUse.has(nameKey) || this.players.has(character.id)) {
+      return { ok: false, reason: 'already-online' };
     }
 
-    const spawn = spawnPoint(this.map);
+    // Where they logged out, unless that tile is no longer somewhere a person
+    // can stand — a building may have been put there while they were away.
+    const saved = { x: character.x, y: character.y };
+    const start = this.map.isWalkable(saved) ? saved : spawnPoint(this.map);
+
     const player: PlayerState = {
-      id: this.makeId(),
-      name,
-      x: spawn.x,
-      y: spawn.y,
-      facing: 's',
+      id: character.id,
+      name: character.name,
+      x: start.x,
+      y: start.y,
+      facing: character.facing,
       // Dated in the past so a player may move as soon as they arrive.
       lastStepAtMs: nowMs - MIN_STEP_INTERVAL_MS,
       path: [],

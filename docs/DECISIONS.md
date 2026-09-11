@@ -146,3 +146,78 @@ on screen, not in the "welcome" handler.
 zero, and the result is a 0x0 canvas that never recovers — the game simply
 looks broken. This was a real bug, found by the browser tests.
 **Cost to change:** None.
+
+## D-016 — Docker is installed on this machine
+
+**Date:** 2026-09-11
+**Decision:** Docker and the Compose plugin were installed from Ubuntu's own
+package repositories, and PostgreSQL 17 and Redis 7 now run as containers.
+**Why:** Phase 2 needs a database, and this answered the question that was
+open as Q-001. Using Ubuntu's packages rather than an added third-party
+repository keeps the machine's updates in one place.
+**Cost to change:** None. The compose file works with any Docker.
+
+## D-017 — Accounts hold one character, and the database enforces it
+
+**Date:** 2026-09-11
+**Decision:** `characters.account_id` carries a unique index, so an account
+cannot have two characters.
+**Why:** It makes today's rules explicit rather than assumed, and dropping that
+one index is the whole change needed if we ever allow more.
+**Cost to change:** Low, by design.
+
+## D-018 — Uniqueness is the database's job, not the code's
+
+**Date:** 2026-09-11
+**Decision:** Registration inserts and catches the unique-violation error,
+rather than checking whether a name is free and then inserting it.
+**Why:** Two people can register the same name in the same millisecond. A
+check-then-insert lets both look, both see the name free, and both write. Only
+the unique index sees both. There is a test for exactly this race.
+**Cost to change:** None.
+
+## D-019 — The WebSocket is opened with a ticket, never with the session cookie
+
+**Date:** 2026-09-11
+**Decision:** A logged-in player asks the API for a ticket, which lasts thirty
+seconds and works once. The world server spends the ticket to learn who is
+connecting.
+**Why:** A WebSocket handshake does not get the protections a normal request
+gets, and a long-lived session cookie used as a game credential is a large
+thing to lose. A ticket that dies in half a minute is a small one. Spending it
+is a single Redis command that reads and deletes at once, so two connections
+racing on a stolen ticket cannot both win.
+**Cost to change:** Medium — it is part of the protocol (version 2).
+
+## D-020 — Two rate limits, not one
+
+**Date:** 2026-09-11
+**Decision:** Logging in and registering allow 10 requests a minute per IP
+address. Everything else allows 300.
+**Why:** A single limit has to be wrong in one direction or the other. A
+household, an office or a mobile network puts many real players behind one
+address, so a limit tight enough to stop password guessing locks out real
+people. Splitting them lets the guessable routes be strict and the rest be
+generous. The browser tests exposed this: they all come from one address, and
+a single tight limit stopped the suite rather than an attacker.
+**Cost to change:** None. Both are settings.
+
+## D-021 — Unit tests and integration tests are separate commands
+
+**Date:** 2026-09-11
+**Decision:** `pnpm test` runs everything that needs nothing installed.
+`pnpm test:integration` runs the tests that need a real PostgreSQL and Redis.
+**Why:** The unit tests must stay instant and runnable anywhere. The things
+only a real database can prove — a unique index catching a race, a transaction
+rolling back, a ticket that works once — are worth a slower, separate command
+rather than a fake that would prove nothing.
+**Cost to change:** None.
+
+## D-022 — The seed script has no default password
+
+**Date:** 2026-09-11
+**Decision:** `pnpm db:seed` does nothing unless told who the moderator is,
+and it never changes an account that already exists.
+**Why:** A seed script with a built-in password is a way in that nobody
+remembers leaving open.
+**Cost to change:** None.

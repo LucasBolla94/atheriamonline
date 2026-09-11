@@ -7,15 +7,6 @@ from this file.
 
 ---
 
-## Q-001 — Is Docker available on the server?
-
-Docker is not installed on this machine, so PostgreSQL and Redis cannot be
-started locally yet.
-**Working assumption:** Docker will be installed later, and until then the parts
-that need a database are postponed (they are not needed before Phase 2).
-**What we need from you:** may we install Docker on this machine, or do you want
-to use a hosted PostgreSQL and Redis instead?
-
 ## Q-002 — How do players pay, if at all?
 
 The spec forbids blockchain and loot boxes, but does not say how the game earns
@@ -37,7 +28,9 @@ few hundred players to feel busy.
 
 ## Q-005 — Who are the first moderators?
 
-**Working assumption:** only the owner's account has moderator rights.
+Moderator rights exist on the account, and `pnpm db:seed` can grant them to
+one account you name.
+**Working assumption:** only the owner's account has them.
 **What we need from you:** a list of accounts that should be moderators, when
 you have one.
 
@@ -48,11 +41,24 @@ The server refuses player 201 with "The city is full right now."
 **What we need from you:** is a queue worth building, or should a second
 district open instead?
 
-## Q-007 — Should names be reserved, or first-come-first-served?
+## Q-007 — Can a player change their name?
 
-Today a name is only taken while that player is connected. When they log off,
-anyone may use it.
-**Working assumption:** first-come-first-served, until accounts exist in
-Phase 2 — after which a name belongs to an account permanently.
-**What we need from you:** confirm that a name should be permanent once
-somebody has registered it.
+A name now belongs to an account permanently: it is registered once and nobody
+else can take it.
+**Working assumption:** names cannot be changed.
+**What we need from you:** should a player be able to rename themselves, and
+if so, does the old name become free again?
+
+## Q-008 — What happens to somebody who forgets their password?
+
+There is no way to reset a password yet, which means a forgotten password is a
+lost account.
+**Working assumption:** none, until you tell us how you want to send email.
+**What we need from you:** an email service we may use (for example Postmark,
+Resend or Amazon SES), or a decision to do without password resets for now.
+
+## Q-009 — How long should a login last?
+
+A session currently lasts seven days from the last time it was used.
+**Working assumption:** seven days.
+**What we need from you:** confirm, or name a different period.

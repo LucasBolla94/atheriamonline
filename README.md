@@ -32,26 +32,38 @@ You need **Node.js 22 or newer** and **pnpm**.
    ```bash
    docker compose -f infra/docker-compose.yml up -d
    ```
-4. Run everything in development mode:
+4. Create the tables:
+   ```bash
+   pnpm db:migrate
+   ```
+5. Run everything in development mode:
    ```bash
    pnpm dev
    ```
 
+Then open http://localhost:5173 and create an account. You must be 18 or over.
+
 ## Checking the code is healthy
 
 ```bash
-pnpm typecheck   # TypeScript, strict mode
-pnpm lint        # ESLint
-pnpm test        # Vitest
+pnpm typecheck        # TypeScript, strict mode
+pnpm lint             # ESLint
+pnpm test             # Vitest — runs anywhere, needs nothing installed
 ```
 
-All three must pass before any change is finished.
+All three must pass before any change is finished. Two slower suites cover
+what those cannot:
+
+```bash
+pnpm test:integration  # against a real PostgreSQL and Redis
+pnpm test:e2e          # a real browser, desktop and phone-sized
+```
 
 ## How the project is arranged
 
 ```
 apps/
-  client/    the browser game (Phaser + Vite + React)   — arrives in Phase 1
+  client/    the browser game (Phaser + Vite + React)
   world/     the live world server (WebSocket)          — positions in memory
   api/       the HTTP API (Fastify)                     — accounts, money, items
 packages/
@@ -75,3 +87,5 @@ docs/                  the documents listed above
 - **No assets or names taken from any commercial game**, and no asset with an
   unclear or NonCommercial licence.
 - **No secrets in the repository.**
+- **Passwords are argon2id hashes**, and the game is **18+**, checked against a
+  recorded date of birth.

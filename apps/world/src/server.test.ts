@@ -7,8 +7,41 @@ import {
   type ServerMessage,
 } from '@atheriam/protocol';
 import { GameMap } from './map.js';
-import { World } from './world.js';
+import { World, type JoiningCharacter } from './world.js';
 import { WorldServer } from './server.js';
+
+/**
+ * A stand-in for the API's ticket store.
+ *
+ * It behaves the way the real one must: a ticket works exactly once, and an
+ * unknown ticket is simply unknown.
+ */
+class FakeTickets {
+  private readonly tickets = new Map<string, JoiningCharacter>();
+  /** Positions written down by the server, so a test can check they were. */
+  readonly saved: Array<{ id: string; x: number; y: number }> = [];
+
+  issue(character: JoiningCharacter): string {
+    const ticket = `ticket-${character.id}-${this.tickets.size}-padding`;
+    this.tickets.set(ticket, character);
+    return ticket;
+  }
+
+  spend = async (ticket: string): Promise<JoiningCharacter | null> => {
+    const character = this.tickets.get(ticket) ?? null;
+    this.tickets.delete(ticket);
+    return Promise.resolve(character);
+  };
+
+  save = async (character: { id: string; x: number; y: number }): Promise<void> => {
+    this.saved.push({ id: character.id, x: character.x, y: character.y });
+    return Promise.resolve();
+  };
+}
+
+function character(id: string, name: string, x = 10, y = 10): JoiningCharacter {
+  return { id, name, x, y, facing: 's' };
+}
 
 /** A wide open field, so the tests are about the server and not about walls. */
 const openField = new GameMap(Array.from({ length: 21 }, () => '.'.repeat(21)));
@@ -85,12 +118,20 @@ class TestClient {
 describe('the world server over a real socket', () => {
   let server: WorldServer;
   let world: World;
+  let tickets: FakeTickets;
   let port: number;
   const clients: TestClient[] = [];
 
   beforeEach(async () => {
     world = new World(openField);
-    server = new WorldServer({ host: '127.0.0.1', port: 0, world });
+    tickets = new FakeTickets();
+    server = new WorldServer({
+      host: '127.0.0.1',
+      port: 0,
+      world,
+      resolveTicket: tickets.spend,
+      savePosition: tickets.save,
+    });
     server.start();
     // The port is only known once the socket is actually bound.
     await new Promise((resolve) => setTimeout(resolve, 50));
@@ -112,7 +153,7 @@ describe('the world server over a real socket', () => {
 
   it('welcomes a player and sends them the map', async () => {
     const client = await connect();
-    client.send({ t: 'join', name: 'Aldric' });
+    client.send({ t: 'join', ticket: tickets.issue(character('c-aldric', 'Aldric')) });
 
     const welcome = await client.waitFor('welcome');
     expect(welcome.map.rows).toHaveLength(openField.height);
@@ -124,13 +165,34 @@ describe('the world server over a real socket', () => {
 
   it('refuses to let two players share a name', async () => {
     const first = await connect();
-    first.send({ t: 'join', name: 'Aldric' });
+    first.send({ t: 'join', ticket: tickets.issue(character('c-aldric', 'Aldric')) });
     await first.waitFor('welcome');
 
     const second = await connect();
-    second.send({ t: 'join', name: 'Aldric' });
+    second.send({ t: 'join', ticket: tickets.issue(character('c-aldric-2', 'Aldric')) });
     const bye = await second.waitFor('bye');
-    expect(bye.reason).toBe('name-taken');
+    expect(bye.reason).toBe('already-online');
+  });
+
+  it('turns away a connection with no valid ticket', async () => {
+    const client = await connect();
+    client.send({ t: 'join', ticket: 'a-ticket-nobody-ever-issued' });
+    const bye = await client.waitFor('bye');
+    expect(bye.reason).toBe('bad-ticket');
+    expect(world.playerCount).toBe(0);
+  });
+
+  it('lets a ticket be used only once', async () => {
+    const ticket = tickets.issue(character('c-aldric', 'Aldric'));
+
+    const first = await connect();
+    first.send({ t: 'join', ticket });
+    await first.waitFor('welcome');
+
+    const second = await connect();
+    second.send({ t: 'join', ticket });
+    const bye = await second.waitFor('bye');
+    expect(bye.reason).toBe('bad-ticket');
   });
 
   it('will not act on an intent from someone who has not joined', async () => {
@@ -143,7 +205,7 @@ describe('the world server over a real socket', () => {
 
   it('moves the player when the step is legal', async () => {
     const client = await connect();
-    client.send({ t: 'join', name: 'Aldric' });
+    client.send({ t: 'join', ticket: tickets.issue(character('c-aldric', 'Aldric')) });
     const start = await client.waitFor('snapshot');
     client.clear();
 
@@ -157,7 +219,7 @@ describe('the world server over a real socket', () => {
 
   it('answers rubbish with a rejection instead of crashing', async () => {
     const client = await connect();
-    client.send({ t: 'join', name: 'Aldric' });
+    client.send({ t: 'join', ticket: tickets.issue(character('c-aldric', 'Aldric')) });
     await client.waitFor('welcome');
     client.clear();
 
@@ -170,7 +232,7 @@ describe('the world server over a real socket', () => {
 
   it('disconnects a client that floods it', async () => {
     const client = await connect();
-    client.send({ t: 'join', name: 'Aldric' });
+    client.send({ t: 'join', ticket: tickets.issue(character('c-aldric', 'Aldric')) });
     await client.waitFor('welcome');
     client.clear();
 
@@ -192,11 +254,11 @@ describe('the world server over a real socket', () => {
 
   it('lets two players see each other', async () => {
     const one = await connect();
-    one.send({ t: 'join', name: 'Aldric' });
+    one.send({ t: 'join', ticket: tickets.issue(character('c-aldric', 'Aldric')) });
     await one.waitFor('welcome');
 
     const two = await connect();
-    two.send({ t: 'join', name: 'Bryn' });
+    two.send({ t: 'join', ticket: tickets.issue(character('c-bryn', 'Bryn', 12, 10)) });
     await two.waitFor('welcome');
 
     await new Promise((resolve) => setTimeout(resolve, 200));
@@ -206,12 +268,28 @@ describe('the world server over a real socket', () => {
 
   it('takes a player out of the world when their connection closes', async () => {
     const client = await connect();
-    client.send({ t: 'join', name: 'Aldric' });
+    client.send({ t: 'join', ticket: tickets.issue(character('c-aldric', 'Aldric')) });
     await client.waitFor('welcome');
     expect(world.playerCount).toBe(1);
 
     client.close();
     await new Promise((resolve) => setTimeout(resolve, 150));
     expect(world.playerCount).toBe(0);
+  });
+
+  it('writes down where a player was standing when they leave', async () => {
+    const client = await connect();
+    client.send({ t: 'join', ticket: tickets.issue(character('c-aldric', 'Aldric')) });
+    await client.waitFor('welcome');
+
+    client.send({ t: 'step', seq: 1, dir: 'e' });
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    client.close();
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    // Exactly one write, on the way out — not one per step.
+    expect(tickets.saved).toHaveLength(1);
+    expect(tickets.saved[0]).toMatchObject({ id: 'c-aldric', x: 11, y: 10 });
   });
 });

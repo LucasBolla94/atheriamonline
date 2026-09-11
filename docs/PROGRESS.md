@@ -10,8 +10,8 @@ Last updated: 2026-09-11
 
 ## Current phase
 
-**Phase 1 — Walking skeleton** — done.
-Next up: **Phase 2 — Accounts**.
+**Phase 2 — Accounts** — done.
+Next up: **Phase 3 — The city**.
 
 ## Phase list
 
@@ -118,7 +118,11 @@ Open a terminal in the project folder and run these, in order.
    pnpm lint
    pnpm test
    ```
-5. To test it in a real browser (slower, needs the browser downloaded once
+5. To check the parts that need a real database:
+   ```
+   pnpm test:integration
+   ```
+6. To test it in a real browser (slower, needs the browser downloaded once
    with `pnpm exec playwright install chromium`):
    ```
    pnpm test:e2e
@@ -126,15 +130,35 @@ Open a terminal in the project folder and run these, in order.
 
 ## Trying the game right now
 
-Phase 1 is playable. Two terminals:
+Phase 2 is playable, with real accounts.
+
+First, once:
 
 ```
-pnpm --filter @atheriam/world dev     # the city
-pnpm --filter @atheriam/client dev    # the browser game
+cp .env.example .env
+docker compose -f infra/docker-compose.yml up -d
+pnpm db:migrate
 ```
 
-Then open http://localhost:5173, type a name, and press **Enter the city**.
-Open a second browser window to see two people in the same place.
+Then start all three parts at once:
 
-Click a tile to walk there, or use WASD. There is no chat yet — that is
-Phase 4.
+```
+pnpm dev
+```
+
+Open http://localhost:5173, choose **Create an account**, and fill in the
+form. You need to be 18 or over. Open a second browser window and make a
+second account to see two people in the same place.
+
+Click a tile to walk there, or use WASD. Your position is saved when you log
+out, so you come back where you left. There is no chat yet — that is Phase 4.
+
+### Making yourself a moderator
+
+```
+SEED_MODERATOR_EMAIL=you@example.com \
+SEED_MODERATOR_PASSWORD='a long password you chose' \
+SEED_MODERATOR_NAME=Aldric \
+SEED_MODERATOR_DOB=1990-05-04 \
+pnpm db:seed
+```
