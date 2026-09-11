@@ -10,8 +10,8 @@ Last updated: 2026-09-11
 
 ## Current phase
 
-**Phase 3 — The city** — done.
-Next up: **Phase 4 — Talking**.
+**Phase 4 — Talking** — done.
+Next up: **Phase 5 — Items and the ledger**.
 
 ## Phase list
 
@@ -59,12 +59,13 @@ charge.
 - [x] Collision from the map, server-side validation
 - [x] A test walks the whole city and fails if any tile is unreachable
 
-### Phase 4 — Talking
+### Phase 4 — Talking — DONE
 
-- [ ] Local chat with a radius, delivered by the world server
-- [ ] Rate limiting, mute, block, report
-- [ ] Chat bubbles in the client
-- [ ] Moderation audit log
+- [x] Local chat with a radius (12 tiles), delivered by the world server
+- [x] Rate limiting (a bucket of tokens), mute, block, report
+- [x] Chat bubbles in the client, and a chat log you can scroll
+- [x] Moderation audit log, written in the same transaction as the punishment
+- [x] Moderator routes: mute, unmute, kick, ban, unban, and the report queue
 
 ### Phase 5 — Items and the ledger
 
@@ -133,7 +134,7 @@ Open a terminal in the project folder and run these, in order.
 
 ## Trying the game right now
 
-Phase 3 is playable: real accounts, and a real city to walk around.
+Phase 4 is playable: real accounts, a real city, and people to talk to.
 
 First, once:
 
@@ -158,7 +159,13 @@ zoom. Your position is saved when you log out, so you come back where you left.
 
 You start on the Crown Square, by the well. North-west is the park and its
 lake, north-east the market, and south of the square are two streets of houses
-you can walk into. There is no chat yet — that is Phase 4.
+you can walk into.
+
+Press **Enter** to talk, or use the box in the bottom-left corner. Only people
+within about twelve tiles hear you, so walk closer to join a conversation.
+
+Click somebody's name in the chat to **stop hearing them** (they are never
+told) or to **report them** to a moderator.
 
 ### Making yourself a moderator
 
@@ -169,3 +176,23 @@ SEED_MODERATOR_NAME=Aldric \
 SEED_MODERATOR_DOB=1990-05-04 \
 pnpm db:seed
 ```
+
+### What a moderator can do
+
+There is no moderator screen yet — these are web addresses the browser asks
+for while you are logged in as a moderator. Each one needs a reason, and every
+one of them is written down forever in the audit log.
+
+| What                     | Where                          | What you send               |
+| ------------------------ | ------------------------------ | --------------------------- |
+| See the reports waiting  | `GET /api/moderation/reports`  | nothing                     |
+| See what moderators did  | `GET /api/moderation/log`      | nothing                     |
+| Stop somebody talking    | `POST /api/moderation/mute`    | `name`, `reason`, `minutes` |
+| Let them talk again      | `POST /api/moderation/unmute`  | `name`, `reason`            |
+| Throw them out for now   | `POST /api/moderation/kick`    | `name`, `reason`            |
+| Ban the account          | `POST /api/moderation/ban`     | `name`, `reason`            |
+| Lift a ban               | `POST /api/moderation/unban`   | `name`, `reason`            |
+| Decide a report is empty | `POST /api/moderation/dismiss` | `reportId`, `reason`        |
+
+A mute, a kick and a ban all take effect **immediately**, even for somebody who
+is standing in the city at that moment.

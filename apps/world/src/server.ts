@@ -87,6 +87,8 @@ export class WorldServer {
   private readonly wss: WebSocketServer;
   private readonly world: World;
   private readonly connections = new Map<WebSocket, Connection>();
+  /** The same connections, found by the character playing on them. */
+  private readonly byPlayer = new Map<string, Connection>();
   private readonly now: () => number;
   private readonly resolveTicket: WorldServerOptions['resolveTicket'];
   private readonly savePosition: WorldServerOptions['savePosition'];
@@ -159,6 +161,7 @@ export class WorldServer {
     if (playerId !== null) {
       const player = this.world.get(playerId);
       connection.playerId = null;
+      this.byPlayer.delete(playerId);
       this.world.leave(playerId);
 
       if (player !== undefined) {
@@ -217,6 +220,11 @@ export class WorldServer {
       return;
     }
 
+    if (message.t === 'say') {
+      this.handleSay(connection, playerId, message.seq, message.text, nowMs);
+      return;
+    }
+
     const rejection =
       message.t === 'step'
         ? this.world.handleStep(playerId, message.dir, nowMs)
@@ -261,6 +269,7 @@ export class WorldServer {
     }
 
     connection.playerId = result.player.id;
+    this.byPlayer.set(result.player.id, connection);
     this.send(connection, {
       t: 'welcome',
       protocolVersion: PROTOCOL_VERSION,
@@ -274,6 +283,63 @@ export class WorldServer {
       },
     });
     this.sendSnapshot(connection);
+  }
+
+  /**
+   * Deliver a remark to the people who are allowed to hear it.
+   *
+   * The world decides who those are. This method only addresses envelopes, so
+   * there is no second place where "who can hear this" could be got wrong.
+   */
+  private handleSay(
+    connection: Connection,
+    playerId: string,
+    seq: number,
+    text: string,
+    nowMs: number,
+  ): void {
+    const result = this.world.handleSay(playerId, text, nowMs);
+    if (!result.ok) {
+      this.send(connection, { t: 'reject', seq, reason: result.reason });
+      return;
+    }
+
+    const chat = {
+      t: 'chat',
+      from: result.from.id,
+      name: result.from.name,
+      text: result.text,
+      tick: this.world.tick,
+    } as const;
+
+    for (const listenerId of result.listeners) {
+      const listener = this.byPlayer.get(listenerId);
+      if (listener === undefined) continue;
+      this.send(listener, chat);
+    }
+  }
+
+  /**
+   * Throw somebody out of the city, because a moderator said so.
+   *
+   * Returns whether anyone was actually here to throw out, so the API can tell
+   * a moderator whether the ban took effect now or will on next login.
+   */
+  kick(characterId: string, reason: 'kicked' | 'banned'): boolean {
+    const connection = this.byPlayer.get(characterId);
+    if (connection === undefined) return false;
+    this.disconnect(connection, reason);
+    return true;
+  }
+
+  /** Silence a player who is online right now. */
+  mute(characterId: string, untilMs: number | null): void {
+    this.world.mute(characterId, untilMs);
+  }
+
+  /** Apply a block, or lift one, for a player who is online right now. */
+  setBlock(blockerId: string, blockedId: string, blocked: boolean): void {
+    this.world.block(blockerId, blockedId, blocked);
   }
 
   private isFlooding(connection: Connection, nowMs: number): boolean {

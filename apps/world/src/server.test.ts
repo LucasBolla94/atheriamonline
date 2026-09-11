@@ -376,3 +376,148 @@ describe('streaming the map over a real socket', () => {
     expect(new Set(chunks).size).toBe(chunks.length);
   });
 });
+
+/**
+ * Talking, over a real socket.
+ *
+ * The world decides who hears what; these check that the socket layer then
+ * delivers it to exactly those people and to nobody else.
+ */
+describe('talking over a real socket', () => {
+  const field = new GameMap(Array.from({ length: 60 }, () => '.'.repeat(60)));
+  let server: WorldServer;
+  let world: World;
+  let tickets: FakeTickets;
+  let port: number;
+  const clients: TestClient[] = [];
+
+  beforeEach(async () => {
+    world = new World(field);
+    tickets = new FakeTickets();
+    server = new WorldServer({
+      host: '127.0.0.1',
+      port: 0,
+      world,
+      resolveTicket: tickets.spend,
+      savePosition: tickets.save,
+    });
+    server.start();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    port = server.port;
+  });
+
+  afterEach(async () => {
+    for (const client of clients) client.close();
+    clients.length = 0;
+    await server.stop();
+  });
+
+  async function joinAt(
+    id: string,
+    name: string,
+    x: number,
+    y: number,
+    extra: Partial<JoiningCharacter> = {},
+  ): Promise<TestClient> {
+    const client = await TestClient.connect(port);
+    clients.push(client);
+    client.send({ t: 'join', ticket: tickets.issue({ ...character(id, name, x, y), ...extra }) });
+    await client.waitFor('snapshot');
+    return client;
+  }
+
+  it('sends a remark back to the person who made it', async () => {
+    const client = await joinAt('c-aldric', 'Aldric', 10, 10);
+    client.send({ t: 'say', seq: 1, text: 'Good evening' });
+
+    const chat = await client.waitFor('chat');
+    expect(chat.text).toBe('Good evening');
+    expect(chat.name).toBe('Aldric');
+  });
+
+  it('delivers it to somebody standing nearby', async () => {
+    const aldric = await joinAt('c-aldric', 'Aldric', 10, 10);
+    const bryn = await joinAt('c-bryn', 'Bryn', 12, 11);
+
+    aldric.send({ t: 'say', seq: 1, text: 'Good evening' });
+
+    const heard = await bryn.waitFor('chat');
+    expect(heard.text).toBe('Good evening');
+    expect(heard.from).toBe('c-aldric');
+  });
+
+  it('does not deliver it across the city', async () => {
+    const aldric = await joinAt('c-aldric', 'Aldric', 10, 10);
+    const far = await joinAt('c-bryn', 'Bryn', 50, 50);
+    far.clear();
+
+    aldric.send({ t: 'say', seq: 1, text: 'Good evening' });
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    expect(far.latest('chat')).toBeUndefined();
+  });
+
+  it('does not deliver it to somebody who blocked the speaker', async () => {
+    const aldric = await joinAt('c-aldric', 'Aldric', 10, 10);
+    const bryn = await joinAt('c-bryn', 'Bryn', 11, 10, { blocked: ['c-aldric'] });
+    bryn.clear();
+
+    aldric.send({ t: 'say', seq: 1, text: 'Good evening' });
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    expect(bryn.latest('chat')).toBeUndefined();
+  });
+
+  it('refuses a muted player and says why', async () => {
+    const client = await joinAt('c-aldric', 'Aldric', 10, 10);
+    server.mute('c-aldric', Date.now() + 60_000);
+
+    client.send({ t: 'say', seq: 7, text: 'Good evening' });
+
+    const reject = await client.waitFor('reject');
+    expect(reject.reason).toBe('muted');
+    expect(reject.seq).toBe(7);
+  });
+
+  it('refuses a flood of talk without disconnecting anybody', async () => {
+    const client = await joinAt('c-aldric', 'Aldric', 10, 10);
+
+    for (let i = 0; i < 12; i += 1) {
+      client.send({ t: 'say', seq: i, text: `message ${i}` });
+    }
+
+    const reject = await client.waitFor('reject');
+    expect(reject.reason).toBe('too-chatty');
+    expect(world.playerCount).toBe(1);
+  });
+
+  it('throws a player out when a moderator says so', async () => {
+    const client = await joinAt('c-aldric', 'Aldric', 10, 10);
+
+    expect(server.kick('c-aldric', 'banned')).toBe(true);
+
+    const bye = await client.waitFor('bye');
+    expect(bye.reason).toBe('banned');
+    expect(world.playerCount).toBe(0);
+  });
+
+  it('says so when there was nobody to throw out', () => {
+    expect(server.kick('c-nobody', 'kicked')).toBe(false);
+  });
+
+  it('applies a block that arrives in the middle of a conversation', async () => {
+    const aldric = await joinAt('c-aldric', 'Aldric', 10, 10);
+    const bryn = await joinAt('c-bryn', 'Bryn', 11, 10);
+
+    aldric.send({ t: 'say', seq: 1, text: 'first' });
+    await bryn.waitFor('chat');
+
+    server.setBlock('c-bryn', 'c-aldric', true);
+    bryn.clear();
+
+    aldric.send({ t: 'say', seq: 2, text: 'second' });
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    expect(bryn.latest('chat')).toBeUndefined();
+  });
+});

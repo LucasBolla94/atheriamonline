@@ -24,13 +24,24 @@
  *      |  orchard      south gate     orchard  |
  *      +--------------------------------------+ 127
  */
-import { CHUNK_SIZE_TILES, SOLID_CHAR, type TerrainChar, type TilePos } from '@atheriam/shared';
+import {
+  CHUNK_SIZE_TILES,
+  DEFAULT_SPAWN_TILE,
+  SOLID_CHAR,
+  type TerrainChar,
+  type TilePos,
+} from '@atheriam/shared';
 
 /** The district is four chunks by four chunks. */
 export const CITY_SIZE_TILES = CHUNK_SIZE_TILES * 4;
 
-/** Where a player who has never played before appears: the Crown Square. */
-export const CITY_SPAWN: TilePos = { x: 64, y: 69 };
+/**
+ * Where a player who has never played before appears: the Crown Square.
+ *
+ * The tile itself is decided in `@atheriam/shared`, because the API writes it
+ * onto a new character before the world server ever sees them.
+ */
+export const CITY_SPAWN: TilePos = DEFAULT_SPAWN_TILE;
 
 /** How thick the city wall is. Two tiles so it reads as stone, not as a line. */
 const WALL_THICKNESS = 2;

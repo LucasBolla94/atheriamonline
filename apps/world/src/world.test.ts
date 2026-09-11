@@ -417,3 +417,137 @@ describe('the revision counter', () => {
     expect(world.revision).toBe(before);
   });
 });
+
+/**
+ * Talking.
+ *
+ * The map used above is only nine tiles wide, which is closer together than
+ * anybody can whisper, so these use a wide open field instead: the point of
+ * most of them is who is too far away to hear.
+ */
+describe('saying something', () => {
+  const field = new GameMap(Array.from({ length: 60 }, () => '.'.repeat(60)));
+
+  function fieldWorld(): World {
+    return new World(field);
+  }
+
+  function join(world: World, id: string, name: string, x: number, y: number): void {
+    const result = world.join({ id, name, x, y, facing: 's' }, 0);
+    expect(result.ok).toBe(true);
+  }
+
+  it('is heard by the speaker, so they know it was accepted', () => {
+    const world = fieldWorld();
+    join(world, 'al1', 'Aldric', 10, 10);
+
+    const result = world.handleSay('al1', 'Good evening', 0);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.listeners).toEqual(['al1']);
+  });
+
+  it('is heard by somebody standing close by', () => {
+    const world = fieldWorld();
+    join(world, 'al1', 'Aldric', 10, 10);
+    join(world, 'br1', 'Bryn', 12, 11);
+
+    const result = world.handleSay('al1', 'Good evening', 0);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.listeners).toContain('br1');
+  });
+
+  it('does not carry across the city', () => {
+    const world = fieldWorld();
+    join(world, 'al1', 'Aldric', 10, 10);
+    join(world, 'br1', 'Bryn', 50, 50);
+
+    const result = world.handleSay('al1', 'Good evening', 0);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.listeners).not.toContain('br1');
+  });
+
+  it('is not heard by somebody who has blocked the speaker', () => {
+    const world = fieldWorld();
+    join(world, 'al1', 'Aldric', 10, 10);
+    const bryn = world.join(
+      { id: 'br1', name: 'Bryn', x: 11, y: 10, facing: 's', blocked: ['al1'] },
+      0,
+    );
+    expect(bryn.ok).toBe(true);
+
+    const result = world.handleSay('al1', 'Good evening', 0);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.listeners).toEqual(['al1']);
+  });
+
+  it('is heard again once the block is lifted', () => {
+    const world = fieldWorld();
+    join(world, 'al1', 'Aldric', 10, 10);
+    world.join({ id: 'br1', name: 'Bryn', x: 11, y: 10, facing: 's', blocked: ['al1'] }, 0);
+
+    world.block('br1', 'al1', false);
+
+    const result = world.handleSay('al1', 'Good evening', 0);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.listeners).toContain('br1');
+  });
+
+  it('is refused from somebody a moderator has muted', () => {
+    const world = fieldWorld();
+    world.join({ id: 'al1', name: 'Aldric', x: 10, y: 10, facing: 's', mutedUntilMs: 5_000 }, 0);
+
+    const result = world.handleSay('al1', 'Good evening', 1_000);
+    expect(result).toEqual({ ok: false, reason: 'muted' });
+  });
+
+  it('is allowed again once the mute has run out', () => {
+    const world = fieldWorld();
+    world.join({ id: 'al1', name: 'Aldric', x: 10, y: 10, facing: 's', mutedUntilMs: 5_000 }, 0);
+
+    expect(world.handleSay('al1', 'Good evening', 5_001).ok).toBe(true);
+  });
+
+  it('can be silenced and un-silenced while the player is standing there', () => {
+    const world = fieldWorld();
+    join(world, 'al1', 'Aldric', 10, 10);
+
+    world.mute('al1', 10_000);
+    expect(world.handleSay('al1', 'Good evening', 0).ok).toBe(false);
+
+    world.mute('al1', null);
+    expect(world.handleSay('al1', 'Good evening', 0).ok).toBe(true);
+  });
+
+  it('cleans up what was typed before anybody else sees it', () => {
+    const world = fieldWorld();
+    join(world, 'al1', 'Aldric', 10, 10);
+
+    const result = world.handleSay('al1', '  hello   there\nfriend  ', 0);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.text).toBe('hello there friend');
+  });
+
+  it('refuses a message with nothing in it', () => {
+    const world = fieldWorld();
+    join(world, 'al1', 'Aldric', 10, 10);
+    expect(world.handleSay('al1', '     ', 0)).toEqual({ ok: false, reason: 'malformed' });
+  });
+
+  it('refuses somebody who is not in the world at all', () => {
+    const world = fieldWorld();
+    expect(world.handleSay('nobody', 'hello', 0)).toEqual({ ok: false, reason: 'not-joined' });
+  });
+
+  it('stops a flood, and lets them speak again after a pause', () => {
+    const world = fieldWorld();
+    join(world, 'al1', 'Aldric', 10, 10);
+
+    let refused = 0;
+    for (let i = 0; i < 20; i += 1) {
+      if (!world.handleSay('al1', `message ${i}`, 0).ok) refused += 1;
+    }
+    expect(refused).toBeGreaterThan(0);
+
+    expect(world.handleSay('al1', 'later', 60_000).ok).toBe(true);
+  });
+});

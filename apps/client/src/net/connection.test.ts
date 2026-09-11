@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { encode, type ServerMessage } from '@atheriam/protocol';
-import { MAX_INTENTS_PER_SECOND, WorldConnection, type SocketLike } from './connection.js';
+import {
+  CHAT_HISTORY,
+  MAX_INTENTS_PER_SECOND,
+  WorldConnection,
+  type SocketLike,
+} from './connection.js';
 
 class FakeSocket implements SocketLike {
   readonly sent: string[] = [];
@@ -44,6 +49,10 @@ function snapshot(x: number, y: number): ServerMessage {
     you: { id: 'p1', name: 'Aldric', x, y, facing: 's' },
     players: [],
   };
+}
+
+function chatFrom(name: string, text: string): ServerMessage {
+  return { t: 'chat', from: 'p2', name, text, tick: 3 };
 }
 
 describe('WorldConnection', () => {
@@ -256,5 +265,70 @@ describe('WorldConnection', () => {
 
     expect(onClosed).toHaveBeenCalledTimes(1);
     expect(onClosed).toHaveBeenCalledWith('already-online');
+  });
+});
+
+describe('talking', () => {
+  let socket: FakeSocket;
+  let connection: WorldConnection;
+
+  beforeEach(() => {
+    socket = new FakeSocket();
+    connection = new WorldConnection({});
+    connection.attach(socket, TICKET);
+    connection.handleOpen();
+    connection.handleMessage(encode(WELCOME));
+    socket.sent.length = 0;
+  });
+
+  it('sends what the player typed as an intent', () => {
+    connection.say('Good evening');
+    expect(socket.parsed()).toEqual([{ t: 'say', seq: 1, text: 'Good evening' }]);
+  });
+
+  it('does not send an empty remark, which would only be refused', () => {
+    connection.say('   ');
+    expect(socket.sent).toEqual([]);
+  });
+
+  it('trims what was typed before sending it', () => {
+    connection.say('  hello  ');
+    expect(socket.parsed()[0]).toMatchObject({ text: 'hello' });
+  });
+
+  it('keeps what other people say, newest last', () => {
+    connection.handleMessage(encode(chatFrom('Bryn', 'first')));
+    connection.handleMessage(encode(chatFrom('Bryn', 'second')));
+
+    expect(connection.chatLog.map((entry) => entry.text)).toEqual(['first', 'second']);
+    expect(connection.chatRevision).toBe(2);
+  });
+
+  it('forgets the oldest remarks rather than growing without end', () => {
+    for (let i = 0; i < CHAT_HISTORY + 20; i += 1) {
+      connection.handleMessage(encode(chatFrom('Bryn', `line ${i}`)));
+    }
+    expect(connection.chatLog).toHaveLength(CHAT_HISTORY);
+    expect(connection.chatLog[0]?.text).toBe('line 20');
+  });
+
+  it('ignores a remark that is longer than the protocol allows', () => {
+    connection.handleMessage(
+      JSON.stringify({ t: 'chat', from: 'p2', name: 'Bryn', text: 'x'.repeat(5000), tick: 1 }),
+    );
+    expect(connection.chatLog).toHaveLength(0);
+  });
+
+  it('tells the interface why a remark was refused', () => {
+    const reasons: string[] = [];
+    const listening = new WorldConnection({ onReject: (reason) => reasons.push(reason) });
+    listening.attach(new FakeSocket(), TICKET);
+    listening.handleOpen();
+    listening.handleMessage(encode(WELCOME));
+
+    listening.handleMessage(encode({ t: 'reject', seq: 1, reason: 'muted' }));
+    listening.handleMessage(encode({ t: 'reject', seq: 2, reason: 'too-chatty' }));
+
+    expect(reasons).toEqual(['muted', 'too-chatty']);
   });
 });

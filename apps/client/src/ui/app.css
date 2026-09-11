@@ -262,3 +262,149 @@ body {
   outline: 2px solid var(--color-accent);
   outline-offset: 1px;
 }
+
+/*
+ * Talking.
+ *
+ * The chat sits in the bottom-left corner on every screen size. On a phone in
+ * landscape there is very little height to spare, so the log shrinks rather
+ * than the input box: being able to type is what matters.
+ */
+.chat {
+  position: absolute;
+  bottom: var(--space-md);
+  left: var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  width: min(360px, calc(100vw - var(--space-xl)));
+  max-height: min(40vh, 260px);
+}
+
+.chat__log {
+  overflow-y: auto;
+  padding: var(--space-sm);
+  background: color-mix(in srgb, var(--color-surface) 82%, transparent);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  line-height: 1.4;
+  scrollbar-width: thin;
+}
+
+.chat__empty {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.chat__line {
+  margin: 0 0 var(--space-xs);
+  overflow-wrap: anywhere;
+}
+
+.chat__who {
+  margin-right: var(--space-xs);
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.chat__who::after {
+  content: ':';
+}
+
+.chat__who--me {
+  color: var(--color-accent);
+}
+
+.chat__who:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.chat__notice {
+  margin: 0;
+  padding: var(--space-xs) var(--space-sm);
+  background: color-mix(in srgb, var(--color-surface) 82%, transparent);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.chat__form {
+  display: flex;
+  gap: var(--space-xs);
+}
+
+.chat__input {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-sm);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: var(--font-size-md);
+}
+
+.chat__input:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.chat__send {
+  padding: var(--space-sm) var(--space-md);
+  background: var(--color-accent);
+  color: var(--color-accent-text);
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.chat__send:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Blocking and reporting, over the top of the city. */
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-md);
+  background: color-mix(in srgb, var(--color-backdrop) 75%, transparent);
+}
+
+.panel--small {
+  max-width: 340px;
+}
+
+.button--quiet {
+  margin-bottom: var(--space-xs);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+}
+
+/* The hint would sit on top of the chat box on a small screen. */
+@media (max-height: 480px) {
+  .hint {
+    display: none;
+  }
+
+  .chat {
+    max-height: 34vh;
+  }
+}

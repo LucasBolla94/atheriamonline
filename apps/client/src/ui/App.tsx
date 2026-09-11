@@ -15,11 +15,18 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type Phaser from 'phaser';
 import type { PlayerView, WorldInfo } from '@atheriam/protocol';
 import * as api from '../net/api.js';
-import { connectToWorld, type ConnectionState, type WorldConnection } from '../net/connection.js';
+import {
+  connectToWorld,
+  type ChatEntry,
+  type ConnectionState,
+  type WorldConnection,
+} from '../net/connection.js';
 import { createGame } from '../game/createGame.js';
 import { AuthScreen } from './AuthScreen.js';
+import { ChatPanel } from './ChatPanel.js';
 import { Hud } from './Hud.js';
-import { errorMessage } from './strings.js';
+import { PlayerActions } from './PlayerActions.js';
+import { errorMessage, strings } from './strings.js';
 
 /** Where the world server is. In production Caddy serves it under /ws. */
 function worldUrl(): string {
@@ -38,6 +45,11 @@ export function App(): JSX.Element {
   const [you, setYou] = useState<PlayerView | null>(null);
   const [nearbyCount, setNearbyCount] = useState(0);
   const [world, setWorld] = useState<WorldInfo | null>(null);
+  const [chat, setChat] = useState<ChatEntry[]>([]);
+  const [chatNotice, setChatNotice] = useState<string | null>(null);
+  const [chosenPlayer, setChosenPlayer] = useState<string | null>(null);
+  const [blocked, setBlocked] = useState<readonly string[]>([]);
+  const [safetyBusy, setSafetyBusy] = useState(false);
 
   const connectionRef = useRef<WorldConnection | null>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
@@ -61,15 +73,83 @@ export function App(): JSX.Element {
         setNearbyCount(others.length);
       },
       onWelcome: (info) => setWorld(info),
+      onChat: (entry) => setChat((previous) => [...previous, entry]),
+      onReject: (reason) => {
+        // Most refusals are ordinary and the next snapshot corrects them. The
+        // two about talking are the exception: the player needs to know why
+        // what they typed did not appear.
+        if (reason === 'muted') setChatNotice(strings.chat.muted);
+        else if (reason === 'too-chatty') setChatNotice(strings.chat.tooChatty);
+      },
       onClosed: (reason) => {
         setError(errorMessage(reason));
         setYou(null);
         setWorld(null);
+        setChat([]);
         setBusy(false);
         gameRef.current?.destroy(true);
         gameRef.current = null;
       },
     });
+  }, []);
+
+  /** The list of people this player has chosen not to hear. */
+  const refreshBlocked = useCallback(() => {
+    void (async () => {
+      const result = await api.blockedPlayers();
+      if (result.ok) setBlocked(result.data.names);
+    })();
+  }, []);
+
+  const handleSay = useCallback((text: string) => {
+    setChatNotice(null);
+    connectionRef.current?.say(text);
+  }, []);
+
+  const handleBlock = useCallback(
+    (name: string) => {
+      setSafetyBusy(true);
+      void (async () => {
+        const result = await api.blockPlayer(name);
+        setSafetyBusy(false);
+        if (!result.ok) {
+          setChatNotice(result.message);
+          return;
+        }
+        setChatNotice(strings.safety.blocked(name));
+        setChosenPlayer(null);
+        refreshBlocked();
+      })();
+    },
+    [refreshBlocked],
+  );
+
+  const handleUnblock = useCallback(
+    (name: string) => {
+      setSafetyBusy(true);
+      void (async () => {
+        const result = await api.unblockPlayer(name);
+        setSafetyBusy(false);
+        if (!result.ok) {
+          setChatNotice(result.message);
+          return;
+        }
+        setChatNotice(strings.safety.unblocked(name));
+        setChosenPlayer(null);
+        refreshBlocked();
+      })();
+    },
+    [refreshBlocked],
+  );
+
+  const handleReport = useCallback((name: string, reason: string) => {
+    setSafetyBusy(true);
+    void (async () => {
+      const result = await api.reportPlayer(name, reason);
+      setSafetyBusy(false);
+      setChatNotice(result.ok ? strings.safety.reportSent : result.message);
+      setChosenPlayer(null);
+    })();
   }, []);
 
   /** If the browser is already logged in, walk straight back into the city. */
@@ -79,6 +159,7 @@ export function App(): JSX.Element {
       const who = await api.me();
       if (cancelled) return;
       if (who.ok) {
+        refreshBlocked();
         await enterCity();
       } else {
         setBusy(false);
@@ -87,7 +168,7 @@ export function App(): JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, [enterCity]);
+  }, [enterCity, refreshBlocked]);
 
   const handleCreate = useCallback(
     (input: { email: string; password: string; dateOfBirth: string; characterName: string }) => {
@@ -132,6 +213,8 @@ export function App(): JSX.Element {
       await api.logOut();
       setYou(null);
       setWorld(null);
+      setChat([]);
+      setChosenPlayer(null);
       setState('idle');
       setError(null);
       setBusy(false);
@@ -179,6 +262,26 @@ export function App(): JSX.Element {
           nearbyCount={nearbyCount}
           touch={touch}
           onLogOut={handleLogOut}
+        />
+      )}
+      {playing && (
+        <ChatPanel
+          entries={chat}
+          myPlayerId={connectionRef.current?.playerId ?? null}
+          notice={chatNotice}
+          onSay={handleSay}
+          onChoosePlayer={setChosenPlayer}
+        />
+      )}
+      {chosenPlayer !== null && (
+        <PlayerActions
+          name={chosenPlayer}
+          blocked={blocked.includes(chosenPlayer)}
+          busy={safetyBusy}
+          onBlock={handleBlock}
+          onUnblock={handleUnblock}
+          onReport={handleReport}
+          onClose={() => setChosenPlayer(null)}
         />
       )}
       {!playing && (

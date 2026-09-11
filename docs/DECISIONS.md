@@ -286,3 +286,76 @@ lake that swallows a road: all of them look fine on screen and are only found
 by walking the entire city. A machine can do that in a millisecond, on every
 change, forever.
 **Cost to change:** None. It is a test.
+
+## D-028 — You can see further than you can hear
+
+**Date:** 2026-09-11
+**Decision:** Chat carries 12 tiles. A player can be seen at 24.
+**Why:** If everybody heard everybody they could see, the square would be one
+conversation that nobody can follow. A shorter radius means walking closer to
+somebody is how you join their conversation, which is the whole point of a
+social world that happens in a place.
+**Cost to change:** None. It is one number in `@atheriam/shared`.
+
+## D-029 — Chat is limited by a bucket of tokens, not by a delay
+
+**Date:** 2026-09-11
+**Decision:** A player holds five chat tokens and earns one back every two
+seconds. Running out earns a refusal the client explains; it never disconnects
+anybody.
+**Why:** A flat "one message per second" makes ordinary conversation feel
+broken — people really do type three short lines in a row — while barely
+slowing a script down. A bucket allows the burst and stops the flood.
+Disconnecting would punish a slow connection as if it were an attack.
+**Cost to change:** None. Two numbers.
+
+## D-030 — Blocking is one-way, silent, and enforced on the server
+
+**Date:** 2026-09-11
+**Decision:** Blocking somebody stops their words being **sent** to you. They
+are never told. The world server filters at the point of delivery, so the
+blocked person's remarks never reach the browser at all.
+**Why:** Filtering in the browser would mean the words were still delivered,
+and anybody running a modified client would still see them — which makes the
+feature a decoration rather than a protection. Telling the blocked person is
+how a block turns into an argument, and the person doing the blocking is the
+one who needs protecting.
+**Cost to change:** Low, but the server-side half is not negotiable.
+
+## D-031 — A punishment and its audit entry are written together
+
+**Date:** 2026-09-11
+**Decision:** Every moderator action writes the change and a `moderation_log`
+row in one database transaction. The log is append-only.
+**Why:** A mute that is not in the log did not happen, and a log entry without
+the mute is a lie. Writing them separately means that, one day, a crash
+between the two leaves a player silenced with no record of who did it or why.
+Moderation nobody can audit is moderation nobody should trust — including the
+moderators, who need the record when they are accused of something.
+**Cost to change:** High, and deliberately so.
+
+## D-032 — The API tells the world server when something changes, over Redis
+
+**Date:** 2026-09-11
+**Decision:** The API publishes kick, mute and block commands to a Redis
+channel that the world server listens on. The durable change is written to
+PostgreSQL first; the message is a nudge, not the truth.
+**Why:** A ban that only takes effect at next login takes effect precisely when
+it matters least. Going through Redis keeps the two servers from calling each
+other directly, which is what lets there be more than one world server later.
+Because the database row is written first, losing the message costs promptness
+and nothing else — so a moderator's action must never fail because a cache was
+unavailable.
+**Cost to change:** Low. One channel and three message shapes.
+
+## D-033 — Moderator routes answer 404 to everybody else
+
+**Date:** 2026-09-11
+**Decision:** A request to `/api/moderation/*` from an account that is not a
+moderator gets "not found", not "forbidden". Whether an account is a moderator
+is read from the database on every request, never cached in the session.
+**Why:** "You are not allowed here" also says "here is a door worth
+attacking". Reading the badge every time means taking it away takes effect at
+once, rather than whenever that person next logs in — which is the moment you
+would most want it gone.
+**Cost to change:** None.

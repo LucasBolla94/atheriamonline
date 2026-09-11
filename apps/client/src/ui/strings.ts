@@ -49,6 +49,7 @@ export const strings = {
     'already-online': 'That character is already in the city.',
     'server-full': 'The city is full right now. Please try again in a moment.',
     kicked: 'A moderator removed you from the city.',
+    banned: 'This account is banned from Atheriam.',
     shutdown: 'The city is restarting. Come back shortly.',
     'protocol-error': 'The connection sent something unexpected and was closed.',
     idle: 'You were away for a long time, so you left the city.',
@@ -67,8 +68,36 @@ export const strings = {
   },
 
   hints: {
-    desktop: 'Click a tile to walk there, or use WASD.',
-    touch: 'Tap a tile to walk there.',
+    desktop: 'Click a tile to walk there, WASD to step, Enter to talk.',
+    touch: 'Tap a tile to walk there. Use the box below to talk.',
+  },
+
+  chat: {
+    logLabel: 'What people near you are saying',
+    inputLabel: 'Say something',
+    placeholder: 'Say something to the people near you…',
+    send: 'Say',
+    empty: 'Nobody nearby has said anything yet.',
+    nameTitle: (name: string): string => `What to do about ${name}`,
+    muted: 'A moderator has stopped you talking for now.',
+    tooChatty: 'That was a lot at once. Give it a moment.',
+  },
+
+  safety: {
+    title: (name: string): string => `What to do about ${name}`,
+    subtitle: 'Blocking is private. Reporting goes to a moderator.',
+    block: 'Stop hearing this person',
+    unblock: 'Hear this person again',
+    blockHelp: 'You will not see anything they say. They are not told.',
+    unblockHelp: 'You will hear them again from now on.',
+    report: 'Report them to a moderator',
+    reportHelp: 'A person reads every report. Reporting does not silence anybody by itself.',
+    reasonLabel: 'What happened?',
+    sendReport: 'Send the report',
+    reportSent: 'Thank you. A moderator will read this.',
+    blocked: (name: string): string => `You will no longer hear ${name}.`,
+    unblocked: (name: string): string => `You will hear ${name} again.`,
+    close: 'Close',
   },
 } as const;
 

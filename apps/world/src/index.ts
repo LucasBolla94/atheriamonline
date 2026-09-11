@@ -10,9 +10,9 @@
  */
 import { Redis } from 'ioredis';
 import { eq } from 'drizzle-orm';
-import { TICK_HZ, VIEW_RADIUS_TILES, type Direction } from '@atheriam/shared';
-import { PROTOCOL_VERSION } from '@atheriam/protocol';
-import { characters, connect } from '@atheriam/db';
+import { CHAT_RADIUS_TILES, TICK_HZ, VIEW_RADIUS_TILES, type Direction } from '@atheriam/shared';
+import { PROTOCOL_VERSION, WORLD_COMMAND_CHANNEL, decodeWorldCommand } from '@atheriam/protocol';
+import { accounts, blocks, characters, connect } from '@atheriam/db';
 import { starterDistrict } from './map.js';
 import { World, type JoiningCharacter } from './world.js';
 import { WorldServer } from './server.js';
@@ -47,14 +47,35 @@ async function resolveTicket(ticket: string): Promise<JoiningCharacter | null> {
   }
   if (typeof data.characterId !== 'string') return null;
 
+  // The character, and the two things about them that decide what they may do
+  // once they are inside: whether a moderator has silenced them, and who they
+  // have chosen not to hear.
   const found = await database.db
-    .select()
+    .select({
+      id: characters.id,
+      name: characters.name,
+      x: characters.x,
+      y: characters.y,
+      facing: characters.facing,
+      status: accounts.status,
+      mutedUntil: accounts.mutedUntil,
+    })
     .from(characters)
+    .innerJoin(accounts, eq(accounts.id, characters.accountId))
     .where(eq(characters.id, data.characterId))
     .limit(1);
 
   const character = found[0];
   if (character === undefined) return null;
+
+  // A ban may have been handed down while the ticket was in flight. The API
+  // refuses a banned login, but the check is cheap and this is the last door.
+  if (character.status === 'banned' || character.status === 'suspended') return null;
+
+  const blocked = await database.db
+    .select({ blockedId: blocks.blockedId })
+    .from(blocks)
+    .where(eq(blocks.blockerId, character.id));
 
   return {
     id: character.id,
@@ -62,6 +83,8 @@ async function resolveTicket(ticket: string): Promise<JoiningCharacter | null> {
     x: character.x,
     y: character.y,
     facing: character.facing as Direction,
+    mutedUntilMs: character.mutedUntil?.getTime() ?? null,
+    blocked: blocked.map((row) => row.blockedId),
   };
 }
 
@@ -85,9 +108,39 @@ async function savePosition(character: {
 const server = new WorldServer({ host, port, world, resolveTicket, savePosition });
 server.start();
 
+/**
+ * Listen for what the API decides.
+ *
+ * A mute, a kick or a block written to the database must take effect in the
+ * middle of a conversation, not at next login — that is the moment it matters.
+ * A command we cannot read is ignored rather than guessed at.
+ */
+const commands = new Redis(process.env['REDIS_URL'] ?? 'redis://localhost:6379');
+await commands.subscribe(WORLD_COMMAND_CHANNEL);
+commands.on('message', (_channel, raw) => {
+  const command = decodeWorldCommand(raw);
+  if (command === null) {
+    console.warn('[world] ignored a command it could not read.');
+    return;
+  }
+
+  switch (command.t) {
+    case 'kick':
+      server.kick(command.characterId, command.reason);
+      return;
+    case 'mute':
+      server.mute(command.characterId, command.untilMs);
+      return;
+    case 'block':
+      server.setBlock(command.blockerId, command.blockedId, command.blocked);
+      return;
+  }
+});
+
 console.warn(
   `[world] listening on ws://${host}:${port} — protocol v${PROTOCOL_VERSION}, ` +
     `${TICK_HZ} Hz, view radius ${VIEW_RADIUS_TILES} tiles, ` +
+    `chat radius ${CHAT_RADIUS_TILES} tiles, ` +
     `map ${starterDistrict.width}x${starterDistrict.height} tiles.`,
 );
 
@@ -95,6 +148,7 @@ async function shutdown(signal: string): Promise<void> {
   console.warn(`[world] ${signal} received, telling players goodbye.`);
   await server.stop();
   redis.disconnect();
+  commands.disconnect();
   await database.close();
   process.exit(0);
 }

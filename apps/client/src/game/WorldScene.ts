@@ -21,7 +21,7 @@ import {
   type Direction,
 } from '@atheriam/shared';
 import type { PlayerView, WorldInfo } from '@atheriam/protocol';
-import { colorTokens, fontFamilyTokens, fontSizeTokens } from '../tokens/tokens.js';
+import { colorTokens, fontFamilyTokens, fontSizeTokens, spaceTokens } from '../tokens/tokens.js';
 import type { HeldChunk, WorldConnection } from '../net/connection.js';
 
 /** How quickly a character catches up with where the server says it is. */
@@ -33,6 +33,12 @@ const SNAP_DISTANCE_PX = 0.5;
 /** How far the camera may be zoomed out and in, on a pinch or a wheel. */
 const MIN_ZOOM = 0.6;
 const MAX_ZOOM = 2.2;
+
+/** How long a speech bubble stays on screen. */
+const BUBBLE_LIFETIME_MS = 6_000;
+
+/** How wide a bubble may get before the text wraps, in pixels. */
+const BUBBLE_WIDTH_PX = 180;
 
 /**
  * One colour per kind of ground, and a second, slightly different one so the
@@ -69,6 +75,9 @@ const KEY_DIRECTIONS: ReadonlyArray<readonly [string, Direction]> = [
 interface Avatar {
   readonly container: Phaser.GameObjects.Container;
   targetPx: { x: number; y: number };
+  /** The speech bubble above this character, while they have one. */
+  bubble: Phaser.GameObjects.Container | null;
+  bubbleUntilMs: number;
 }
 
 export interface WorldSceneData {
@@ -85,6 +94,7 @@ export class WorldScene extends Phaser.Scene {
   /** One drawn square of ground per chunk we hold, by `cx:cy`. */
   private chunkImages = new Map<string, Phaser.GameObjects.RenderTexture>();
   private drawnChunkRevision = -1;
+  private shownChatRevision = 0;
   private keys = new Map<Direction, Phaser.Input.Keyboard.Key[]>();
   private lastStepSentAtMs = 0;
 
@@ -104,10 +114,11 @@ export class WorldScene extends Phaser.Scene {
     this.setUpPointer();
   }
 
-  override update(_time: number, delta: number): void {
+  override update(time: number, delta: number): void {
     this.pollKeyboard();
     this.syncChunks();
     this.syncAvatars();
+    this.syncBubbles(time);
     this.easeAvatars(delta);
   }
 
@@ -324,11 +335,77 @@ export class WorldScene extends Phaser.Scene {
     label.setOrigin(0.5, 0.5);
 
     container.add([body, label]);
-    this.avatars.set(view.id, { container, targetPx });
+    this.avatars.set(view.id, { container, targetPx, bubble: null, bubbleUntilMs: 0 });
 
     if (isSelf) {
       this.cameras.main.startFollow(container, true, 0.12, 0.12);
     }
+  }
+
+  // -- speech -------------------------------------------------------------
+
+  /**
+   * Put a bubble over whoever just spoke, and take away the ones that have had
+   * their turn.
+   *
+   * Like the ground, this does nothing at all unless something has changed —
+   * the revision counter is what makes that cheap to check every frame.
+   */
+  private syncBubbles(nowMs: number): void {
+    if (this.connection.chatRevision !== this.shownChatRevision) {
+      // Only the remarks that arrived since the last frame, so a long history
+      // is never replayed over the city.
+      const fresh = this.connection.chatRevision - this.shownChatRevision;
+      const log = this.connection.chatLog;
+      for (const entry of log.slice(Math.max(0, log.length - fresh))) {
+        this.showBubble(entry.from, entry.text, nowMs);
+      }
+      this.shownChatRevision = this.connection.chatRevision;
+    }
+
+    for (const avatar of this.avatars.values()) {
+      if (avatar.bubble === null) continue;
+      if (nowMs < avatar.bubbleUntilMs) continue;
+      avatar.bubble.destroy();
+      avatar.bubble = null;
+    }
+  }
+
+  /** One bubble per speaker: saying something again replaces what was there. */
+  private showBubble(speakerId: string, text: string, nowMs: number): void {
+    const avatar = this.avatars.get(speakerId);
+    if (avatar === undefined) return;
+
+    avatar.bubble?.destroy();
+
+    const label = this.add.text(0, 0, text, {
+      fontFamily: fontFamilyTokens.ui,
+      fontSize: `${fontSizeTokens.md}px`,
+      color: toHex(colorTokens.text),
+      wordWrap: { width: BUBBLE_WIDTH_PX },
+      align: 'center',
+    });
+    label.setOrigin(0.5, 1);
+
+    const padding = spaceTokens.sm;
+    const background = this.add.rectangle(
+      0,
+      -label.height / 2,
+      label.width + padding * 2,
+      label.height + padding,
+      colorTokens.surface,
+      0.92,
+    );
+    background.setStrokeStyle(1, colorTokens.border, 1);
+
+    const bubble = this.add.container(avatar.container.x, avatar.container.y - TILE_SIZE_PX, [
+      background,
+      label,
+    ]);
+    bubble.setDepth(5);
+
+    avatar.bubble = bubble;
+    avatar.bubbleUntilMs = nowMs + BUBBLE_LIFETIME_MS;
   }
 
   /**
@@ -348,6 +425,12 @@ export class WorldScene extends Phaser.Scene {
         continue;
       }
       container.setPosition(container.x + dx * t, container.y + dy * t);
+    }
+
+    // A bubble belongs to a character, so it follows them rather than hanging
+    // in the air where they were standing when they spoke.
+    for (const avatar of this.avatars.values()) {
+      avatar.bubble?.setPosition(avatar.container.x, avatar.container.y - TILE_SIZE_PX);
     }
   }
 }

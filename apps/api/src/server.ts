@@ -12,6 +12,7 @@ import type { Redis } from 'ioredis';
 import type { Database } from '@atheriam/db';
 import { SessionStore } from './auth/sessions.js';
 import { registerRoutes } from './routes.js';
+import { redisWorldLink, type WorldLink } from './worldLink.js';
 import type { Config } from './config.js';
 import { isProduction } from './config.js';
 
@@ -19,6 +20,11 @@ export interface BuildOptions {
   readonly config: Config;
   readonly db: Database;
   readonly redis: Redis;
+  /**
+   * How to reach the live city. Left out, the API talks to the world server
+   * over the same Redis it already has.
+   */
+  readonly world?: WorldLink;
 }
 
 export async function buildServer(options: BuildOptions): Promise<FastifyInstance> {
@@ -62,6 +68,11 @@ export async function buildServer(options: BuildOptions): Promise<FastifyInstanc
     sessions: new SessionStore(redis),
     secureCookies: isProduction(config),
     authRateLimitPerMinute: config.authRateLimitPerMinute,
+    world:
+      options.world ??
+      redisWorldLink(redis, (error) => {
+        app.log.warn(error, 'Could not tell the world server about a change.');
+      }),
   });
 
   return app;

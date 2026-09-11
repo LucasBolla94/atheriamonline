@@ -11,6 +11,7 @@
  * without a network.
  */
 import {
+  CHAT_RADIUS_TILES,
   MIN_STEP_INTERVAL_MS,
   VIEW_MARGIN_TILES,
   VIEW_RADIUS_TILES,
@@ -25,6 +26,7 @@ import type { PlayerView, RejectReason } from '@atheriam/protocol';
 import type { GameMap } from './map.js';
 import { spawnPoint } from './map.js';
 import { canStep, findPath } from './pathfinding.js';
+import { cleanChatText, newChatAllowance, takeChatToken, type ChatAllowance } from './chat.js';
 
 /** A player as the server knows them. More than the client is ever told. */
 export interface PlayerState {
@@ -37,6 +39,18 @@ export interface PlayerState {
   lastStepAtMs: number;
   /** Tiles still to walk, in order. Empty means standing still. */
   path: TilePos[];
+  /** How many things this player may still say before they must slow down. */
+  chat: ChatAllowance;
+  /**
+   * When a moderator's mute runs out, as a clock time in milliseconds, or null
+   * when this player is not muted.
+   */
+  mutedUntilMs: number | null;
+  /**
+   * Character ids this player has chosen not to hear. Blocking is personal and
+   * one-way: it hides somebody from you, and tells them nothing.
+   */
+  blocked: ReadonlySet<string>;
 }
 
 /**
@@ -51,10 +65,19 @@ export interface JoiningCharacter {
   readonly x: number;
   readonly y: number;
   readonly facing: Direction;
+  /** A mute a moderator set earlier, if it has not run out. */
+  readonly mutedUntilMs?: number | null;
+  /** The people this player has blocked, from the database. */
+  readonly blocked?: readonly string[];
 }
 
 export type JoinResult =
   { ok: true; player: PlayerState } | { ok: false; reason: 'already-online' | 'server-full' };
+
+/** Who heard a remark, or why nobody did. */
+export type SayResult =
+  | { ok: true; text: string; from: PlayerState; listeners: string[] }
+  | { ok: false; reason: RejectReason };
 
 export interface WorldOptions {
   /** Refuse new players past this many. Protects memory and bandwidth. */
@@ -132,6 +155,9 @@ export class World {
       // Dated in the past so a player may move as soon as they arrive.
       lastStepAtMs: nowMs - MIN_STEP_INTERVAL_MS,
       path: [],
+      chat: newChatAllowance(nowMs),
+      mutedUntilMs: character.mutedUntilMs ?? null,
+      blocked: new Set(character.blocked ?? []),
     };
     this.players.set(player.id, player);
     this.namesInUse.set(nameKey, player.id);
@@ -192,6 +218,64 @@ export class World {
 
     player.path = path;
     return null;
+  }
+
+  /**
+   * "I want to say this out loud."
+   *
+   * Returns who hears it and what they hear, or the reason nobody does. The
+   * speaker is included in the list of listeners: seeing your own words appear
+   * is how you know the server accepted them.
+   *
+   * Three things are decided here and nowhere else: the words are cleaned, the
+   * speaker must not be muted or flooding, and only the people close enough —
+   * who have not blocked the speaker — are listed. A client is never told
+   * about a remark it is not allowed to hear, so there is nothing to filter in
+   * the browser.
+   */
+  handleSay(id: string, rawText: string, nowMs: number): SayResult {
+    const player = this.players.get(id);
+    if (player === undefined) return { ok: false, reason: 'not-joined' };
+
+    if (player.mutedUntilMs !== null && nowMs < player.mutedUntilMs) {
+      return { ok: false, reason: 'muted' };
+    }
+
+    const text = cleanChatText(rawText);
+    if (text === null) return { ok: false, reason: 'malformed' };
+
+    if (!takeChatToken(player.chat, nowMs)) return { ok: false, reason: 'too-chatty' };
+
+    const listeners: string[] = [];
+    for (const other of this.players.values()) {
+      if (tileDistance(player, other) > CHAT_RADIUS_TILES) continue;
+      if (other.blocked.has(player.id)) continue;
+      listeners.push(other.id);
+    }
+
+    return { ok: true, text, from: player, listeners };
+  }
+
+  /**
+   * Silence a player, or let them speak again by passing a time in the past.
+   *
+   * The world server holds the mute in memory so it costs nothing to check on
+   * every message; the database row is what makes it survive a restart.
+   */
+  mute(id: string, untilMs: number | null): void {
+    const player = this.players.get(id);
+    if (player === undefined) return;
+    player.mutedUntilMs = untilMs;
+  }
+
+  /** Stop delivering one player's words to another. Personal and one-way. */
+  block(blockerId: string, blockedId: string, blocked: boolean): void {
+    const player = this.players.get(blockerId);
+    if (player === undefined) return;
+    const next = new Set(player.blocked);
+    if (blocked) next.add(blockedId);
+    else next.delete(blockedId);
+    player.blocked = next;
   }
 
   /** "Stop where I am." Always allowed, for anyone who is in the world. */

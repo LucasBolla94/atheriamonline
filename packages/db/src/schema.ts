@@ -23,6 +23,20 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 
+/** What a moderator did. Every one of these is written to the audit log. */
+export const moderationAction = pgEnum('moderation_action', [
+  'warn',
+  'mute',
+  'unmute',
+  'kick',
+  'ban',
+  'unban',
+  'dismiss-report',
+]);
+
+/** Where a report has got to. */
+export const reportStatus = pgEnum('report_status', ['open', 'actioned', 'dismissed']);
+
 /** What may be true of an account. */
 export const accountStatus = pgEnum('account_status', ['active', 'suspended', 'banned']);
 
@@ -60,6 +74,13 @@ export const accounts = pgTable(
     dateOfBirth: date('date_of_birth').notNull(),
     status: accountStatus('status').notNull().default('active'),
     isModerator: boolean('is_moderator').notNull().default(false),
+    /**
+     * When a mute runs out. Null means this account is not muted.
+     *
+     * It lives on the account rather than on the character so that a mute
+     * cannot be escaped by making a new character later.
+     */
+    mutedUntil: timestamp('muted_until', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
@@ -98,7 +119,99 @@ export const characters = pgTable(
   ],
 );
 
+/**
+ * "I do not want to hear from this person."
+ *
+ * Blocking is personal and one-way: it hides somebody from you, and tells them
+ * nothing. Both sides are characters rather than accounts, because a player
+ * blocks the person they met in the city, not a login they never see.
+ */
+export const blocks = pgTable(
+  'blocks',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    blockerId: uuid('blocker_id')
+      .notNull()
+      .references(() => characters.id, { onDelete: 'cascade' }),
+    blockedId: uuid('blocked_id')
+      .notNull()
+      .references(() => characters.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // Blocking twice is the same as blocking once, and the database is what
+    // makes that true even when two tabs ask at the same moment.
+    uniqueIndex('blocks_pair_key').on(table.blockerId, table.blockedId),
+    index('blocks_blocker_idx').on(table.blockerId),
+  ],
+);
+
+/**
+ * "This person did something wrong."
+ *
+ * A report is kept whatever a moderator decides, so that a pattern across many
+ * reports is still visible after each one was dealt with.
+ */
+export const reports = pgTable(
+  'reports',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    reporterId: uuid('reporter_id')
+      .notNull()
+      .references(() => characters.id, { onDelete: 'cascade' }),
+    reportedId: uuid('reported_id')
+      .notNull()
+      .references(() => characters.id, { onDelete: 'cascade' }),
+    reason: text('reason').notNull(),
+    status: reportStatus('status').notNull().default('open'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    reviewedBy: uuid('reviewed_by').references(() => accounts.id, { onDelete: 'set null' }),
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+  },
+  (table) => [
+    index('reports_status_idx').on(table.status, table.createdAt),
+    index('reports_reported_idx').on(table.reportedId),
+  ],
+);
+
+/**
+ * Everything a moderator has ever done, and why.
+ *
+ * Rows are only ever added. A moderation system nobody can audit is a
+ * moderation system nobody should trust, including the moderators themselves.
+ */
+export const moderationLog = pgTable(
+  'moderation_log',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    /** The moderator. Kept even if their account is later deleted. */
+    moderatorId: uuid('moderator_id').references(() => accounts.id, { onDelete: 'set null' }),
+    targetAccountId: uuid('target_account_id').references(() => accounts.id, {
+      onDelete: 'set null',
+    }),
+    /** The character the moderator was actually looking at, when there was one. */
+    targetCharacterId: uuid('target_character_id').references(() => characters.id, {
+      onDelete: 'set null',
+    }),
+    action: moderationAction('action').notNull(),
+    reason: text('reason').notNull(),
+    /** When a mute or a ban runs out, when it is not permanent. */
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+    reportId: uuid('report_id').references(() => reports.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('moderation_log_created_idx').on(table.createdAt),
+    index('moderation_log_target_idx').on(table.targetAccountId),
+  ],
+);
+
 export type Account = typeof accounts.$inferSelect;
 export type NewAccount = typeof accounts.$inferInsert;
 export type Character = typeof characters.$inferSelect;
 export type NewCharacter = typeof characters.$inferInsert;
+export type Block = typeof blocks.$inferSelect;
+export type Report = typeof reports.$inferSelect;
+export type NewReport = typeof reports.$inferInsert;
+export type ModerationEntry = typeof moderationLog.$inferSelect;
+export type NewModerationEntry = typeof moderationLog.$inferInsert;

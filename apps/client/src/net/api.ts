@@ -97,6 +97,29 @@ export async function me(): Promise<ApiResult<{ character: CharacterSummary }>> 
   return request('/api/me');
 }
 
+/** "I do not want to hear from this person." Takes effect at once. */
+export async function blockPlayer(name: string): Promise<ApiResult<{ ok: true }>> {
+  return request('/api/players/block', { method: 'POST', body: JSON.stringify({ name }) });
+}
+
+/** Undo a block. */
+export async function unblockPlayer(name: string): Promise<ApiResult<{ ok: true }>> {
+  return request('/api/players/unblock', { method: 'POST', body: JSON.stringify({ name }) });
+}
+
+/** Who this player has blocked, by name. */
+export async function blockedPlayers(): Promise<ApiResult<{ names: string[] }>> {
+  return request('/api/players/blocked');
+}
+
+/** Report somebody to the moderators. Silences nobody by itself. */
+export async function reportPlayer(name: string, reason: string): Promise<ApiResult<{ ok: true }>> {
+  return request('/api/players/report', {
+    method: 'POST',
+    body: JSON.stringify({ name, reason }),
+  });
+}
+
 /** Ask for a ticket to open the WebSocket with. */
 export async function worldTicket(): Promise<ApiResult<{ ticket: string }>> {
   return request('/api/world/ticket', { method: 'POST' });

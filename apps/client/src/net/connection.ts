@@ -21,7 +21,21 @@ import {
   type ServerMessage,
   type WorldInfo,
 } from '@atheriam/protocol';
+import { MAX_CHAT_LENGTH } from '@atheriam/shared';
 import { chunkKey, type Direction, type TilePos } from '@atheriam/shared';
+
+/** Something somebody near you said. */
+export interface ChatEntry {
+  readonly id: number;
+  readonly from: string;
+  readonly name: string;
+  readonly text: string;
+  /** When it reached this browser, used to fade the bubble out. */
+  readonly atMs: number;
+}
+
+/** How many remarks the client keeps. Older ones scroll away for good. */
+export const CHAT_HISTORY = 60;
 
 /** One square of the map, as the client holds it. */
 export interface HeldChunk {
@@ -41,6 +55,7 @@ export interface ConnectionHandlers {
   onStateChange?: (state: ConnectionState) => void;
   onWelcome?: (world: WorldInfo, playerId: string) => void;
   onSnapshot?: (you: PlayerView, others: PlayerView[]) => void;
+  onChat?: (entry: ChatEntry) => void;
   onReject?: (reason: RejectReason) => void;
   onClosed?: (reason: string) => void;
 }
@@ -86,6 +101,19 @@ export class WorldConnection {
    * frame and means the two never need to be wired together with events.
    */
   chunkRevision = 0;
+
+  /**
+   * What has been said near the player, oldest first.
+   *
+   * The server only sends what this player is allowed to hear, so there is
+   * nothing to filter here — a blocked person's words never arrive at all.
+   */
+  readonly chatLog: ChatEntry[] = [];
+
+  /** Goes up with every remark, so the renderer knows there is a new bubble. */
+  chatRevision = 0;
+
+  private nextChatId = 1;
 
   constructor(handlers: ConnectionHandlers = {}, now: () => number = () => Date.now()) {
     this.handlers = handlers;
@@ -167,6 +195,18 @@ export class WorldConnection {
     this.sendIntent({ t: 'stop', seq: this.nextSeq() });
   }
 
+  /**
+   * "I want to say this out loud."
+   *
+   * Empty text is dropped here rather than sent: the server would refuse it,
+   * and a refusal costs the player one of their chat tokens.
+   */
+  say(text: string): void {
+    const trimmed = text.trim().slice(0, MAX_CHAT_LENGTH);
+    if (trimmed.length === 0) return;
+    this.sendIntent({ t: 'say', seq: this.nextSeq(), text: trimmed });
+  }
+
   /** Close the connection on purpose. */
   disconnect(): void {
     this.socket?.close();
@@ -211,6 +251,21 @@ export class WorldConnection {
       }
       case 'bye': {
         this.handleClose(message.reason);
+        return;
+      }
+      case 'chat': {
+        const entry: ChatEntry = {
+          id: this.nextChatId,
+          from: message.from,
+          name: message.name,
+          text: message.text,
+          atMs: this.now(),
+        };
+        this.nextChatId += 1;
+        this.chatLog.push(entry);
+        if (this.chatLog.length > CHAT_HISTORY) this.chatLog.shift();
+        this.chatRevision += 1;
+        this.handlers.onChat?.(entry);
         return;
       }
       case 'pong': {

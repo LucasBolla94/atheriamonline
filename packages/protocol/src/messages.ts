@@ -13,7 +13,7 @@
  * Every message is validated with zod before it is trusted, on both sides.
  */
 import { z } from 'zod';
-import { CHUNK_SIZE_TILES } from '@atheriam/shared';
+import { CHUNK_SIZE_TILES, MAX_CHAT_LENGTH } from '@atheriam/shared';
 
 /**
  * Bumped whenever a message shape changes in a way old clients cannot read.
@@ -22,8 +22,9 @@ import { CHUNK_SIZE_TILES } from '@atheriam/shared';
  *    world server knows which account is connecting.
  * 3: the map is no longer sent whole. The server streams the 32x32 chunks
  *    around the player and tells the client when to forget one.
+ * 4: players can talk to the people near them.
  */
-export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_VERSION = 4;
 
 /** The eight directions a player may step in. */
 export const directionSchema = z.enum(['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw']);
@@ -95,6 +96,18 @@ export const stopIntentSchema = z.object({
   seq: sequenceSchema,
 });
 
+/**
+ * Say something out loud to the people standing near you.
+ *
+ * The text is trimmed and length-checked here, but it is never trusted: the
+ * server decides who hears it, and the browser never renders it as markup.
+ */
+export const sayIntentSchema = z.object({
+  t: z.literal('say'),
+  seq: sequenceSchema,
+  text: z.string().trim().min(1).max(MAX_CHAT_LENGTH),
+});
+
 /** Round-trip timing. `ts` is the client's clock and is echoed back untouched. */
 export const pingSchema = z.object({
   t: z.literal('ping'),
@@ -106,6 +119,7 @@ export const clientMessageSchema = z.discriminatedUnion('t', [
   stepIntentSchema,
   walkToIntentSchema,
   stopIntentSchema,
+  sayIntentSchema,
   pingSchema,
 ]);
 
@@ -113,6 +127,7 @@ export type ClientMessage = z.infer<typeof clientMessageSchema>;
 export type JoinIntent = z.infer<typeof joinIntentSchema>;
 export type StepIntent = z.infer<typeof stepIntentSchema>;
 export type WalkToIntent = z.infer<typeof walkToIntentSchema>;
+export type SayIntent = z.infer<typeof sayIntentSchema>;
 
 // ---------------------------------------------------------------------------
 // Server -> Client. Facts only.
@@ -190,6 +205,24 @@ export const snapshotSchema = z.object({
 });
 
 /**
+ * Somebody near you said something.
+ *
+ * Only people within earshot are sent this at all, so a modified client cannot
+ * listen across the city: what it was never sent, it cannot read.
+ */
+export const chatSchema = z.object({
+  t: z.literal('chat'),
+  /** The character who spoke. `system` is reserved and never a player id. */
+  from: z.string().min(1).max(64),
+  name: displayNameSchema,
+  text: z.string().min(1).max(MAX_CHAT_LENGTH),
+  /** The server tick it was said on, so the client can age the bubble out. */
+  tick: z.number().int().nonnegative(),
+});
+
+export type Chat = z.infer<typeof chatSchema>;
+
+/**
  * An intent the server refused. The client must snap back to the position in
  * the next snapshot. This is not an error to show the player; it is normal
  * when the network is slow.
@@ -205,6 +238,8 @@ export const rejectSchema = z.object({
     'out-of-bounds',
     'no-path',
     'malformed',
+    'muted',
+    'too-chatty',
   ]),
 });
 
@@ -216,6 +251,7 @@ export const byeSchema = z.object({
     'already-online',
     'server-full',
     'kicked',
+    'banned',
     'shutdown',
     'protocol-error',
     'idle',
@@ -233,6 +269,7 @@ export const serverMessageSchema = z.discriminatedUnion('t', [
   chunkSchema,
   chunkDropSchema,
   snapshotSchema,
+  chatSchema,
   rejectSchema,
   byeSchema,
   pongSchema,

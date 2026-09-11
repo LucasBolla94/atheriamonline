@@ -39,3 +39,33 @@ export const MIN_STEP_INTERVAL_MS = 180;
 
 /** How often online player positions are written to the database, in ms. */
 export const POSITION_SNAPSHOT_INTERVAL_MS = 60_000;
+
+/**
+ * Where a brand new character starts: the Crown Square, by the well.
+ *
+ * Both the API (which creates the character) and the world server (which draws
+ * the city) need this, and they must agree, so it is decided once, here.
+ */
+export const DEFAULT_SPAWN_TILE = { x: 64, y: 69 } as const;
+
+/**
+ * How far an ordinary remark carries, in tiles.
+ *
+ * Smaller than the view radius on purpose: you can see someone across the
+ * square without hearing them, which is what makes standing closer mean
+ * something. See D-028.
+ */
+export const CHAT_RADIUS_TILES = 12;
+
+/** The longest thing anybody may say in one message. */
+export const MAX_CHAT_LENGTH = 200;
+
+/**
+ * Chat is limited by a bucket of tokens rather than a flat delay: a player may
+ * fire off a few lines in a row, and then has to wait. A flat delay makes
+ * ordinary conversation feel broken; a bucket only stops a flood.
+ */
+export const CHAT_BURST = 5;
+
+/** How long it takes for one chat token to come back, in milliseconds. */
+export const CHAT_TOKEN_REFILL_MS = 2_000;
