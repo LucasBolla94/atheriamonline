@@ -16,7 +16,13 @@ import { strings } from './strings.js';
 import { Portrait } from './Art.js';
 import { Icon } from './Icon.js';
 
-export type AuthMode = 'create' | 'login';
+/**
+ * The four things this screen can be doing.
+ *
+ * `reset` is not reached by a button: the player arrives on it by opening the
+ * link in their email, which carries a token in the address bar.
+ */
+export type AuthMode = 'create' | 'login' | 'forgot' | 'reset';
 
 export interface AuthScreenProps {
   readonly busy: boolean;
@@ -29,17 +35,37 @@ export interface AuthScreenProps {
     appearance?: number;
   }) => void;
   readonly onLogIn: (email: string, password: string) => void;
+  /** Ask for a link to choose a new password. */
+  readonly onForgot: (email: string) => Promise<string | null>;
+  /** Use the link from the email. Returns an error to show, or null. */
+  readonly onReset: (token: string, password: string) => Promise<string | null>;
+  /**
+   * The token from the address bar, when the player arrived from their email.
+   * Its presence is what puts this screen into `reset`.
+   */
+  readonly resetToken: string | null;
 }
 
-export function AuthScreen({ busy, error, onCreate, onLogIn }: AuthScreenProps): JSX.Element {
+export function AuthScreen({
+  busy,
+  error,
+  onCreate,
+  onLogIn,
+  onForgot,
+  onReset,
+  resetToken,
+}: AuthScreenProps): JSX.Element {
   const [appearance, setAppearance] = useState(0);
-  const [mode, setMode] = useState<AuthMode>('login');
+  const [mode, setMode] = useState<AuthMode>(resetToken === null ? 'login' : 'reset');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [characterName, setCharacterName] = useState('');
   const [dateOfBirth, setDateOfBirth] = useState('');
   const [confirmsAdult, setConfirmsAdult] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [repeated, setRepeated] = useState('');
+  const [done, setDone] = useState<string | null>(null);
+  const [working, setWorking] = useState(false);
 
   function fail(key: keyof typeof strings.errors): void {
     setLocalError(strings.errors[key] ?? null);
@@ -48,10 +74,54 @@ export function AuthScreen({ busy, error, onCreate, onLogIn }: AuthScreenProps):
   function handleSubmit(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
     setLocalError(null);
+    setDone(null);
+
+    // Choosing a new password from an emailed link. There is no address to
+    // check here: the link itself says who this is.
+    if (mode === 'reset') {
+      if (password.length < 10) {
+        fail('passwordTooShort');
+        return;
+      }
+      if (password !== repeated) {
+        fail('passwordsDiffer');
+        return;
+      }
+      setWorking(true);
+      void (async () => {
+        const problem = await onReset(resetToken ?? '', password);
+        setWorking(false);
+        if (problem !== null) {
+          setLocalError(problem);
+          return;
+        }
+        setDone(strings.auth.resetDone);
+        setPassword('');
+        setRepeated('');
+        setMode('login');
+      })();
+      return;
+    }
 
     const trimmedEmail = email.trim();
     if (!trimmedEmail.includes('@') || trimmedEmail.length < 3) {
       fail('notAnEmail');
+      return;
+    }
+
+    // Asking for the link. The answer is the same either way, so there is
+    // nothing here that could tell somebody whether an address has an account.
+    if (mode === 'forgot') {
+      setWorking(true);
+      void (async () => {
+        const problem = await onForgot(trimmedEmail);
+        setWorking(false);
+        if (problem !== null) {
+          setLocalError(problem);
+          return;
+        }
+        setDone(strings.auth.forgotSent);
+      })();
       return;
     }
 
@@ -100,7 +170,19 @@ export function AuthScreen({ busy, error, onCreate, onLogIn }: AuthScreenProps):
   }
 
   const creating = mode === 'create';
+  const resetting = mode === 'reset';
+  const forgetting = mode === 'forgot';
+  /** True while either half of the screen is waiting on the server. */
+  const waiting = busy || working;
   const message = localError ?? error;
+
+  /** Go back to the ordinary login form, forgetting whatever was half typed. */
+  function backToLogin(): void {
+    setMode('login');
+    setLocalError(null);
+    setPassword('');
+    setRepeated('');
+  }
 
   return (
     <main className="screen welcome-screen">
@@ -145,38 +227,52 @@ export function AuthScreen({ busy, error, onCreate, onLogIn }: AuthScreenProps):
             <Icon name={creating ? 'leaf' : 'home'} />
           </div>
           <h2 className="auth-title">
-            {creating ? strings.welcome.createTitle : strings.welcome.loginTitle}
+            {resetting
+              ? strings.auth.resetTitle
+              : forgetting
+                ? strings.auth.forgotTitle
+                : creating
+                  ? strings.welcome.createTitle
+                  : strings.welcome.loginTitle}
           </h2>
           <p className="panel__subtitle">
-            {creating ? strings.welcome.createCopy : strings.welcome.loginCopy}
+            {resetting
+              ? strings.auth.resetCopy
+              : forgetting
+                ? strings.auth.forgotCopy
+                : creating
+                  ? strings.welcome.createCopy
+                  : strings.welcome.loginCopy}
           </p>
 
-          <div className="tabs" role="tablist">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={!creating}
-              className={`tab ${creating ? '' : 'tab--active'}`}
-              onClick={() => {
-                setMode('login');
-                setLocalError(null);
-              }}
-            >
-              {strings.auth.loginTab}
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={creating}
-              className={`tab ${creating ? 'tab--active' : ''}`}
-              onClick={() => {
-                setMode('create');
-                setLocalError(null);
-              }}
-            >
-              {strings.auth.createTab}
-            </button>
-          </div>
+          {!resetting && !forgetting && (
+            <div className="tabs" role="tablist">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={!creating}
+                className={`tab ${creating ? '' : 'tab--active'}`}
+                onClick={() => {
+                  setMode('login');
+                  setLocalError(null);
+                }}
+              >
+                {strings.auth.loginTab}
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={creating}
+                className={`tab ${creating ? 'tab--active' : ''}`}
+                onClick={() => {
+                  setMode('create');
+                  setLocalError(null);
+                }}
+              >
+                {strings.auth.createTab}
+              </button>
+            </div>
+          )}
 
           {creating && (
             <fieldset className="starter-looks">
@@ -199,35 +295,58 @@ export function AuthScreen({ busy, error, onCreate, onLogIn }: AuthScreenProps):
             </fieldset>
           )}
 
-          <label className="field">
-            <span className="field__label">{strings.auth.emailLabel}</span>
-            <input
-              className="field__input"
-              type="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              placeholder={strings.auth.emailPlaceholder}
-              autoComplete="email"
-              disabled={busy}
-              required
-            />
-          </label>
+          {!resetting && (
+            <label className="field">
+              <span className="field__label">{strings.auth.emailLabel}</span>
+              <input
+                className="field__input"
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder={strings.auth.emailPlaceholder}
+                autoComplete="email"
+                disabled={waiting}
+                required
+              />
+            </label>
+          )}
 
-          <label className="field">
-            <span className="field__label">{strings.auth.passwordLabel}</span>
-            <input
-              className="field__input"
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              autoComplete={creating ? 'new-password' : 'current-password'}
-              disabled={busy}
-              required
-            />
-          </label>
-          {creating && <p className="notice notice--quiet">{strings.auth.passwordHelp}</p>}
+          {!forgetting && (
+            <label className="field">
+              <span className="field__label">
+                {resetting ? strings.auth.newPasswordLabel : strings.auth.passwordLabel}
+              </span>
+              <input
+                className="field__input"
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                autoComplete={creating || resetting ? 'new-password' : 'current-password'}
+                disabled={waiting}
+                required
+              />
+            </label>
+          )}
+          {(creating || resetting) && (
+            <p className="notice notice--quiet">{strings.auth.passwordHelp}</p>
+          )}
 
-          {creating && (
+          {resetting && (
+            <label className="field">
+              <span className="field__label">{strings.auth.repeatPasswordLabel}</span>
+              <input
+                className="field__input"
+                type="password"
+                value={repeated}
+                onChange={(event) => setRepeated(event.target.value)}
+                autoComplete="new-password"
+                disabled={waiting}
+                required
+              />
+            </label>
+          )}
+
+          {creating && !resetting && (
             <>
               <label className="field">
                 <span className="field__label">{strings.auth.nameLabel}</span>
@@ -267,13 +386,44 @@ export function AuthScreen({ busy, error, onCreate, onLogIn }: AuthScreenProps):
             </>
           )}
 
-          <button className="button" type="submit" disabled={busy}>
-            {busy
+          <button className="button" type="submit" disabled={waiting}>
+            {waiting
               ? strings.auth.working
-              : creating
-                ? strings.auth.createSubmit
-                : strings.auth.loginSubmit}
+              : resetting
+                ? strings.auth.resetSubmit
+                : forgetting
+                  ? strings.auth.forgotSubmit
+                  : creating
+                    ? strings.auth.createSubmit
+                    : strings.auth.loginSubmit}
           </button>
+
+          {mode === 'login' && (
+            <button
+              type="button"
+              className="auth-link"
+              disabled={waiting}
+              onClick={() => {
+                setMode('forgot');
+                setLocalError(null);
+                setDone(null);
+              }}
+            >
+              {strings.auth.forgotLink}
+            </button>
+          )}
+
+          {(forgetting || resetting) && (
+            <button type="button" className="auth-link" disabled={waiting} onClick={backToLogin}>
+              {strings.auth.backToLogin}
+            </button>
+          )}
+
+          {done !== null && (
+            <p className="notice notice--good" role="status">
+              {done}
+            </p>
+          )}
 
           {message !== null && (
             <p className="notice notice--error" role="alert">

@@ -194,6 +194,36 @@ Open a terminal in the project folder and run these, in order.
    pnpm test:e2e
    ```
 
+## Forgetting your password
+
+The login form has **I have forgotten my password**. The player types their
+address, the server emails a link, and the link lets them choose a new one. It
+works once and lasts an hour, and using it logs out every device that was
+signed in to that account.
+
+This needs a mailbox to send from. On the live server the settings are in
+`/etc/atheriam/atheriam.env`:
+
+```
+SMTP_HOST=smtp.ionos.co.uk
+SMTP_PORT=465
+SMTP_USER=support@bolla.network
+SMTP_PASSWORD=…            (never written down anywhere else)
+MAIL_FROM=Atheriam <support@bolla.network>
+```
+
+To put the password in without it appearing on screen or in any history:
+
+```
+read -rsp "Password: " P && echo && \
+  echo "SMTP_PASSWORD=$P" | sudo tee -a /etc/atheriam/atheriam.env >/dev/null && \
+  unset P && sudo systemctl restart atheriam-api
+```
+
+Until that is set, asking for a link answers "Password reset is not set up on
+this server yet" — which is honest, and better than a message that never
+arrives.
+
 ## The game is live
 
 **https://atheriam.online** — on a computer or on a phone held sideways.

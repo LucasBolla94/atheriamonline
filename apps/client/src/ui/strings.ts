@@ -75,6 +75,22 @@ export const strings = {
     working: 'One moment…',
 
     ageNotice: 'Atheriam is for adults. You must be 18 or over to play.',
+
+    forgotLink: 'I have forgotten my password',
+    forgotTitle: 'Choosing a new password',
+    forgotCopy:
+      'Tell us the email address you signed up with and we will send you a link. The link works once, and only for an hour.',
+    forgotSubmit: 'Send me a link',
+    forgotSent:
+      'If that address has an account, a link is on its way. Have a look in your spam folder if it does not arrive.',
+    backToLogin: 'Back to logging in',
+
+    resetTitle: 'Choose a new password',
+    resetCopy: 'Type it twice, so a typo cannot lock you out.',
+    newPasswordLabel: 'New password',
+    repeatPasswordLabel: 'Type it again',
+    resetSubmit: 'Save my new password',
+    resetDone: 'Your password is changed. You can log in with it now.',
     logOut: 'Log out',
   },
 
@@ -86,6 +102,7 @@ export const strings = {
     notAnEmail: 'That does not look like an email address.',
     noBirthday: 'Please tell us your date of birth.',
     notConfirmedAdult: 'Please confirm that you are 18 or over.',
+    passwordsDiffer: 'Those two do not match. Please type the same password twice.',
     'bad-ticket': 'Your pass to the city expired. Please try again.',
     'already-online': 'That character is already in the city.',
     'server-full': 'The city is full right now. Please try again in a moment.',

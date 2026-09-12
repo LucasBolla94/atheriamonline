@@ -146,6 +146,61 @@ export async function login(db: Database, email: string, password: string): Prom
 }
 
 /** Look up the character belonging to an account. */
+/**
+ * Find an account by the address somebody typed.
+ *
+ * Used by "I have forgotten my password", which must never say whether an
+ * address is known — so this returns null quietly and the caller answers the
+ * same way either way.
+ */
+export async function accountByEmail(db: Database, email: string): Promise<Account | null> {
+  const found = await db
+    .select()
+    .from(accounts)
+    .where(eq(accounts.emailNormalised, normaliseEmail(email)))
+    .limit(1);
+  return found[0] ?? null;
+}
+
+/** One account, by its id. */
+export async function accountById(db: Database, id: string): Promise<Account | null> {
+  const found = await db.select().from(accounts).where(eq(accounts.id, id)).limit(1);
+  return found[0] ?? null;
+}
+
+export type SetPasswordFailure =
+  'password-too-short' | 'password-too-long' | 'password-same-as-email';
+
+export type SetPasswordResult = { ok: true } | { ok: false; reason: SetPasswordFailure };
+
+/**
+ * Give an account a new password.
+ *
+ * The same rules as registration, checked the same way — a reset must not be a
+ * way to set a password that signing up would have refused.
+ *
+ * Ending the account's sessions is deliberately **not** done here: it needs
+ * Redis, which this file does not have. The caller does it, and there is a
+ * test that fails if it forgets.
+ */
+export async function setPassword(
+  db: Database,
+  account: Account,
+  password: string,
+): Promise<SetPasswordResult> {
+  const problem = checkPassword(password, account.email);
+  if (problem === 'too-short') return { ok: false, reason: 'password-too-short' };
+  if (problem === 'too-long') return { ok: false, reason: 'password-too-long' };
+  if (problem === 'same-as-email') return { ok: false, reason: 'password-same-as-email' };
+
+  await db
+    .update(accounts)
+    .set({ passwordHash: await hashPassword(password), updatedAt: new Date() })
+    .where(eq(accounts.id, account.id));
+
+  return { ok: true };
+}
+
 export async function characterOf(db: Database, accountId: string): Promise<Character | null> {
   const found = await db
     .select()

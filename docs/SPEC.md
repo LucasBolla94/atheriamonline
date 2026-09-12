@@ -198,6 +198,13 @@ Movement rules:
   date of birth is stored. Under 18 cannot create an account.
 - Sessions are opaque tokens stored in Redis, sent as `HttpOnly`, `Secure`,
   `SameSite=Lax` cookies.
+- A forgotten password is recovered by **email**: the player asks for a link,
+  the server sends one that works **once** and expires in **an hour**, and
+  only a hash of its token is ever stored. The answer to "I have forgotten my
+  password" is identical whether or not the address has an account, so the
+  route cannot be used to ask who plays. Changing a password **ends every
+  session** on that account, because somebody resetting a password may be
+  doing it precisely to remove another person.
 - The WebSocket connection is authenticated with a short-lived ticket issued by
   the api server; the raw session cookie is never used as a WS credential.
 - Every player can **block** and **report** another player. Reports are stored

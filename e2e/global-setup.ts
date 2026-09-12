@@ -5,7 +5,7 @@
  * client. They get their own database and their own Redis database number, so
  * a test run can never touch the world you are playing in.
  */
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import postgres from 'postgres';
@@ -28,6 +28,15 @@ export const E2E_REDIS_DB = 14;
 export const E2E_API_PORT = 3101;
 export const E2E_WORLD_PORT = 3102;
 export const E2E_CLIENT_PORT = 5273;
+
+/**
+ * Where the browser tests read email from.
+ *
+ * Nothing is sent: the API appends each message to this file as JSON. It is
+ * how a test can follow a password reset link without a mailbox, and the
+ * reason the API refuses to use an outbox in production.
+ */
+export const E2E_OUTBOX = join(root, 'test-results', 'outbox.jsonl');
 
 /**
  * Read `.env` without adding a dependency.
@@ -79,6 +88,7 @@ export function e2eEnv(): Record<string, string> {
     VITE_API_URL: `http://127.0.0.1:${E2E_API_PORT}`,
     VITE_WORLD_URL: `ws://127.0.0.1:${E2E_WORLD_PORT}`,
     VITE_PORT: String(E2E_CLIENT_PORT),
+    MAIL_OUTBOX: E2E_OUTBOX,
     // Every browser test comes from the same address and makes an account, so
     // the real limits would stop the suite rather than an attacker. The limits
     // themselves are tested directly in routes.integration.test.ts.
@@ -95,6 +105,10 @@ export function e2eEnv(): Record<string, string> {
  * used to start against a database that was about to be dropped from under it.
  */
 export async function prepareDatabase(): Promise<void> {
+  // A fresh outbox, so a test never reads an email from a previous run.
+  mkdirSync(dirname(E2E_OUTBOX), { recursive: true });
+  writeFileSync(E2E_OUTBOX, '');
+
   const base = readEnvFile();
   const adminUrl = base['DATABASE_URL'];
   if (adminUrl === undefined) {

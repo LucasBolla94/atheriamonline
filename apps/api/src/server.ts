@@ -14,6 +14,7 @@ import { SessionStore } from './auth/sessions.js';
 import { registerRoutes } from './routes.js';
 import { redisWorldLink, type WorldLink } from './worldLink.js';
 import { ensureCatalogue } from './items.js';
+import { noMailer, outboxMailer, smtpMailer, type Mailer } from './mail.js';
 import type { Config } from './config.js';
 import { isProduction } from './config.js';
 
@@ -26,6 +27,42 @@ export interface BuildOptions {
    * over the same Redis it already has.
    */
   readonly world?: WorldLink;
+  /** How to send email. Left out, it is decided by the settings. */
+  readonly mailer?: Mailer;
+}
+
+/**
+ * Decide how email gets sent, from the settings alone.
+ *
+ * The outbox is refused in production on purpose: an outbox nobody reads is a
+ * password reset that silently never arrives, and that is worse than a route
+ * which says plainly that reset is not set up.
+ */
+export function mailerFor(config: Config, onError?: (error: unknown) => void): Mailer {
+  const production = isProduction(config);
+
+  if (config.mailOutbox !== undefined && !production) {
+    return outboxMailer(config.mailOutbox);
+  }
+
+  if (
+    config.smtpHost !== undefined &&
+    config.smtpUser !== undefined &&
+    config.smtpPassword !== undefined
+  ) {
+    return smtpMailer(
+      {
+        host: config.smtpHost,
+        port: config.smtpPort,
+        user: config.smtpUser,
+        password: config.smtpPassword,
+        from: config.mailFrom ?? config.smtpUser,
+      },
+      onError,
+    );
+  }
+
+  return noMailer();
 }
 
 export async function buildServer(options: BuildOptions): Promise<FastifyInstance> {
@@ -69,9 +106,25 @@ export async function buildServer(options: BuildOptions): Promise<FastifyInstanc
   // remember to run on the server.
   await ensureCatalogue(db);
 
+  const mailer =
+    options.mailer ??
+    mailerFor(config, (error) => {
+      app.log.error(error, 'Could not send an email.');
+    });
+
+  if (!mailer.configured) {
+    app.log.warn(
+      'No mail settings, so nobody can reset a forgotten password. ' +
+        'Set SMTP_HOST, SMTP_USER and SMTP_PASSWORD to turn it on.',
+    );
+  }
+
   await registerRoutes(app, {
     db,
+    mailer,
+    publicOrigin: config.publicOrigin,
     sessions: new SessionStore(redis),
+    redis,
     secureCookies: isProduction(config),
     authRateLimitPerMinute: config.authRateLimitPerMinute,
     world:

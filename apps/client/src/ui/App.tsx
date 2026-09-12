@@ -70,6 +70,18 @@ export function App(): JSX.Element {
   const [houseBusy, setHouseBusy] = useState(false);
   const [picked, setPicked] = useState<api.InventoryItem | null>(null);
   const [indoors, setIndoors] = useState(false);
+  /**
+   * The token from a password reset link, if the player arrived on one.
+   *
+   * Read once, when the page loads. It is not kept in the address bar any
+   * longer than it has to be: leaving a working reset token in a URL is how it
+   * ends up in a browser history, a shared screenshot or a chat message.
+   */
+  const [resetToken, setResetToken] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const found = new URLSearchParams(window.location.search).get('reset');
+    return found !== null && found.length >= 16 ? found : null;
+  });
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [appearanceBusy, setAppearanceBusy] = useState(false);
   const [appearanceError, setAppearanceError] = useState<string | null>(null);
@@ -405,6 +417,33 @@ export function App(): JSX.Element {
     [enterCity, refreshBlocked, refreshPouch],
   );
 
+  /**
+   * Ask for a link to choose a new password.
+   *
+   * Returns the message to show, or null when it worked. The screen itself
+   * says the same thing whether or not the address is known, because the
+   * server does.
+   */
+  const handleForgot = useCallback(async (email: string): Promise<string | null> => {
+    const result = await api.forgotPassword(email);
+    return result.ok ? null : result.message;
+  }, []);
+
+  /** Use the link from the email. */
+  const handleReset = useCallback(
+    async (token: string, password: string): Promise<string | null> => {
+      const result = await api.resetPassword(token, password);
+      if (!result.ok) return result.message;
+
+      // The token is spent, so the address bar should not keep offering it —
+      // a reload would only produce "that link has already been used".
+      window.history.replaceState({}, '', window.location.pathname);
+      setResetToken(null);
+      return null;
+    },
+    [],
+  );
+
   const handleLogOut = useCallback(() => {
     void (async () => {
       connectionRef.current?.disconnect();
@@ -640,6 +679,9 @@ export function App(): JSX.Element {
           error={error}
           onCreate={handleCreate}
           onLogIn={handleLogIn}
+          onForgot={handleForgot}
+          onReset={handleReset}
+          resetToken={resetToken}
         />
       )}
     </>

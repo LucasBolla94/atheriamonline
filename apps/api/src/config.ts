@@ -36,6 +36,31 @@ const configSchema = z.object({
    * is deliberately much lower than the general limit.
    */
   authRateLimitPerMinute: z.coerce.number().int().min(1).default(10),
+
+  /*
+   * Sending email, for "I have forgotten my password" and nothing else.
+   *
+   * All of it is optional so that the game runs on a laptop with no mail
+   * account. When none of it is set, the route that would send a message says
+   * plainly that password reset is not set up, rather than pretending.
+   *
+   * The password is read from the environment like every other secret. It is
+   * never written in this repository and never appears in a log line.
+   */
+  smtpHost: z.string().min(1).optional(),
+  smtpPort: z.coerce.number().int().min(1).max(65_535).default(465),
+  smtpUser: z.string().min(1).optional(),
+  smtpPassword: z.string().min(1).optional(),
+  /** What a player sees in the "from" line. */
+  mailFrom: z.string().min(3).optional(),
+
+  /**
+   * Write email to this file instead of sending it.
+   *
+   * For development and for the browser tests, which read the file to follow
+   * the link. Ignored in production — see `buildServer`.
+   */
+  mailOutbox: z.string().min(1).optional(),
 });
 
 export type Config = z.infer<typeof configSchema>;
@@ -51,6 +76,12 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     sessionSecret: env['SESSION_SECRET'],
     generalRateLimitPerMinute: env['GENERAL_RATE_LIMIT_PER_MINUTE'],
     authRateLimitPerMinute: env['AUTH_RATE_LIMIT_PER_MINUTE'],
+    smtpHost: env['SMTP_HOST'],
+    smtpPort: env['SMTP_PORT'],
+    smtpUser: env['SMTP_USER'],
+    smtpPassword: env['SMTP_PASSWORD'],
+    mailFrom: env['MAIL_FROM'],
+    mailOutbox: env['MAIL_OUTBOX'],
   });
 
   if (!parsed.success) {

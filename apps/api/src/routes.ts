@@ -13,12 +13,19 @@ import { DEFAULT_SPAWN_TILE } from '@atheriam/shared';
 import { displayNameSchema } from '@atheriam/protocol';
 import type { Database } from '@atheriam/db';
 import {
+  accountByEmail,
+  accountById,
   characterOf,
   login,
   register,
+  setPassword,
   type LoginFailure,
   type RegisterFailure,
+  type SetPasswordFailure,
 } from './accounts.js';
+import { createReset, spendReset } from './auth/resets.js';
+import type { Mailer } from './mail.js';
+import type { Redis } from 'ioredis';
 import {
   MAX_DURATION_MINUTES,
   MAX_REASON_LENGTH,
@@ -98,6 +105,30 @@ const registerBody = z.object({
   confirmsAdult: z.literal(true),
 });
 
+const forgotBody = z.object({ email: emailSchema });
+
+const resetBody = z.object({
+  token: z.string().min(16).max(512),
+  password: z.string().min(MIN_PASSWORD_LENGTH).max(MAX_PASSWORD_LENGTH),
+});
+
+/** What the email says. Plain text: a sentence and a link. */
+const MAIL = {
+  subject: 'Choosing a new password for Atheriam',
+  body: (link: string): string =>
+    [
+      'Somebody asked to choose a new password for your Atheriam account.',
+      '',
+      'If it was you, open this link within the hour:',
+      link,
+      '',
+      'If it was not you, you can ignore this message. Your password has not',
+      'changed and nobody has been let in.',
+      '',
+      'Atheriam — https://atheriam.online',
+    ].join('\n'),
+};
+
 const loginBody = z.object({
   email: emailSchema,
   password: z.string().min(1).max(MAX_PASSWORD_LENGTH),
@@ -107,12 +138,19 @@ const loginBody = z.object({
 const MESSAGES: Record<
   | RegisterFailure
   | LoginFailure
+  | SetPasswordFailure
+  | 'no-email'
+  | 'send-failed'
+  | 'bad-reset-link'
   | ModerationFailure
   | TradeFailure
   | HouseFailure
   | 'unknown-problem',
   string
 > = {
+  'no-email': 'Password reset is not set up on this server yet. Please contact support.',
+  'send-failed': 'We could not send the email just now. Please try again in a few minutes.',
+  'bad-reset-link': 'That link has expired or has already been used. Please ask for a new one.',
   'no-such-house': 'There is no house there.',
   'not-your-house': 'That is not your house.',
   'not-welcome': 'The door is shut. They have not welcomed you in.',
@@ -171,6 +209,12 @@ const dismissBody = z.object({
 export interface RouteOptions {
   readonly db: Database;
   readonly sessions: SessionStore;
+  /** How to send a password reset. */
+  readonly mailer: Mailer;
+  /** Where the reset link should point, without a trailing slash. */
+  readonly publicOrigin: string;
+  /** Reset tokens live here, alongside sessions. */
+  readonly redis: Redis;
   readonly secureCookies: boolean;
   /** Requests a minute, per IP, allowed on login and registration. */
   readonly authRateLimitPerMinute: number;
@@ -182,7 +226,8 @@ export interface RouteOptions {
 }
 
 export async function registerRoutes(app: FastifyInstance, options: RouteOptions): Promise<void> {
-  const { db, sessions, secureCookies, authRateLimitPerMinute, world } = options;
+  const { db, sessions, secureCookies, authRateLimitPerMinute, world, mailer, redis } = options;
+  const publicOrigin = options.publicOrigin.replace(/\/+$/, '');
 
   /**
    * The routes where somebody guesses. Everything else runs on the general
@@ -277,6 +322,87 @@ export async function registerRoutes(app: FastifyInstance, options: RouteOptions
     return reply
       .setCookie(SESSION_COOKIE, token, cookieOptions)
       .send({ character: { name: result.character.name } });
+  });
+
+  /**
+   * "I have forgotten my password."
+   *
+   * The answer is the same whether or not the address is known. Anything else
+   * turns this route into a way of asking "does this person play?", which is
+   * a question nobody outside the account is entitled to an answer to.
+   *
+   * It runs on the tight rate limit, because it sends email: somebody who
+   * could call it freely could use the game to post to any address they liked.
+   */
+  app.post('/api/auth/forgot', guessable, async (request, reply) => {
+    if (!mailer.configured) {
+      return reply.code(503).send({
+        error: 'no-email',
+        message: MESSAGES['no-email'],
+      });
+    }
+
+    const parsed = forgotBody.safeParse(request.body);
+    // A malformed address gets the same answer as an unknown one.
+    if (!parsed.success) return reply.send({ ok: true });
+
+    const account = await accountByEmail(db, parsed.data.email);
+    if (account !== null && account.status !== 'banned') {
+      const token = await createReset(redis, account.id);
+      const link = `${publicOrigin}/?reset=${token}`;
+
+      const sent = await mailer.send({
+        to: account.email,
+        subject: MAIL.subject,
+        text: MAIL.body(link),
+      });
+
+      if (!sent.ok) {
+        // The player is told something went wrong, because pretending an
+        // email is on its way when it is not leaves them waiting forever.
+        request.log.error({ reason: sent.reason }, 'A password reset could not be sent.');
+        return reply.code(502).send({ error: 'send-failed', message: MESSAGES['send-failed'] });
+      }
+    }
+
+    return reply.send({ ok: true });
+  });
+
+  /**
+   * Choose a new password, using the link from the email.
+   *
+   * Spending the token, changing the password and ending every session happen
+   * together. That last part matters: somebody resetting their password may be
+   * doing it precisely because another person is logged in as them.
+   */
+  app.post('/api/auth/reset', guessable, async (request, reply) => {
+    const parsed = resetBody.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        error: 'invalid-request',
+        message: parsed.error.issues[0]?.message ?? MESSAGES['bad-reset-link'],
+      });
+    }
+
+    const spent = await spendReset(redis, parsed.data.token);
+    if (spent === null) {
+      return reply.code(400).send({ error: 'bad-reset-link', message: MESSAGES['bad-reset-link'] });
+    }
+
+    const account = await accountById(db, spent.accountId);
+    if (account === null) {
+      return reply.code(400).send({ error: 'bad-reset-link', message: MESSAGES['bad-reset-link'] });
+    }
+
+    const changed = await setPassword(db, account, parsed.data.password);
+    if (!changed.ok) {
+      return reply.code(400).send({ error: changed.reason, message: MESSAGES[changed.reason] });
+    }
+
+    // Every session, including whoever else was logged in as them.
+    await sessions.destroyAllFor(account.id);
+
+    return reply.clearCookie(SESSION_COOKIE, { path: '/' }).send({ ok: true });
   });
 
   app.post('/api/auth/logout', async (request, reply) => {

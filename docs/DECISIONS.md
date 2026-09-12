@@ -759,3 +759,43 @@ in milliseconds. Continuous canvas image recording adds work unrelated to a
 player's input. Assertions, time limits and production behaviour are unchanged.
 **Cost to change:** Switch trace screenshots on for a specific visual diagnosis;
 the ordinary failure trace still contains the DOM and HTTP evidence.
+
+## D-057 — A forgotten password is recovered by a one-time emailed link
+
+**Date:** 2026-09-12
+**Decision:** The player asks for a link; the server sends one that works once
+and expires in an hour. Only a **hash** of the token is stored, in Redis. Using
+the link changes the password and **ends every session** on the account.
+**Why:** Each part answers a way this goes wrong. Storing only a hash means
+somebody who reads a Redis backup finds nothing usable — the token exists only
+in the email and the player's browser. Working once means a forwarded email is
+not a second key. An hour means an old message in a mailbox is not a key at
+all. Ending every session matters most: a person resetting their password is
+quite often doing it because somebody else is logged in as them, and leaving
+that session alive would defeat the whole exercise.
+**Cost to change:** Low for the timings, high for the rest.
+
+## D-058 — "I have forgotten my password" answers the same way every time
+
+**Date:** 2026-09-12
+**Decision:** The route returns the same status and the same body whether the
+address has an account, has no account, or is not an address at all.
+**Why:** Any difference turns it into a way of asking "does this person play
+Atheriam?" — which is nobody's business but theirs, and is worth more to
+somebody with a list of addresses than it looks. The only case that answers
+differently is the server being unable to send at all, which is about the
+server and says nothing about any account.
+**Cost to change:** None, and it must not be.
+
+## D-059 — Email goes to a file in development, and never in production
+
+**Date:** 2026-09-12
+**Decision:** With `MAIL_OUTBOX` set, messages are appended to that file as
+JSON instead of being sent. The setting is ignored when `NODE_ENV=production`.
+**Why:** It is how a browser test can follow a real reset link without a
+mailbox — the test reads the file the server wrote, exactly as a person would
+read their inbox — and how somebody working on the game can see what the email
+says without sending themselves anything. Ignoring it in production is the
+important half: an outbox nobody reads is a password reset that silently never
+arrives, which is worse than a route that says plainly it is not set up.
+**Cost to change:** None.

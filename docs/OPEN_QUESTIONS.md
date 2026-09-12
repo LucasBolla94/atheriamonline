@@ -83,14 +83,6 @@ else can take it.
 **What we need from you:** should a player be able to rename themselves, and
 if so, does the old name become free again?
 
-## Q-008 — What happens to somebody who forgets their password?
-
-There is no way to reset a password yet, which means a forgotten password is a
-lost account.
-**Working assumption:** none, until you tell us how you want to send email.
-**What we need from you:** an email service we may use (for example Postmark,
-Resend or Amazon SES), or a decision to do without password resets for now.
-
 ## Q-009 — How long should a login last?
 
 A session currently lasts seven days from the last time it was used.

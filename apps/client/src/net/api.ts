@@ -321,6 +321,27 @@ export async function takeBackFurniture(
   });
 }
 
+/**
+ * "I have forgotten my password."
+ *
+ * The answer is the same whether or not the address is known — the server will
+ * not say who has an account, and neither will this.
+ */
+export async function forgotPassword(email: string): Promise<ApiResult<{ ok: true }>> {
+  return request('/api/auth/forgot', { method: 'POST', body: JSON.stringify({ email }) });
+}
+
+/** Choose a new password, using the token from the emailed link. */
+export async function resetPassword(
+  token: string,
+  password: string,
+): Promise<ApiResult<{ ok: true }>> {
+  return request('/api/auth/reset', {
+    method: 'POST',
+    body: JSON.stringify({ token, password }),
+  });
+}
+
 /** Ask for a ticket to open the WebSocket with. */
 export async function worldTicket(): Promise<ApiResult<{ ticket: string }>> {
   return request('/api/world/ticket', { method: 'POST' });
