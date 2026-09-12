@@ -7,6 +7,7 @@
  * what to run when somebody says the game is broken.
  */
 import { expect, test, type Page } from '@playwright/test';
+import { verifyChatControls } from '../e2e/helpers/chat-controls.js';
 
 /** Test accounts are named so that they are obvious in the database. */
 function throwawayName(): string {
@@ -250,4 +251,9 @@ test('the published pixel-art look persists and works on touch', async ({ page }
   }
   await page.screenshot({ path: `test-results/live-${info.project.name}-city.png` });
   expect(errors).toEqual([]);
+});
+
+test('live chat accepts movement letters and Enter restores walking', async ({ page }) => {
+  await createAccountAndEnter(page);
+  await verifyChatControls(page);
 });

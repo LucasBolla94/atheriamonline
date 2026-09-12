@@ -1025,3 +1025,19 @@ Sourcing the environment file as shell code interpreted those characters as
 syntax. The deploy script now uses Node's built-in environment parser and passes
 the resulting values to the migration child, overriding development values.
 Configuration text is never executed. Existing production settings are retained.
+
+## D-080 — Let text fields receive movement letters and toggle chat with Enter
+
+The owner reported that WASD disappeared while typing. Phaser's default key
+capture was preventing native input even though movement polling already ignored
+focused text fields. Movement keys now register without native-event capture;
+the existing field/dialog movement guard remains. A real-key browser reproduction
+on the old bundle typed `wasd WASD` and received only the space. Earlier chat tests
+used fill(), which bypassed native key events and could not detect the problem.
+
+Enter focuses and unfolds chat; the next Enter sends nonempty text, folds chat
+and restores movement. Empty Enter closes without sending. Escape closes while
+retaining the draft. Focus is applied after a folded input becomes visible.
+Repeated Enter keydowns and IME confirmation do not toggle or send. One shared
+browser check drives real typing, cursor editing, stationary typing, delivery,
+empty close, reopening and restored WASD movement locally and on the live site.

@@ -6,6 +6,7 @@
  * a block takes it away again, and that a report reaches a moderator's queue.
  */
 import { expect, test, type Page } from '@playwright/test';
+import { verifyChatControls } from './helpers/chat-controls.js';
 
 function unique(prefix: string): string {
   return `${prefix}${Math.floor(Math.random() * 900000 + 100000)}`;
@@ -109,4 +110,11 @@ test('pressing Enter opens the chat box', async ({ page }) => {
   await createAccountAndEnter(page);
   await page.keyboard.press('Enter');
   await expect(page.getByLabel('Say something')).toBeFocused();
+});
+
+test('typing movement keys stays in chat and Enter returns control to the city', async ({
+  page,
+}) => {
+  await createAccountAndEnter(page);
+  await verifyChatControls(page);
 });

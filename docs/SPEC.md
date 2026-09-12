@@ -270,6 +270,11 @@ characters are ordered by their ground position. Menus, chat and touch movement
 must remain usable on mobile, including during viewport resizing.
 
 - Desktop: click a tile to walk there; WASD / arrow keys to step; Enter to chat.
+- Text fields receive all letters, including WASD, and arrow-key cursor editing
+  normally, without moving the character. Enter opens and focuses chat; a
+  second Enter sends a nonempty message, folds the chat and restores movement.
+  Empty Enter closes without sending. Escape closes without sending the draft.
+  Held Enter and IME composition must not repeatedly toggle or submit chat.
 - Mobile (landscape): tap a tile to walk there; on-screen chat button; pinch to
   zoom within fixed limits.
 - The client must stay playable at **60 fps** on a mid-range phone, and must

@@ -485,7 +485,9 @@ export class WorldScene extends Phaser.Scene {
     if (keyboard === null || keyboard === undefined) return;
 
     for (const [keyName, direction] of KEY_DIRECTIONS) {
-      const key = keyboard.addKey(keyName);
+      // Observe movement keys without swallowing their native text/cursor input.
+      // pollKeyboard already suspends walking while a field or dialog is active.
+      const key = keyboard.addKey(keyName, false);
       const existing = this.keys.get(direction) ?? [];
       existing.push(key);
       this.keys.set(direction, existing);

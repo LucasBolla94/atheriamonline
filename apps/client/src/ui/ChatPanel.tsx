@@ -36,13 +36,21 @@ export function ChatPanel({
   const [folded, setFolded] = useState(false);
   const [readCount, setReadCount] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const focusAfterUnfold = useRef(false);
   const logRef = useRef<HTMLDivElement | null>(null);
 
   const unread = folded ? entries.length - readCount : 0;
 
-  // Enter opens the chat box from anywhere, the way it does in every game
-  // with a chat box. Escape gives the keyboard back to the city, so the
-  // movement keys work again.
+  // A folded input cannot take focus until React has made it visible again.
+  useEffect(() => {
+    if (!folded && focusAfterUnfold.current) {
+      focusAfterUnfold.current = false;
+      inputRef.current?.focus();
+    }
+  }, [folded]);
+
+  // Enter toggles between typing and walking. Keep shortcuts out of other
+  // controls and leave composition confirmation to the input method editor.
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent): void {
       const input = inputRef.current;
@@ -56,22 +64,33 @@ export function ChatPanel({
       )
         return;
 
-      if (event.key === 'Enter' && document.activeElement !== input) {
+      if (event.isComposing || event.keyCode === 229) return;
+      if (event.key === 'Enter') {
         event.preventDefault();
-        // Opening the chat with the keyboard also unfolds it, or the box the
-        // player just asked for would not be on screen.
+        if (event.repeat) return;
+        if (document.activeElement === input) {
+          input.form?.requestSubmit();
+          input.blur();
+          setReadCount(entries.length);
+          setFolded(true);
+          return;
+        }
+        focusAfterUnfold.current = folded;
         setFolded(false);
-        input.focus();
+        if (!folded) input.focus();
         return;
       }
       if (event.key === 'Escape' && document.activeElement === input) {
+        event.preventDefault();
         input.blur();
+        setReadCount(entries.length);
+        setFolded(true);
       }
     }
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
+  }, [folded, entries.length]);
 
   // Always show the newest remark without stealing the scroll position from
   // somebody who has deliberately scrolled back.
