@@ -1,280 +1,108 @@
-/**
- * The starter district of Atheriam, drawn tile by tile.
- *
- * Everything here is invented for this project: the shape of the walls, the
- * streets, the market, the park. Nothing is taken from, traced from or modelled
- * on another game — see `docs/SPEC.md` section 2.
- *
- * The district is written as code rather than as a giant text file for one
- * reason: a street here is a line with a name, so it can be moved, widened or
- * removed without counting characters in a wall of text. The result is always
- * the same tiles, because nothing here is random — `plantGrid` lays trees on a
- * fixed lattice, so two servers always build the same city.
- *
- * The plan, at a glance:
- *
- *      +--------------------------------------+   0
- *      |  orchard      north gate     orchard  |
- *      |    +-----------------------------+    |  24  ring road
- *      |    |  park+lake  |    market     |    |
- *      |    |        +---------+          |    |  52  the Crown Square
- *      |    |        | square  |          |    |
- *      |    |  homes  |        |   homes  |    |
- *      |    +-----------------------------+    | 103
- *      |  orchard      south gate     orchard  |
- *      +--------------------------------------+ 127
- */
+/** Original contemporary city. Building footprints and addresses are shared. */
 import {
-  CHUNK_SIZE_TILES,
+  CITY_BUILDINGS,
   DEFAULT_SPAWN_TILE,
-  SOLID_CHAR,
+  STARTER_CITY,
   type TerrainChar,
   type TilePos,
 } from '@atheriam/shared';
 
-/** The district is four chunks by four chunks. */
-export const CITY_SIZE_TILES = CHUNK_SIZE_TILES * 4;
-
-/**
- * Where a player who has never played before appears: the Crown Square.
- *
- * The tile itself is decided in `@atheriam/shared`, because the API writes it
- * onto a new character before the world server ever sees them.
- */
+export const CITY_SIZE_TILES = STARTER_CITY.size;
 export const CITY_SPAWN: TilePos = DEFAULT_SPAWN_TILE;
 
-/** How thick the city wall is. Two tiles so it reads as stone, not as a line. */
-const WALL_THICKNESS = 2;
-
-/** A rectangle of tiles, given by its corners, both ends included. */
-interface Rect {
-  readonly x0: number;
-  readonly y0: number;
-  readonly x1: number;
-  readonly y1: number;
-}
-
-/**
- * A grid of characters being drawn on.
- *
- * Every method clips to the canvas, so a street that runs off the edge is
- * simply shorter rather than an exception. That keeps the drawing code below
- * free of bounds checks.
- */
-class Canvas {
-  private readonly rows: TerrainChar[][];
-
-  constructor(
-    readonly width: number,
-    readonly height: number,
-    fill: TerrainChar,
-  ) {
-    this.rows = Array.from({ length: height }, () =>
-      Array.from({ length: width }, (): TerrainChar => fill),
-    );
-  }
-
-  set(x: number, y: number, char: TerrainChar): void {
-    if (x < 0 || y < 0 || x >= this.width || y >= this.height) return;
-    const row = this.rows[y];
-    if (row === undefined) return;
-    row[x] = char;
-  }
-
-  at(x: number, y: number): TerrainChar {
-    return this.rows[y]?.[x] ?? SOLID_CHAR;
-  }
-
-  fill(rect: Rect, char: TerrainChar): void {
-    for (let y = rect.y0; y <= rect.y1; y += 1) {
-      for (let x = rect.x0; x <= rect.x1; x += 1) {
-        this.set(x, y, char);
-      }
-    }
-  }
-
-  /** The outline of a rectangle, one tile thick. */
-  outline(rect: Rect, char: TerrainChar): void {
-    for (let x = rect.x0; x <= rect.x1; x += 1) {
-      this.set(x, rect.y0, char);
-      this.set(x, rect.y1, char);
-    }
-    for (let y = rect.y0; y <= rect.y1; y += 1) {
-      this.set(rect.x0, y, char);
-      this.set(rect.x1, y, char);
-    }
-  }
-
-  toRows(): string[] {
-    return this.rows.map((row) => row.join(''));
-  }
-}
-
-/** A city wall with nothing but solid stone: the edge of the world. */
-function drawWalls(canvas: Canvas): void {
-  const last = canvas.width - 1;
-  canvas.fill({ x0: 0, y0: 0, x1: last, y1: WALL_THICKNESS - 1 }, '#');
-  canvas.fill({ x0: 0, y0: canvas.height - WALL_THICKNESS, x1: last, y1: canvas.height - 1 }, '#');
-  canvas.fill({ x0: 0, y0: 0, x1: WALL_THICKNESS - 1, y1: canvas.height - 1 }, '#');
-  canvas.fill({ x0: canvas.width - WALL_THICKNESS, y0: 0, x1: last, y1: canvas.height - 1 }, '#');
-}
-
-/**
- * The two great streets that cross at the square, and the ring road that ties
- * the four quarters together.
- */
-function drawStreets(canvas: Canvas): void {
-  const near = WALL_THICKNESS;
-  const far = canvas.width - WALL_THICKNESS - 1;
-
-  // King's Road, north to south. Queen's Road, west to east.
-  canvas.fill({ x0: 61, y0: near, x1: 66, y1: far }, ',');
-  canvas.fill({ x0: near, y0: 61, x1: far, y1: 66 }, ',');
-
-  // The ring road, a square around the four quarters.
-  canvas.fill({ x0: 24, y0: 24, x1: 103, y1: 25 }, ',');
-  canvas.fill({ x0: 24, y0: 102, x1: 103, y1: 103 }, ',');
-  canvas.fill({ x0: 24, y0: 24, x1: 25, y1: 103 }, ',');
-  canvas.fill({ x0: 102, y0: 24, x1: 103, y1: 103 }, ',');
-
-  // Gatehouses: solid blocks flanking each gate, so the wall reads as guarded.
-  for (const [x0, x1] of [
-    [56, 59],
-    [68, 71],
-  ] as const) {
-    canvas.fill({ x0, y0: near, x1, y1: near + 3 }, '#');
-    canvas.fill({ x0, y0: far - 3, x1, y1: far }, '#');
-  }
-  for (const [y0, y1] of [
-    [56, 59],
-    [68, 71],
-  ] as const) {
-    canvas.fill({ x0: near, y0, x1: near + 3, y1 }, '#');
-    canvas.fill({ x0: far - 3, y0, x1: far, y1 }, '#');
-  }
-}
-
-/** The Crown Square: paved, with the city well at its heart. */
-function drawSquare(canvas: Canvas): void {
-  canvas.fill({ x0: 52, y0: 52, x1: 75, y1: 75 }, 'p');
-  canvas.fill({ x0: 63, y0: 63, x1: 64, y1: 64 }, 'W');
-}
-
-/**
- * The park in the north-west quarter: a lake with a shore, and trees on a
- * lattice wide enough that a person can always walk between them.
- */
-function drawPark(canvas: Canvas): void {
-  const centre = { x: 42, y: 42 };
-  const radius = { x: 11, y: 8 };
-
-  for (let y = centre.y - radius.y - 2; y <= centre.y + radius.y + 2; y += 1) {
-    for (let x = centre.x - radius.x - 2; x <= centre.x + radius.x + 2; x += 1) {
-      const dx = (x - centre.x) / radius.x;
-      const dy = (y - centre.y) / radius.y;
-      const distance = dx * dx + dy * dy;
-      if (canvas.at(x, y) !== '.') continue;
-      if (distance <= 1) canvas.set(x, y, '~');
-      else if (distance <= 1.45) canvas.set(x, y, 's');
-    }
-  }
-
-  plantGrid(canvas, { x0: 27, y0: 27, x1: 59, y1: 59 });
-}
-
-/** The market in the north-east quarter: stalls in rows, with wide aisles. */
-function drawMarket(canvas: Canvas): void {
-  canvas.fill({ x0: 69, y0: 28, x1: 99, y1: 50 }, 'p');
-  for (let y = 30; y <= 46; y += 6) {
-    for (let x = 71; x <= 95; x += 8) {
-      canvas.fill({ x0: x, y0: y, x1: x + 4, y1: y + 1 }, 'M');
-    }
-  }
-}
-
-/**
- * A house: four walls, a wooden floor and one doorway.
- *
- * The inside is part of the public street plan, not a home somebody owns —
- * private houses are Phase 7, and they will be their own interiors.
- */
-function drawHouse(canvas: Canvas, rect: Rect, door: 'n' | 's'): void {
-  canvas.fill(rect, 'd');
-  canvas.outline(rect, '#');
-  const doorX = Math.floor((rect.x0 + rect.x1) / 2);
-  const doorY = door === 'n' ? rect.y0 : rect.y1;
-  canvas.set(doorX, doorY, '+');
-  canvas.set(doorX + 1, doorY, '+');
-}
-
-/** The two residential quarters, each two rows of houses along a lane. */
-function drawHomes(canvas: Canvas): void {
-  for (const originX of [28, 69]) {
-    // The lane between the two rows.
-    canvas.fill({ x0: originX - 2, y0: 83, x1: originX + 30, y1: 84 }, ',');
-    canvas.fill({ x0: originX - 2, y0: 97, x1: originX + 30, y1: 98 }, ',');
-
-    for (const offset of [0, 10, 20]) {
-      const x0 = originX + offset;
-      drawHouse(canvas, { x0, y0: 70, x1: x0 + 7, y1: 78 }, 's');
-      // Both rows use south-facing cottage artwork. Keep the walkable door
-      // under the visible front steps, with paths connecting it to a lane.
-      drawHouse(canvas, { x0, y0: 88, x1: x0 + 7, y1: 96 }, 's');
-      canvas.fill({ x0: x0 + 3, y0: 79, x1: x0 + 4, y1: 82 }, ',');
-    }
-  }
-}
-
-/** Orchards in the band between the ring road and the wall. */
-function drawOrchards(canvas: Canvas): void {
-  plantGrid(canvas, { x0: 5, y0: 5, x1: 122, y1: 21 });
-  plantGrid(canvas, { x0: 5, y0: 106, x1: 122, y1: 122 });
-  plantGrid(canvas, { x0: 5, y0: 27, x1: 21, y1: 100 });
-  plantGrid(canvas, { x0: 106, y0: 27, x1: 122, y1: 100 });
-}
-
-/**
- * Trees every four tiles, and only on grass.
- *
- * The spacing is what makes this safe: three walkable tiles between any two
- * trees means a lattice can never close a pocket of the map off, however it
- * lands next to a street or a wall.
- */
-function plantGrid(canvas: Canvas, rect: Rect): void {
-  for (let y = rect.y0; y <= rect.y1; y += 4) {
-    for (let x = rect.x0; x <= rect.x1; x += 4) {
-      if (canvas.at(x, y) === '.') canvas.set(x, y, 'T');
-    }
-  }
-}
-
-/** Small planted islands break up the square while leaving broad social paths. */
-function drawSquareGardens(canvas: Canvas): void {
-  for (const [cx, cy] of [
-    [56, 58],
-    [71, 58],
-    [56, 70],
-    [71, 67],
-  ]) {
-    if (cx === undefined || cy === undefined) continue;
-    for (let y = cy - 1; y <= cy + 1; y++)
-      for (let x = cx - 1; x <= cx + 1; x++) {
-        if (canvas.at(x, y) === 'p') canvas.set(x, y, '.');
-      }
-    if (canvas.at(cx, cy) === '.') canvas.set(cx, cy, 'T');
-  }
-}
-
-/** Draw the whole district and hand back its rows. */
 export function buildStarterDistrict(): string[] {
-  const canvas = new Canvas(CITY_SIZE_TILES, CITY_SIZE_TILES, '.');
-  drawWalls(canvas);
-  drawPark(canvas);
-  drawStreets(canvas);
-  drawSquare(canvas);
-  drawMarket(canvas);
-  drawHomes(canvas);
-  drawOrchards(canvas);
-  drawSquareGardens(canvas);
-  return canvas.toRows();
+  const size = CITY_SIZE_TILES;
+  const rows: TerrainChar[][] = Array.from({ length: size }, () =>
+    Array.from({ length: size }, (): TerrainChar => '.'),
+  );
+  const rect = (x: number, y: number, width: number, height: number, char: TerrainChar) => {
+    for (let py = y; py < y + height; py++) {
+      for (let px = x; px < x + width; px++) {
+        const row = rows[py];
+        if (row !== undefined && px >= 0 && px < size) row[px] = char;
+      }
+    }
+  };
+  // Low boundary hedges keep the walkable city enclosed.
+  rect(0, 0, size, 2, 'F');
+  rect(0, size - 2, size, 2, 'F');
+  rect(0, 0, 2, size, 'F');
+  rect(size - 2, 0, 2, size, 'F');
+
+  // Pedestrian avenues and a perimeter circuit. Broad sidewalks are walkable.
+  rect(39, 25, 5, 122, 'p');
+  rect(116, 25, 5, 122, 'p');
+  rect(39, 25, 82, 5, 'p');
+  rect(39, 142, 82, 5, 'p');
+  rect(76, 29, 8, 77, 'p');
+  rect(3, 83, 154, 6, 'p');
+  rect(39, 101, 82, 5, 'p');
+
+  // Park shoreline with a footbridge and a broad south-facing timber pier.
+  for (let y = 109; y < 140; y++) {
+    for (let x = 52; x < 108; x++) {
+      const d = ((x - 80) / 22) ** 2 + ((y - 123) / 11) ** 2;
+      if (d <= 1) rect(x, y, 1, 1, '~');
+      else if (d <= 1.35) rect(x, y, 1, 1, 's');
+    }
+  }
+  rect(56, 119, 48, 3, 'b');
+  rect(78, 130, 5, 13, 'b');
+  rect(75, 129, 11, 3, 'b');
+
+  const square = STARTER_CITY.square;
+  rect(square.x, square.y, square.width, square.height, 'p');
+  rect(STARTER_CITY.fountain.x, STARTER_CITY.fountain.y, 2, 2, 'W');
+  // Four planted corners leave the central conversation area open.
+  for (const [x, y] of [
+    [68, 68],
+    [89, 68],
+    [68, 88],
+    [89, 88],
+  ] as const) {
+    rect(x, y, 3, 3, '.');
+    rect(x + 1, y + 1, 1, 1, 'T');
+  }
+
+  for (const building of CITY_BUILDINGS) {
+    const { x, y, width, height, entrance } = building;
+    rect(x - 2, y - 2, width + 4, height + 6, 'p');
+    // Outdoor footprint is solid; entering transfers into a separate interior.
+    rect(x, y, width, height, '#');
+    rect(entrance.x - 1, entrance.y, 2, 1, '+');
+    if (building.kind === 'commercial') {
+      if (x < 80) rect(entrance.x - 1, entrance.y + 1, 44 - entrance.x, 3, 'p');
+      else rect(116, entrance.y + 1, entrance.x - 114, 3, 'p');
+    } else if (y < 60) {
+      rect(entrance.x - 1, entrance.y + 1, 2, 66 - entrance.y, 'p');
+    }
+  }
+
+  // Small, staggered clusters rather than a repeated orchard lattice.
+  for (const [cx, cy] of [
+    [11, 20],
+    [31, 15],
+    [61, 16],
+    [103, 17],
+    [143, 21],
+    [11, 67],
+    [148, 65],
+    [10, 115],
+    [149, 116],
+    [47, 112],
+    [111, 134],
+    [55, 148],
+    [98, 150],
+    [15, 146],
+    [146, 147],
+  ] as const) {
+    for (const [dx, dy] of [
+      [0, 0],
+      [4, 2],
+      [-2, 5],
+    ] as const) {
+      if (rows[cy + dy]?.[cx + dx] === '.') rect(cx + dx, cy + dy, 1, 1, 'T');
+    }
+  }
+  return rows.map((row) => row.join(''));
 }

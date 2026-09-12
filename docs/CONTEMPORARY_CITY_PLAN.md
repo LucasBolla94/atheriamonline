@@ -35,3 +35,13 @@ canvas and public site. Do not describe pending work as shipped.
 origin/main. Published the existing history on feat/contemporary-city-v1, without
 rewriting main. Existing homes are separate realms, supporting reuse of movement
 and local chat infrastructure. No production changes have been applied yet.
+
+
+## Phase 1 evidence (layout foundation)
+
+Shared definitions now contain the single 160 × 160 city and exactly fifteen
+non-overlapping addresses, with five municipal venues and ten commercial sites.
+The new authoritative terrain includes the square, fountain, lake, bridge and pier.
+All walkable tiles are reachable from arrival, respecting diagonal corner rules.
+Typecheck and lint passed; all 277 unit tests passed. Rendering/entrance interaction
+is pending the client/interior phases, so this is not yet a playable release.

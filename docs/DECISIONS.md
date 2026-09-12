@@ -813,3 +813,15 @@ are in-game only. Initial reservations are free with bounded durations and quota
 existing residents' possessions and the authoritative economy guarantees.
 **Cost to change:** Future cities add definitions and persistent rows. Price and
 booking policies are explicit configuration rather than client authority.
+
+
+## D-065 — Initial commercial pricing is 250 Crowns per address
+
+**Date:** 2026-09-12
+**Decision:** Seed ten equal-price commercial properties at 250 Crowns each.
+The existing 50-Crown welcome and 10-Crown daily rewards remain unchanged.
+**Why:** Provide an explicit testable first price without silently awarding free
+properties or changing existing balances. Prices are server-owned, displayed
+before confirmation, and can be tuned before launch from playtest feedback.
+**Cost to change:** Seed values for new cities; existing unsold rows need a
+controlled price update. Existing purchases retain their original audit record.

@@ -1,3 +1,5 @@
+import { STARTER_CITY } from './city.js';
+
 /**
  * World constants.
  *
@@ -41,12 +43,12 @@ export const MIN_STEP_INTERVAL_MS = 180;
 export const POSITION_SNAPSHOT_INTERVAL_MS = 60_000;
 
 /**
- * Where a brand new character starts: the Crown Square, by the well.
+ * Where a brand new character starts: Central Square, by the fountain.
  *
  * Both the API (which creates the character) and the world server (which draws
  * the city) need this, and they must agree, so it is decided once, here.
  */
-export const DEFAULT_SPAWN_TILE = { x: 64, y: 69 } as const;
+export const DEFAULT_SPAWN_TILE = STARTER_CITY.spawn;
 
 /**
  * How far an ordinary remark carries, in tiles.

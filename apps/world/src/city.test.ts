@@ -8,7 +8,13 @@
  * what a flood fill does in a millisecond.
  */
 import { describe, expect, it } from 'vitest';
-import { CHUNK_SIZE_TILES, isWalkableChar, isTerrainChar } from '@atheriam/shared';
+import {
+  CHUNK_SIZE_TILES,
+  CITY_BUILDINGS,
+  STARTER_CITY,
+  isWalkableChar,
+  isTerrainChar,
+} from '@atheriam/shared';
 import { CITY_SIZE_TILES, CITY_SPAWN, buildStarterDistrict } from './city.js';
 
 const rows = buildStarterDistrict();
@@ -50,43 +56,36 @@ describe('the starter district', () => {
     expect(isWalkableChar(charAt(CITY_SPAWN.x, CITY_SPAWN.y))).toBe(true);
   });
 
-  it('has a city well at the heart of the square', () => {
-    expect(charAt(63, 63)).toBe('W');
-    expect(charAt(64, 64)).toBe('W');
-  });
-
-  it('has houses with doorways, and floorboards inside them', () => {
-    const doors = rows
-      .join('')
-      .split('')
-      .filter((char) => char === '+').length;
-    const floor = rows
-      .join('')
-      .split('')
-      .filter((char) => char === 'd').length;
-    expect(doors).toBeGreaterThanOrEqual(12);
-    expect(floor).toBeGreaterThan(200);
-  });
-
-  it('has a lake, a market and enough room to walk', () => {
-    const all = rows.join('');
-    const count = (char: string): number => all.split(char).length - 1;
-    expect(count('~')).toBeGreaterThan(100);
-    expect(count('M')).toBeGreaterThan(50);
-    // A city that is mostly walls is a maze, not a place to meet people.
-    const walkable = [...all].filter((char) => isWalkableChar(char)).length;
-    expect(walkable / all.length).toBeGreaterThan(0.7);
-  });
-
-  it('lets a player enter both cottage rows through their visible south-facing steps', () => {
-    for (const x of [31, 41, 51, 72, 82, 92]) {
-      for (const y of [78, 96]) {
-        expect(charAt(x, y)).toBe('+');
-        expect(charAt(x + 1, y)).toBe('+');
-        expect(isWalkableChar(charAt(x, y - 1))).toBe(true);
-        expect(isWalkableChar(charAt(x, y + 1))).toBe(true);
+  it('has a fountain and a generous, clear arrival area in Central Square', () => {
+    expect(CITY_SIZE_TILES).toBe(160);
+    expect(charAt(STARTER_CITY.fountain.x, STARTER_CITY.fountain.y)).toBe('W');
+    for (let y = CITY_SPAWN.y - 3; y <= CITY_SPAWN.y + 3; y++) {
+      for (let x = CITY_SPAWN.x - 3; x <= CITY_SPAWN.x + 3; x++) {
+        expect(isWalkableChar(charAt(x, y))).toBe(true);
       }
     }
+  });
+
+  it('gives all fifteen buildings solid footprints and reachable front entrances', () => {
+    expect(rows.join('').split('+').length - 1).toBe(30);
+    for (const b of CITY_BUILDINGS) {
+      for (let y = b.y; y < b.y + b.height; y++) {
+        for (let x = b.x; x < b.x + b.width; x++) expect(charAt(x, y)).toBe('#');
+      }
+      for (const x of [b.entrance.x - 1, b.entrance.x]) {
+        expect(charAt(x, b.entrance.y)).toBe('+');
+        expect(isWalkableChar(charAt(x, b.entrance.y + 1))).toBe(true);
+      }
+    }
+  });
+
+  it('has a lake, footbridge, pier and ample walkable space', () => {
+    const all = rows.join('');
+    expect(all.split('~').length - 1).toBeGreaterThan(300);
+    expect(charAt(80, 120)).toBe('b');
+    expect(charAt(80, 134)).toBe('b');
+    const walkable = [...all].filter((char) => isWalkableChar(char)).length;
+    expect(walkable / all.length).toBeGreaterThan(0.7);
   });
 
   it('lets a player reach every single tile they could stand on', () => {
