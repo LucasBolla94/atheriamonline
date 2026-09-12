@@ -14,11 +14,17 @@
  * darkness, because that is honestly what the client knows about it.
  */
 import Phaser from 'phaser';
-import { MIN_STEP_INTERVAL_MS, TILE_SIZE_PX, type Direction } from '@atheriam/shared';
+import {
+  CITY_BUILDINGS,
+  STARTER_CITY,
+  MIN_STEP_INTERVAL_MS,
+  TILE_SIZE_PX,
+  type Direction,
+} from '@atheriam/shared';
 import type { PlayerView, WorldInfo } from '@atheriam/protocol';
 import { colorTokens, fontFamilyTokens, fontSizeTokens, spaceTokens } from '../tokens/tokens.js';
 import type { HeldChunk, WorldConnection } from '../net/connection.js';
-import { prepareArt, PROP_NAMES } from './art.js';
+import { prepareArt, PROP_NAMES, BUILDING_NAMES } from './art.js';
 import { terrainAtlas, terrainIndex } from './terrainArt.js';
 import { strings } from '../ui/strings.js';
 
@@ -164,6 +170,12 @@ export class WorldScene extends Phaser.Scene {
           const texture = this.textures.addCanvas('town', art.props)!;
           PROP_NAMES.forEach((name, i) =>
             texture.add(name, 0, (i % 4) * 128, Math.floor(i / 4) * 128, 128, 128),
+          );
+        }
+        if (!this.textures.exists('buildings')) {
+          const texture = this.textures.addCanvas('buildings', art.buildings)!;
+          BUILDING_NAMES.forEach((name, i) =>
+            texture.add(name, 0, (i % 3) * 128, Math.floor(i / 3) * 128, 128, 128),
           );
         }
         if (!this.textures.exists('terrain')) this.textures.addCanvas('terrain', terrainAtlas());
@@ -319,17 +331,28 @@ export class WorldScene extends Phaser.Scene {
         if (char === 'M' && this.tileAt(tx - 1, ty) !== 'M' && this.tileAt(tx, ty + 1) !== 'M')
           add('stall', (tx + 2.5) * 32, ty * 32 + 24, 164, 128);
       }
-    // Original residential footprints retain their doors and walkable interiors.
-    // The building art fades when the local resident is behind it.
-    if (this.world.width === 128)
-      for (const startX of [28, 69])
-        for (const offset of [0, 10, 20])
-          for (const top of [70, 88]) {
-            const tx = startX + offset + 3,
-              ty = top + 3;
-            if (Math.floor(tx / 32) === chunk.cx && Math.floor(ty / 32) === chunk.cy)
-              add('cottage', (tx + 1) * 32, (top + 9) * 32, 256, 288);
-          }
+    if (this.world.width === STARTER_CITY.size) {
+      for (const building of CITY_BUILDINGS) {
+        // Attach each facade to its entrance chunk; all dimensions come from
+        // the same address definition used by collisions and property sales.
+        if (
+          Math.floor(building.entrance.x / 32) !== chunk.cx ||
+          Math.floor(building.entrance.y / 32) !== chunk.cy
+        )
+          continue;
+        const image = this.add
+          .image(
+            (building.x + building.width / 2) * 32,
+            building.entrance.y * 32,
+            'buildings',
+            building.use,
+          )
+          .setOrigin(0.5, 1)
+          .setDisplaySize(building.width * 32, building.width * 32)
+          .setDepth(100 + building.entrance.y * 32);
+        props.push(image);
+      }
+    }
     this.props.set(chunkKeyOf(chunk), props);
     return layer;
   }

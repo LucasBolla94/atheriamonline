@@ -13,7 +13,10 @@ export const PROP_NAMES = [
   'river-stone',
   'brass-bell',
 ] as const;
+export const BUILDING_NAMES = ['hall', 'creative', 'events', 'lounge', 'market', 'shop'] as const;
+
 export interface GameArt {
+  buildings: HTMLCanvasElement;
   residents: HTMLCanvasElement[];
   props: HTMLCanvasElement;
   portraits: string[];
@@ -176,7 +179,7 @@ export async function bakeArt(): Promise<GameArt> {
       icon.getContext('2d')!.drawImage(props, col * 128, row * 128, 128, 128, 0, 0, 128, 128);
       icons[PROP_NAMES[i]!] = icon.toDataURL();
     }
-    return { residents, props, portraits, icons };
+    return { residents, props, portraits, icons, buildings: await loadBuildings() };
   })().catch((error: unknown) => {
     pending = undefined;
     throw error;
@@ -199,6 +202,7 @@ export function prepareArt(): Promise<GameArt> {
     return {
       residents,
       props,
+      buildings: await loadBuildings(),
       portraits: Array.from({ length: 6 }, (_, i) => `/art/portrait-${i}.png`),
       icons: Object.fromEntries(PROP_NAMES.map((name) => [name, `/art/${name}.png`])),
     };
@@ -207,4 +211,11 @@ export function prepareArt(): Promise<GameArt> {
     throw error;
   });
   return pending;
+}
+
+async function loadBuildings(): Promise<HTMLCanvasElement> {
+  const image = await load('/art/central-buildings.png');
+  const out = canvas(384, 256);
+  out.getContext('2d')!.drawImage(image, 0, 0);
+  return out;
 }

@@ -28,3 +28,14 @@ Reproduction commands and the final prompt set are in [ART_PROMPTS.md](ART_PROMP
 - Usage: project-generated promotional illustration; no third-party asset licence.
 - Prompt and production notes: `docs/design/CONTEMPORARY_ART_PROMPTS.md`.
 - This illustration is marketing artwork, not an actual gameplay screenshot.
+
+## Contemporary building sprites — 2026-09-12
+
+- Files: `central-buildings-source.png`, `central-buildings.png`, and
+  `building-{hall,creative,events,lounge,market,shop}.png` in `apps/client/public/art`.
+- Author/source: original project art generated and background-edited with the
+  built-in OpenAI image tool. Source URL: not applicable (project-created).
+- Usage: original project-generated assets; no external asset licence required.
+- Prompt: `docs/design/BUILDING_ART_PROMPT.md`.
+- Processing: `scripts/bake-buildings.mjs`, deterministic transparency extraction,
+  bounding boxes and nearest-neighbour scaling for the game atlas.
