@@ -34,6 +34,10 @@ const MESSAGES: Record<PropertyFailure, string> = {
 
 /** Convert money explicitly; never let a BIGINT through JSON serialization. */
 function view(property: Property, viewerId: string) {
+  const address = CITY_BUILDINGS.find(
+    (b) => b.cityId === property.cityId && b.id === property.buildingId,
+  );
+  const visible = property.municipal || property.published || property.ownerId === viewerId;
   return {
     id: property.id,
     cityId: property.cityId,
@@ -43,15 +47,13 @@ function view(property: Property, viewerId: string) {
     yours: property.ownerId === viewerId,
     price: property.price.toString(),
     priceDisplay: formatAmount(property.price),
-    businessName: property.businessName,
-    description: property.description,
+    businessName: visible ? property.businessName : (address?.name ?? property.buildingId),
+    description: visible ? property.description : '',
     access: property.access,
     published: property.published,
     floorStyle: property.floorStyle,
     wallStyle: property.wallStyle,
-    address: CITY_BUILDINGS.find(
-      (b) => b.cityId === property.cityId && b.id === property.buildingId,
-    ),
+    address,
   };
 }
 

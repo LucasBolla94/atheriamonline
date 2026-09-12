@@ -308,6 +308,37 @@ describe('property HTTP routes', () => {
     );
   });
 
+  it('hides an unpublished business name and description from other residents', async () => {
+    const owner = await player('privateowner');
+    const visitor = await player('privatevisitor');
+    const site = await address();
+    await buyProperty(db, owner, site.id, 'private-key');
+    await configureBusiness(db, owner, site.id, {
+      businessName: 'Unannounced Studio',
+      description: 'Private launch details',
+      access: 'nobody',
+      published: false,
+      floorStyle: 'oak',
+      wallStyle: 'cream',
+    });
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/city/properties',
+      cookies: await cookieFor(visitor),
+    });
+    const body = response.body;
+    expect(body).not.toContain('Unannounced Studio');
+    expect(body).not.toContain('Private launch details');
+    expect(response.json().properties).toContainEqual(
+      expect.objectContaining({
+        id: site.id,
+        businessName: site.businessName,
+        description: '',
+        owned: true,
+      }),
+    );
+  });
+
   it('rejects a client-supplied price or owner instead of trusting it', async () => {
     const buyer = await player('tamper');
     const cookies = await cookieFor(buyer);
