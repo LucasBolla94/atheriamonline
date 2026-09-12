@@ -399,3 +399,43 @@ export function configureBusiness(
     body: JSON.stringify(settings),
   });
 }
+
+export interface InteriorView {
+  id: string;
+  name: string;
+  yours: boolean;
+  municipal: boolean;
+  access: HouseView['access'];
+  floorStyle: PropertyView['floorStyle'];
+  wallStyle: PropertyView['wallStyle'];
+  guests: string[];
+  contents: PlacedItem[];
+}
+export function propertyInterior(id: string): Promise<ApiResult<InteriorView>> {
+  return request(`/api/properties/${id}/interior`);
+}
+export function enterProperty(id: string): Promise<ApiResult<{ requested: true; id: string }>> {
+  return request(`/api/properties/${id}/enter`, { method: 'POST' });
+}
+export function propertyGuest(
+  id: string,
+  name: string,
+  welcomed: boolean,
+): Promise<ApiResult<{ guests: string[] }>> {
+  return request(`/api/properties/${id}/guests`, {
+    method: 'POST',
+    body: JSON.stringify({ name, welcomed }),
+  });
+}
+export function decorateProperty(
+  id: string,
+  intent:
+    | { action: 'place'; itemId: string; x: number; y: number; rotation: number }
+    | { action: 'rotate'; itemId: string; rotation: number }
+    | { action: 'take'; itemId: string },
+): Promise<ApiResult<{ contents: PlacedItem[] }>> {
+  return request(`/api/properties/${id}/decorate`, {
+    method: 'POST',
+    body: JSON.stringify(intent),
+  });
+}

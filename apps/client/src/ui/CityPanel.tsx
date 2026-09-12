@@ -13,6 +13,7 @@ interface Props {
   onReload: () => void;
   onClose: () => void;
   onLocate: (property: PropertyView) => void;
+  onEnter: (property: PropertyView) => Promise<string | null>;
   onBuy: (id: string, key: string) => Promise<ApiResult<unknown>>;
   onSave: (id: string, settings: BusinessSettings) => Promise<ApiResult<unknown>>;
 }
@@ -224,6 +225,23 @@ export function CityPanel(props: Props): JSX.Element {
                     }}
                   >
                     {s.settings}
+                  </button>
+                )}
+                {(p.municipal || p.owned) && (
+                  <button
+                    type="button"
+                    className="button"
+                    disabled={busy || !props.canLocate}
+                    onClick={() => {
+                      setBusy(true);
+                      setNotice(s.entering);
+                      void props.onEnter(p).then((error) => {
+                        setBusy(false);
+                        setNotice(error);
+                      });
+                    }}
+                  >
+                    {s.enter}
                   </button>
                 )}
                 <button

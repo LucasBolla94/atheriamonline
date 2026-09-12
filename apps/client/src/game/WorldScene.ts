@@ -77,6 +77,8 @@ interface Avatar {
  * without the scene having to know what an HTTP request is.
  */
 export interface HouseScenery {
+  floorStyle?: string;
+  wallStyle?: string;
   /** What is standing in this house, if the player is in one. */
   furniture: ReadonlyArray<{
     id: string;
@@ -107,6 +109,7 @@ export class WorldScene extends Phaser.Scene {
   private connection!: WorldConnection;
   private world!: WorldInfo;
   private scenery!: HouseScenery;
+  private drawnFinish = '';
   private drawnFurnitureRevision = -1;
   private drawnRealmRevision = -1;
   private furniture: Phaser.GameObjects.Image[] = [];
@@ -254,6 +257,19 @@ export class WorldScene extends Phaser.Scene {
    * or been dropped, which is what the revision counter is for.
    */
   private syncChunks(): void {
+    const finish =
+      this.connection.realm === 'property'
+        ? `${this.scenery.floorStyle}:${this.scenery.wallStyle}`
+        : '';
+    if (finish !== this.drawnFinish) {
+      this.drawnFinish = finish;
+      for (const layer of this.chunkImages.values()) layer.destroy();
+      this.chunkImages.clear();
+      for (const props of this.props.values()) for (const prop of props) prop.destroy();
+      this.props.clear();
+      this.pendingChunks.length = 0;
+      this.drawnChunkRevision = -1;
+    }
     if (this.connection.chunkRevision !== this.drawnChunkRevision) {
       this.drawnChunkRevision = this.connection.chunkRevision;
 
@@ -290,6 +306,23 @@ export class WorldScene extends Phaser.Scene {
     return this.connection.chunks.get(key)?.rows[y % 32]?.[x % 32] ?? '';
   }
 
+  private interiorTile(char: string): string {
+    if (this.connection.realm !== 'property') return char;
+    if (char === 'd')
+      return this.scenery.floorStyle === 'stone'
+        ? 'S'
+        : this.scenery.floorStyle === 'tile'
+          ? 'L'
+          : 'd';
+    if (char === '#')
+      return this.scenery.wallStyle === 'teal'
+        ? 'E'
+        : this.scenery.wallStyle === 'rose'
+          ? 'R'
+          : 'C';
+    return char;
+  }
+
   private drawChunk(chunk: HeldChunk): Phaser.Tilemaps.TilemapLayer {
     const ox = chunk.cx * 32,
       oy = chunk.cy * 32;
@@ -305,7 +338,7 @@ export class WorldScene extends Phaser.Scene {
       [...row].map((char, x) =>
         ox + x >= this.world.width || oy + y >= this.world.height
           ? -1
-          : terrainIndex(char, ox + x, oy + y),
+          : terrainIndex(this.interiorTile(char), ox + x, oy + y),
       ),
     );
     layer.putTilesAt(tiles, 0, 0);

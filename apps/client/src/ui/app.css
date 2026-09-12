@@ -1515,3 +1515,17 @@ button:active:not(:disabled) {
   image-rendering: pixelated;
   margin-bottom: var(--space-md);
 }
+
+/* Keep the environment action clear of the mobile directional controls. */
+@media (pointer: coarse) {
+  .house__reopen {
+    right: auto;
+    left: max(var(--space-md), env(safe-area-inset-left));
+    top: calc(var(--space-xxl) + var(--space-lg));
+    min-height: var(--touch-size);
+    max-width: calc(50vw - var(--space-xl));
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}

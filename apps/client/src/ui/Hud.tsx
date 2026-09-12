@@ -20,6 +20,7 @@ export interface HudProps {
   readonly purse: string | null;
   /** True when the player is inside a house rather than out in the city. */
   readonly indoors: boolean;
+  readonly environmentName?: string;
   readonly onOpenPouch: () => void;
   readonly onGoHome: () => void;
   readonly onLogOut: () => void;
@@ -36,6 +37,7 @@ export function Hud({
   touch,
   purse,
   indoors,
+  environmentName,
   onOpenPouch,
   onGoHome,
   onLogOut,
@@ -55,7 +57,7 @@ export function Hud({
         <div>
           <strong>
             {indoors
-              ? strings.house.title
+              ? (environmentName ?? strings.house.title)
               : y >= 106
                 ? strings.welcome.park
                 : x < 39 || x > 120

@@ -39,3 +39,9 @@ Reproduction commands and the final prompt set are in [ART_PROMPTS.md](ART_PROMP
 - Prompt: `docs/design/BUILDING_ART_PROMPT.md`.
 - Processing: `scripts/bake-buildings.mjs`, deterministic transparency extraction,
   bounding boxes and nearest-neighbour scaling for the game atlas.
+
+The code-native terrain atlas also includes original pale-stone and studio-tile
+floors and cream, teal and rose interior wall finishes. These are renderer-only
+variants of the server's existing floor/wall tiles; they do not alter collision.
+The contemporary central-city illustration is now also used on the account-entry
+screen, replacing the medieval promotional image there.

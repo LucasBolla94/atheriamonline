@@ -65,6 +65,7 @@ export function App(): JSX.Element {
   const [trade, setTrade] = useState<api.TradeView | null>(null);
   const [tradeNotice, setTradeNotice] = useState<string | null>(null);
   const [tradeBusy, setTradeBusy] = useState(false);
+  const [interior, setInterior] = useState<api.InteriorView | null>(null);
   const [house, setHouse] = useState<api.HouseView | null>(null);
   const [housePanelOpen, setHousePanelOpen] = useState(false);
   const [houseNotice, setHouseNotice] = useState<string | null>(null);
@@ -84,6 +85,7 @@ export function App(): JSX.Element {
     return found !== null && found.length >= 16 ? found : null;
   });
   const [cityOpen, setCityOpen] = useState(false);
+  const [entryBusy, setEntryBusy] = useState(false);
   const [properties, setProperties] = useState<readonly api.PropertyView[]>([]);
   const [cityLoading, setCityLoading] = useState(false);
   const [cityError, setCityError] = useState<string | null>(null);
@@ -100,6 +102,31 @@ export function App(): JSX.Element {
   const [appearanceError, setAppearanceError] = useState<string | null>(null);
 
   const connectionRef = useRef<WorldConnection | null>(null);
+  const enterEnvironment = useCallback(
+    async (property: api.PropertyView): Promise<string | null> => {
+      const connection = connectionRef.current;
+      if (!connection || connection.realm !== 'city') return strings.city.entryFailed;
+      connection.stop();
+      setEntryBusy(true);
+      try {
+        const result = await api.enterProperty(property.id);
+        if (!result.ok) return result.message;
+        const deadline = Date.now() + 10_000;
+        while (
+          Date.now() < deadline &&
+          connectionRef.current === connection &&
+          connection.currentState === 'playing'
+        ) {
+          if (connection.propertyId === property.id) return null;
+          await new Promise((resolve) => window.setTimeout(resolve, 100));
+        }
+        return strings.city.entryFailed;
+      } finally {
+        setEntryBusy(false);
+      }
+    },
+    [],
+  );
   /**
    * What the Phaser scene is told about the room it is drawing.
    *
@@ -141,11 +168,22 @@ export function App(): JSX.Element {
       onNotice: (about) => {
         if (about === 'trade') refreshTradeRef.current?.();
       },
-      onRealm: (which, houseId) => {
-        setIndoors(which === 'house');
+      onRealm: (which, houseId, propertyId) => {
+        setIndoors(which !== 'city');
+        setChat([]);
+        setCityOpen(false);
+        setHouse(null);
+        setInterior(null);
+        sceneryRef.current.furniture = [];
+        sceneryRef.current.floorStyle = 'oak';
+        sceneryRef.current.wallStyle = 'cream';
+        sceneryRef.current.revision += 1;
         setHouseNotice(null);
         setPicked(null);
-        if (which === 'house') {
+        if (which === 'property' && propertyId) {
+          refreshInteriorRef.current?.(propertyId);
+          setHousePanelOpen(true);
+        } else if (which === 'house') {
           refreshHouseRef.current?.(houseId);
           setHousePanelOpen(true);
         } else {
@@ -208,6 +246,7 @@ export function App(): JSX.Element {
       setTradeBusy(true);
       setTradeNotice(null);
       void (async () => {
+        interiorReadVersion.current += 1;
         const result = await action();
         setTradeBusy(false);
         if (!result.ok) {
@@ -330,7 +369,15 @@ export function App(): JSX.Element {
   const refreshHouse = useCallback(
     (houseId: string | null) => {
       void (async () => {
+        const connection = connectionRef.current;
+        const revision = connection?.realmRevision;
         const result = houseId === null ? await api.myHouse() : await api.houseById(houseId);
+        if (
+          connectionRef.current !== connection ||
+          connection?.realm !== 'house' ||
+          connection.realmRevision !== revision
+        )
+          return;
         if (!result.ok) {
           setHouseNotice(result.message);
           return;
@@ -345,18 +392,95 @@ export function App(): JSX.Element {
   const refreshHouseRef = useRef<((houseId: string | null) => void) | null>(null);
   refreshHouseRef.current = refreshHouse;
 
+  const interiorReadVersion = useRef(0);
+  const refreshInterior = useCallback(
+    async (id: string) => {
+      const requestVersion = ++interiorReadVersion.current;
+      const connection = connectionRef.current;
+      const revision = connection?.realmRevision;
+      const result = await api.propertyInterior(id);
+      if (
+        connectionRef.current !== connection ||
+        connection?.propertyId !== id ||
+        requestVersion !== interiorReadVersion.current ||
+        connection.realmRevision !== revision
+      )
+        return;
+      if (!result.ok) {
+        setHouseNotice(result.message);
+        return;
+      }
+      setInterior(result.data);
+      sceneryRef.current.floorStyle = result.data.floorStyle;
+      sceneryRef.current.wallStyle = result.data.wallStyle;
+      setHouse({
+        id,
+        yours: result.data.yours,
+        access: result.data.access,
+        welcomed: result.data.guests,
+        contents: result.data.contents,
+      });
+      showFurniture(result.data.contents);
+    },
+    [showFurniture],
+  );
+  const refreshInteriorRef = useRef<((id: string) => void) | null>(null);
+  refreshInteriorRef.current = (id) => {
+    void refreshInterior(id);
+  };
+
+  useEffect(() => {
+    if (!playing || !indoors) return;
+    let running = false;
+    const interval = window.setInterval(() => {
+      const id = connectionRef.current?.propertyId;
+      if (!id || running) return;
+      running = true;
+      void refreshInterior(id).finally(() => {
+        running = false;
+      });
+    }, 3000);
+    return () => window.clearInterval(interval);
+  }, [playing, indoors, refreshInterior]);
+
+  const changePropertyGuest = useCallback((name: string, welcomed: boolean) => {
+    const id = connectionRef.current?.propertyId;
+    if (!id) return;
+    setHouseBusy(true);
+    interiorReadVersion.current += 1;
+    void api.propertyGuest(id, name, welcomed).then((result) => {
+      setHouseBusy(false);
+      if (connectionRef.current?.propertyId !== id) return;
+      setHouseNotice(result.ok ? null : result.message);
+      if (result.ok) {
+        interiorReadVersion.current += 1;
+        setInterior((current) =>
+          current?.id === id ? { ...current, guests: result.data.guests } : current,
+        );
+        setHouse((current) =>
+          current?.id === id ? { ...current, welcomed: result.data.guests } : current,
+        );
+      }
+    });
+  }, []);
+
   /** Every house action ends the same way: new contents, or a reason why not. */
   const houseAction = useCallback(
     (action: () => Promise<api.ApiResult<{ contents: api.PlacedItem[] }>>) => {
       setHouseBusy(true);
       setHouseNotice(null);
       void (async () => {
+        const connection = connectionRef.current;
+        const revision = connection?.realmRevision;
+        interiorReadVersion.current += 1;
         const result = await action();
         setHouseBusy(false);
+        if (connectionRef.current !== connection || connection?.realmRevision !== revision) return;
         if (!result.ok) {
           setHouseNotice(result.message);
           return;
         }
+        interiorReadVersion.current += 1;
         setHouse((previous) =>
           previous === null ? previous : { ...previous, contents: result.data.contents },
         );
@@ -475,6 +599,7 @@ export function App(): JSX.Element {
       setItems([]);
       setTrade(null);
       setHouse(null);
+      setInterior(null);
       setIndoors(false);
       setState('idle');
       setError(null);
@@ -511,7 +636,18 @@ export function App(): JSX.Element {
       if (item === null) return false;
       if (houseRef.current?.yours !== true) return false;
 
-      houseAction(() => api.placeFurniture(item.id, x, y, 0));
+      const propertyId = connectionRef.current?.propertyId;
+      houseAction(() =>
+        propertyId
+          ? api.decorateProperty(propertyId, {
+              action: 'place',
+              itemId: item.id,
+              x,
+              y,
+              rotation: 0,
+            })
+          : api.placeFurniture(item.id, x, y, 0),
+      );
       setPicked(null);
       return true;
     };
@@ -530,6 +666,19 @@ export function App(): JSX.Element {
 
   const connecting = state === 'connecting' || state === 'joining';
   const touch = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches;
+  const nearbyEntrance =
+    !indoors && you
+      ? properties.find(
+          (property) =>
+            Math.abs(property.address.entrance.x - you.x) <= 2 &&
+            Math.abs(property.address.entrance.y - you.y) <= 2 &&
+            (property.municipal || property.owned),
+        )
+      : undefined;
+
+  useEffect(() => {
+    if (playing) void refreshCity();
+  }, [playing, refreshCity]);
 
   return (
     <>
@@ -554,6 +703,7 @@ export function App(): JSX.Element {
           touch={touch}
           purse={purse?.display ?? null}
           indoors={indoors}
+          {...(interior ? { environmentName: interior.name } : {})}
           onGoHome={() => {
             void (indoors ? api.leaveHouse() : api.goHome());
           }}
@@ -594,6 +744,25 @@ export function App(): JSX.Element {
           }}
         />
       )}
+      {playing && nearbyEntrance && !cityOpen && (
+        <button
+          type="button"
+          className="hud__button house__reopen"
+          disabled={entryBusy}
+          onClick={() => {
+            void enterEnvironment(nearbyEntrance).then((message) => {
+              if (message) {
+                setCityError(message);
+                setCityOpen(true);
+              }
+            });
+          }}
+        >
+          {entryBusy
+            ? strings.city.entering
+            : `${strings.city.enter}: ${nearbyEntrance.businessName}`}
+        </button>
+      )}
       {playing && cityOpen && (
         <CityPanel
           properties={properties}
@@ -610,6 +779,7 @@ export function App(): JSX.Element {
             connectionRef.current?.walkTo(property.address.entrance);
             setCityOpen(false);
           }}
+          onEnter={enterEnvironment}
           onBuy={async (id, key) => {
             const result = await api.buyProperty(id, key);
             await refreshCity();
@@ -636,15 +806,31 @@ export function App(): JSX.Element {
       {housePanelOpen && house !== null && (
         <HousePanel
           house={house}
+          {...(interior ? { title: interior.name } : {})}
+          accessInGuide={interior !== null}
           inventory={items}
           picked={picked}
           busy={houseBusy}
           notice={houseNotice}
           onPick={setPicked}
           onRotate={(item) =>
-            houseAction(() => api.rotateFurniture(item.id, (item.rotation + 90) % 360))
+            houseAction(() =>
+              interior
+                ? api.decorateProperty(interior.id, {
+                    action: 'rotate',
+                    itemId: item.id,
+                    rotation: (item.rotation + 90) % 360,
+                  })
+                : api.rotateFurniture(item.id, (item.rotation + 90) % 360),
+            )
           }
-          onTakeBack={(item) => houseAction(() => api.takeBackFurniture(item.id))}
+          onTakeBack={(item) =>
+            houseAction(() =>
+              interior
+                ? api.decorateProperty(interior.id, { action: 'take', itemId: item.id })
+                : api.takeBackFurniture(item.id),
+            )
+          }
           onAccess={(access) => {
             setHouseBusy(true);
             void (async () => {
@@ -654,6 +840,10 @@ export function App(): JSX.Element {
             })();
           }}
           onWelcome={(name) => {
+            if (interior) {
+              changePropertyGuest(name, true);
+              return;
+            }
             setHouseBusy(true);
             void (async () => {
               const result = await api.welcomeToHouse(name);
@@ -663,6 +853,10 @@ export function App(): JSX.Element {
             })();
           }}
           onUnwelcome={(name) => {
+            if (interior) {
+              changePropertyGuest(name, false);
+              return;
+            }
             setHouseBusy(true);
             void (async () => {
               await api.unwelcomeFromHouse(name);
@@ -682,7 +876,7 @@ export function App(): JSX.Element {
           className="hud__button house__reopen"
           onClick={() => setHousePanelOpen(true)}
         >
-          {strings.house.open}
+          {interior ? strings.city.environment : strings.house.open}
         </button>
       )}
       {trade !== null && (

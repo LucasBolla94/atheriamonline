@@ -1,5 +1,24 @@
 /** Original code-native 32px terrain atlas. Shared textures, no per-chunk canvases. */
-const CHARS = ['.', ',', 'p', 'b', 'd', '+', 's', '#', '~', 'T', 'F', 'M', 'W'];
+const CHARS = [
+  '.',
+  ',',
+  'p',
+  'b',
+  'd',
+  '+',
+  's',
+  '#',
+  '~',
+  'T',
+  'F',
+  'M',
+  'W',
+  'S',
+  'L',
+  'C',
+  'E',
+  'R',
+];
 export const terrainIndex = (char: string, x: number, y: number): number => {
   const base = Math.max(0, CHARS.indexOf(char));
   return base * 4 + (((Math.imul(x, 73) ^ Math.imul(y, 151)) >>> 0) % 4);
@@ -35,7 +54,26 @@ export function terrainAtlas(): HTMLCanvasElement {
                 ? '#c5c394'
                 : '#c6ad7b',
       );
-      if (grass) {
+      if (char === 'S' || char === 'L') {
+        rect(0, 0, 32, 32, char === 'S' ? '#c8ccc5' : '#d9e2db');
+        const size = char === 'S' ? 32 : 16;
+        for (let y = 0; y < 32; y += size)
+          for (let x = 0; x < 32; x += size) {
+            rect(x + 1, y + 1, size - 2, size - 2, char === 'S' ? '#e3e4db' : '#f1eee1');
+            rect(x + 2, y + 2, size - 4, 1, '#faf5e8');
+          }
+      } else if (char === 'C' || char === 'E' || char === 'R') {
+        const colors =
+          char === 'E'
+            ? ['#79a39e', '#a6c4bb', '#527a76']
+            : char === 'R'
+              ? ['#c99591', '#e3bcb0', '#a46f6d']
+              : ['#ded4bb', '#f4ebd5', '#b1a991'];
+        rect(0, 0, 32, 32, colors[0]!);
+        rect(0, 0, 32, 4, colors[1]!);
+        rect(0, 27, 32, 5, colors[2]!);
+        rect(0, 27, 32, 1, colors[1]!);
+      } else if (grass) {
         for (let n = 0; n < 5; n++) {
           const x = (n * 17 + variant * 11) % 30,
             y = (n * 11 + variant * 7) % 29;

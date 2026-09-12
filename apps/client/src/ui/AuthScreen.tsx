@@ -193,7 +193,7 @@ export function AuthScreen({
   return (
     <main className="screen welcome-screen">
       <section className="welcome-art" aria-label={strings.welcome.town}>
-        <img className="welcome-art__image" src="/art/welcome.png" alt="" />
+        <img className="welcome-art__image" src="/art/central-hero.png" alt="" />
         <div className="welcome-art__shade" />
         <a className="brand" href="/" aria-label={strings.appName}>
           <Icon name="castle" />

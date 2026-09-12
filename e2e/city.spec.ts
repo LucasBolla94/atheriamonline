@@ -6,7 +6,7 @@ import { move } from '../apps/api/src/economy.js';
 import { E2E_DATABASE_NAME, e2eEnv } from './global-setup.js';
 
 test('a resident reviews, buys and configures a commercial address', async ({ page }, info) => {
-  test.setTimeout(90_000);
+  test.setTimeout(120_000);
   const name = `Owner${Date.now().toString().slice(-9)}`;
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
@@ -78,5 +78,39 @@ test('a resident reviews, buys and configures a commercial address', async ({ pa
   await expect(page.getByLabel('Floor finish')).toHaveValue('tile');
   await expect(page.getByLabel('Wall colour')).toHaveValue('teal');
   await expect(page.getByLabel('Show my business in the directory')).toBeChecked();
+  await page.getByRole('button', { name: 'Enter environment', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: `${name} Studio`, exact: true })).toBeVisible();
+  await expect(page.getByRole('dialog')).toContainText('Change access, floor and wall finishes');
+  await page.getByRole('button', { name: /Oak stool.*choose/ }).click();
+  await expect(page.getByRole('dialog')).toContainText('Now tap where');
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
+  const canvas = page.locator('canvas');
+  const box = await canvas.boundingBox();
+  if (!box) throw new Error('Missing game canvas');
+  const placed = page.waitForResponse(
+    (response) => response.url().endsWith('/decorate') && response.request().method() === 'POST',
+  );
+  await canvas.click({ position: { x: box.width / 2, y: box.height / 2 - 64 } });
+  expect((await placed).status()).toBe(200);
+  await page.getByRole('button', { name: 'Environment', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'pick up', exact: true })).toHaveCount(1);
+  await page.getByRole('button', { name: 'turn', exact: true }).click();
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
+  if (info.project.name === 'mobile-landscape') {
+    const action = await page
+      .getByRole('button', { name: 'Environment', exact: true })
+      .boundingBox();
+    const arrows = await page.locator('.touch-walk').boundingBox();
+    expect(action).not.toBeNull();
+    expect(arrows).not.toBeNull();
+    expect(action!.x + action!.width).toBeLessThan(arrows!.x);
+  }
+  await page.screenshot({ path: `test-results/${info.project.name}-business-interior.png` });
+  await page.getByRole('button', { name: 'Environment', exact: true }).click();
+  await page.getByRole('button', { name: 'pick up', exact: true }).click();
+  await expect(page.getByRole('dialog')).toContainText('It is a bare room');
+  await page.getByRole('button', { name: 'Step outside', exact: true }).last().click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Go home', exact: true })).toBeVisible();
   expect(errors).toEqual([]);
 });

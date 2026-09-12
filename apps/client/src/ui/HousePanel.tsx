@@ -11,6 +11,8 @@ import { strings } from './strings.js';
 
 export interface HousePanelProps {
   readonly house: HouseView;
+  readonly title?: string;
+  readonly accessInGuide?: boolean;
   readonly inventory: readonly InventoryItem[];
   readonly picked: InventoryItem | null;
   readonly busy: boolean;
@@ -29,6 +31,8 @@ const ACCESS_ORDER: ReadonlyArray<HouseView['access']> = ['nobody', 'welcomed', 
 
 export function HousePanel({
   house,
+  title,
+  accessInGuide = false,
   inventory,
   picked,
   busy,
@@ -45,28 +49,37 @@ export function HousePanel({
   const furniture = inventory.filter((item) => item.kind === 'furniture');
 
   return (
-    <div className="overlay" role="dialog" aria-modal="true" aria-label={strings.house.title}>
+    <div
+      className="overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-label={title ?? strings.house.title}
+    >
       <div className="panel panel--wide">
         <h2 className="panel__title">
-          {house.yours ? strings.house.title : strings.house.visiting}
+          {title ?? (house.yours ? strings.house.title : strings.house.visiting)}
         </h2>
 
         {house.yours && (
           <>
             <h3 className="pouch__heading">{strings.house.door}</h3>
-            <div className="tabs" role="group" aria-label={strings.house.door}>
-              {ACCESS_ORDER.map((access) => (
-                <button
-                  key={access}
-                  type="button"
-                  className={`tab ${house.access === access ? 'tab--active' : ''}`}
-                  disabled={busy}
-                  onClick={() => onAccess(access)}
-                >
-                  {strings.house.access[access]}
-                </button>
-              ))}
-            </div>
+            {accessInGuide ? (
+              <p className="notice notice--quiet">{strings.city.accessInGuide}</p>
+            ) : (
+              <div className="tabs" role="group" aria-label={strings.house.door}>
+                {ACCESS_ORDER.map((access) => (
+                  <button
+                    key={access}
+                    type="button"
+                    className={`tab ${house.access === access ? 'tab--active' : ''}`}
+                    disabled={busy}
+                    onClick={() => onAccess(access)}
+                  >
+                    {strings.house.access[access]}
+                  </button>
+                ))}
+              </div>
+            )}
             <p className="notice notice--quiet">{strings.house.accessHelp[house.access]}</p>
 
             {house.access === 'welcomed' && (

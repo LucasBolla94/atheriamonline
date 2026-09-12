@@ -154,3 +154,37 @@ restored the intended permission checks. Rotation validation uses the existing
 The client currently understands the protocol identifier but still needs the
 property entrance/editor UI and rendered interior finishes. This milestone is
 not a playable complete release and has not been deployed.
+
+## Playable business interior milestone (2026-09-12)
+
+The City guide now requests entry and waits for the authoritative realm change,
+with a timeout message instead of treating HTTP acceptance as successful entry.
+Nearby owned/public doorways also expose an entry action. Owners use their real
+inventory to place, rotate and retrieve furniture and manage named invitations.
+Visitors receive a read-only environment panel. Interior views refresh while
+inside; stale reads are invalidated after edits, guest changes and realm changes.
+The location badge names the business. Stone/tile floors and three wall colours
+are rendered from the saved settings. Account entry uses contemporary city art
+and copy. No production deployment has been made.
+
+Browser evidence: the desktop purchase/decorate/leave case and two-player
+invite/revoke case passed. Mobile purchase/decorate/leave passed, including a
+new assertion that the environment action does not overlap directional controls.
+The final focused mobile run passed both scenarios (1.8 minutes). A previous
+mobile invitation run received a successful server response but did not reflect
+it within the UI bound; the guest response now updates the list immediately and
+invalidates older reads. The final run retains the same 15-second assertion.
+Reviewed desktop/mobile interior captures are in docs/design/contemporary.
+
+The first direct Playwright invocation reused an old test database without the
+new migration. Running pnpm test:e2e prepared the isolated database correctly.
+Two-player testing also found the old one-minute game-intent idle timeout; D-067
+records the heartbeat fix. All 289 unit tests, typecheck, lint and production
+build passed after the changes. Phaser remains a separate large game bundle;
+the public site has a separate entry.
+
+Still pending: a browser walkthrough of the outdoor public-building doorway,
+public venue furnishings, booking rooms, item listings/sales, contemporary
+resident/social animations and the final full regression/deployment gates.
+The initial website copy must remain unpublished until those advertised features
+are complete. This milestone does not complete the overall release.
