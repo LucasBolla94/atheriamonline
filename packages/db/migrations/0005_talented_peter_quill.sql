@@ -1,0 +1,1 @@
+ALTER TABLE "characters" ADD COLUMN "appearance" integer DEFAULT 0 NOT NULL;

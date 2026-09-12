@@ -109,6 +109,7 @@ export const characters = pgTable(
     x: integer('x').notNull(),
     y: integer('y').notNull(),
     facing: facingDirection('facing').notNull().default('s'),
+    appearance: integer('appearance').notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
   },

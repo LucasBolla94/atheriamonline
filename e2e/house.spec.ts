@@ -47,7 +47,7 @@ test('a player can go home and come back out', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Go home' })).toBeVisible();
 });
 
-test('furniture can be put down and picked up again', async ({ page }) => {
+test('furniture can be put down and picked up again', async ({ page }, info) => {
   await createAccountAndEnter(page);
   await page.getByRole('button', { name: 'Go home' }).click();
   await expect(page.getByRole('dialog')).toContainText('Your house');
@@ -66,6 +66,9 @@ test('furniture can be put down and picked up again', async ({ page }) => {
   await page.getByRole('button', { name: 'House', exact: true }).click();
   await expect(page.getByRole('dialog')).toContainText('Standing here');
   await expect(page.getByRole('dialog')).toContainText('Oak stool');
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.screenshot({ path: `test-results/${info.project.name}-furnished-house.png` });
+  await page.getByRole('button', { name: 'House', exact: true }).click();
 
   // And it is no longer being carried: the same item, in one place only.
   await page.getByRole('button', { name: 'pick up' }).first().click();

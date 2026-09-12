@@ -180,6 +180,7 @@ export const playerViewSchema = z.object({
   x: tileCoordinateSchema,
   y: tileCoordinateSchema,
   facing: directionSchema,
+  appearance: z.number().int().min(0).max(5).optional(),
 });
 
 export type PlayerView = z.infer<typeof playerViewSchema>;

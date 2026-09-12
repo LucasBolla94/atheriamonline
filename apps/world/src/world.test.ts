@@ -551,3 +551,21 @@ describe('saying something', () => {
     expect(world.handleSay('al1', 'later', 60_000).ok).toBe(true);
   });
 });
+
+describe('resident appearances', () => {
+  it('makes a stationary appearance change visible without changing position', () => {
+    const world = newWorld();
+    world.join(character('look', 'Resident'), 1000);
+    const before = world.revision;
+    world.setAppearance('look', 4);
+    expect(world.get('look')).toMatchObject({ x: 1, y: 1, appearance: 4 });
+    expect(world.revision).toBeGreaterThan(before);
+  });
+
+  it('ignores unavailable appearances', () => {
+    const world = newWorld();
+    world.join(character('look', 'Resident'), 1000);
+    for (const value of [-1, 6, 1.5, NaN]) world.setAppearance('look', value);
+    expect(world.get('look')?.appearance).toBe(0);
+  });
+});

@@ -57,6 +57,7 @@ async function resolveTicket(ticket: string): Promise<JoiningCharacter | null> {
       x: characters.x,
       y: characters.y,
       facing: characters.facing,
+      appearance: characters.appearance,
       status: accounts.status,
       mutedUntil: accounts.mutedUntil,
     })
@@ -83,6 +84,7 @@ async function resolveTicket(ticket: string): Promise<JoiningCharacter | null> {
     x: character.x,
     y: character.y,
     facing: character.facing as Direction,
+    appearance: character.appearance,
     mutedUntilMs: character.mutedUntil?.getTime() ?? null,
     blocked: blocked.map((row) => row.blockedId),
   };
@@ -125,6 +127,9 @@ commands.on('message', (_channel, raw) => {
   }
 
   switch (command.t) {
+    case 'appearance':
+      server.setAppearance(command.characterId, command.appearance);
+      return;
     case 'kick':
       server.kick(command.characterId, command.reason);
       return;

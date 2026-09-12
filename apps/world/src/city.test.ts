@@ -78,6 +78,17 @@ describe('the starter district', () => {
     expect(walkable / all.length).toBeGreaterThan(0.7);
   });
 
+  it('lets a player enter both cottage rows through their visible south-facing steps', () => {
+    for (const x of [31, 41, 51, 72, 82, 92]) {
+      for (const y of [78, 96]) {
+        expect(charAt(x, y)).toBe('+');
+        expect(charAt(x + 1, y)).toBe('+');
+        expect(isWalkableChar(charAt(x, y - 1))).toBe(true);
+        expect(isWalkableChar(charAt(x, y + 1))).toBe(true);
+      }
+    }
+  });
+
   it('lets a player reach every single tile they could stand on', () => {
     const seen = new Set<number>();
     const queue = [CITY_SPAWN];

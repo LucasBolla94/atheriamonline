@@ -4,7 +4,7 @@ This file is the source of truth for the project. If anything in the code or in
 another document disagrees with this file, **this file wins**. Any change to the
 product must be written here first.
 
-Last updated: 2026-09-11
+Last updated: 2026-09-12
 
 ---
 
@@ -245,6 +245,22 @@ Stored as BIGINT minor units; 1 Crown = 100 minor units. Displayed as `1.00 c`.
 - The owner controls who may enter: nobody, friends, or everyone.
 
 ## 11. Client and controls
+
+### V1.0 visual direction (2026-09-12)
+
+The owner has requested a complete, playable pixel-art redesign. Use original,
+simple animated residents, a warm sandstone/terracotta/green city, illustrated
+login and registration, and a consistent mobile interface. Studying general
+social-game design principles is allowed; production art must be original or
+appropriately licensed, never copied from a commercial game. This clarifies
+the inspiration wording in section 2 without allowing copied assets.
+
+Residents have a saved choice of curated appearances, visible to everyone.
+Walk cycles use four drawn directions for the existing eight-direction movement.
+Art does not change movement authority, collision, money or item ownership.
+Terrain is rendered from a shared detailed pixel atlas; upright objects and
+characters are ordered by their ground position. Menus, chat and touch movement
+must remain usable on mobile, including during viewport resizing.
 
 - Desktop: click a tile to walk there; WASD / arrow keys to step; Enter to chat.
 - Mobile (landscape): tap a tile to walk there; on-screen chat button; pinch to

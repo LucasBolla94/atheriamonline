@@ -4,19 +4,46 @@ This file says **where the project is right now** and **what happens next**.
 We work on **one phase at a time**. A phase is only "done" when every box in it
 is ticked and `pnpm typecheck`, `pnpm lint` and `pnpm test` all pass.
 
-Last updated: 2026-09-11
+Last updated: 2026-09-12
 
 ---
 
 ## Current phase
 
-**Every phase on the list is done.** The game is live at
+**V1.0 visual redesign — PUBLISHED AND VERIFIED.** The redesigned game is live at
 https://atheriam.online: accounts, a city, chat and moderation, money and
 items, trading, and a house each.
 
-What happens next is not another phase — it is whatever the answers to
-`docs/OPEN_QUESTIONS.md` turn out to be, starting with whether it feels right
-on a real phone (Q-001).
+The redesign adds six persistent resident looks with directional walk cycles,
+original town and furniture art, detailed terrain, a new login and registration
+screen, and a responsive HUD with touch movement. Asset processing happens
+before release, keeping large source images out of the gameplay loading path.
+
+Typecheck and lint pass. There are 275 passing unit tests, 109 passing integration
+tests and 66 passing browser scenarios, run in groups (two device-specific cases
+are intentionally skipped on the other device). This includes appearance
+persistence and observation by another player, desktop and touch movement,
+chat, safety controls, inventory, trading, houses and portrait/tablet resizing.
+`pnpm build` also completed successfully. The production client is ready in
+`apps/client/dist`; reviewed screenshots are retained under `docs/design`.
+
+Published on 2026-09-12 at 04:32 UTC with the standard `scripts/deploy.sh`
+workflow, including dependency verification, typecheck, lint, all 275 unit tests
+and production build. Migration 0005 adds the saved appearance with default zero.
+The API, world and Caddy services are active.
+
+All **16 live browser checks passed** against https://atheriam.online, including
+HTTPS, registration, movement, chat, houses, trading, saved appearance after a
+reload and portrait touch controls. Reviewed live screenshots are in
+`docs/design/live-*.png`. The published directory matches `apps/client/dist`;
+HTTPS checks confirmed the new entry script and art are the built files.
+The 14 temporary Smoke accounts were removed after validation.
+
+The pre-release database backup is
+`/var/backups/atheriam/atheriam-2026-09-12-0430.sql.gz`.
+
+Real-phone performance (Q-001) and a community playtest remain follow-up
+validation; browser emulation cannot answer those questions.
 
 ## Phase list
 

@@ -27,7 +27,10 @@ export default defineConfig({
 
   use: {
     baseURL: `http://127.0.0.1:${E2E_CLIENT_PORT}`,
-    trace: 'retain-on-failure',
+    // Keep DOM, network and source diagnostics. Continuous screenshot capture
+    // of a software-rendered game canvas adds seconds to every action on this
+    // server; explicit visual-review tests capture the pictures we inspect.
+    trace: { mode: 'retain-on-failure', screenshots: false, snapshots: true, sources: true },
   },
 
   projects: [

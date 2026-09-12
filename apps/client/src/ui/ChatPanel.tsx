@@ -47,6 +47,14 @@ export function ChatPanel({
     function onKeyDown(event: KeyboardEvent): void {
       const input = inputRef.current;
       if (input === null) return;
+      if (document.querySelector('[role="dialog"]') !== null) return;
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        target !== input &&
+        target.closest('input, textarea, select, button, a, [contenteditable="true"]')
+      )
+        return;
 
       if (event.key === 'Enter' && document.activeElement !== input) {
         event.preventDefault();

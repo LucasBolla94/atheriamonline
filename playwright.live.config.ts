@@ -25,7 +25,7 @@ export default defineConfig({
   reporter: 'list',
   use: {
     baseURL: process.env['ATHERIAM_URL'] ?? 'https://atheriam.online',
-    trace: 'retain-on-failure',
+    trace: { mode: 'retain-on-failure', screenshots: false, snapshots: true, sources: true },
   },
   projects: [
     { name: 'desktop', use: { ...devices['Desktop Chrome'] } },

@@ -53,5 +53,28 @@ export function createGame(options: CreateGameOptions): Phaser.Game {
     scenery: options.scenery,
   };
   game.scene.start(WorldScene.KEY, sceneData);
+  // Orientation changes and mobile browser chrome can resize the parent without
+  // producing the same window event on every browser. Observe the actual stage.
+  const observer = new ResizeObserver(() => {
+    const { clientWidth, clientHeight } = options.parent;
+    if (clientWidth > 0 && clientHeight > 0) game.scale.resize(clientWidth, clientHeight);
+  });
+  observer.observe(options.parent);
+  // A modal hides most of the world. Keep it fresh at five frames per second
+  // while leaving React, the connection and the authoritative server running.
+  // This avoids spending the phone's rendering budget behind a trade or menu.
+  let menuFrame: ReturnType<typeof setTimeout> | null = null;
+  game.events.on(Phaser.Core.Events.POST_RENDER, () => {
+    if (document.querySelector('[role="dialog"]') === null) return;
+    game.loop.sleep();
+    menuFrame = setTimeout(() => {
+      menuFrame = null;
+      game.loop.wake();
+    }, 200);
+  });
+  game.events.once(Phaser.Core.Events.DESTROY, () => {
+    observer.disconnect();
+    if (menuFrame !== null) clearTimeout(menuFrame);
+  });
   return game;
 }

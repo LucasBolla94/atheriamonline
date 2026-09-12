@@ -1,3 +1,4 @@
+import { ItemArt } from './Art.js';
 /**
  * Your purse and the things you are carrying.
  *
@@ -42,6 +43,7 @@ export function Pouch({
         <ul className="pouch__list">
           {items.map((item) => (
             <li key={item.id} className="pouch__item">
+              <ItemArt id={item.definitionId} />
               <strong>{item.name}</strong>
               <span className="pouch__muted">{item.description}</span>
             </li>

@@ -35,6 +35,7 @@ export interface PlayerState {
   x: number;
   y: number;
   facing: Direction;
+  appearance: number;
   /** When this player last moved a tile, used to enforce the speed limit. */
   lastStepAtMs: number;
   /** Tiles still to walk, in order. Empty means standing still. */
@@ -65,6 +66,7 @@ export interface JoiningCharacter {
   readonly x: number;
   readonly y: number;
   readonly facing: Direction;
+  readonly appearance?: number;
   /** A mute a moderator set earlier, if it has not run out. */
   readonly mutedUntilMs?: number | null;
   /** The people this player has blocked, from the database. */
@@ -152,6 +154,7 @@ export class World {
       x: start.x,
       y: start.y,
       facing: character.facing,
+      appearance: character.appearance ?? 0,
       // Dated in the past so a player may move as soon as they arrive.
       lastStepAtMs: nowMs - MIN_STEP_INTERVAL_MS,
       path: [],
@@ -163,6 +166,14 @@ export class World {
     this.namesInUse.set(nameKey, player.id);
     this.currentRevision += 1;
     return { ok: true, player };
+  }
+
+  setAppearance(id: string, appearance: number): void {
+    const player = this.players.get(id);
+    if (player === undefined || !Number.isInteger(appearance) || appearance < 0 || appearance > 5)
+      return;
+    player.appearance = appearance;
+    this.currentRevision += 1;
   }
 
   /** Take a player out of the world. Safe to call twice. */
@@ -355,5 +366,6 @@ function toView(player: PlayerState): PlayerView {
     x: player.x,
     y: player.y,
     facing: player.facing,
+    appearance: player.appearance,
   };
 }

@@ -22,6 +22,8 @@ import {
   type WorldConnection,
 } from '../net/connection.js';
 import { createGame } from '../game/createGame.js';
+import { AppearancePanel } from './AppearancePanel.js';
+import { TouchControls } from './TouchControls.js';
 import { AuthScreen } from './AuthScreen.js';
 import { ChatPanel } from './ChatPanel.js';
 import { Hud } from './Hud.js';
@@ -68,6 +70,9 @@ export function App(): JSX.Element {
   const [houseBusy, setHouseBusy] = useState(false);
   const [picked, setPicked] = useState<api.InventoryItem | null>(null);
   const [indoors, setIndoors] = useState(false);
+  const [appearanceOpen, setAppearanceOpen] = useState(false);
+  const [appearanceBusy, setAppearanceBusy] = useState(false);
+  const [appearanceError, setAppearanceError] = useState<string | null>(null);
 
   const connectionRef = useRef<WorldConnection | null>(null);
   /**
@@ -358,7 +363,13 @@ export function App(): JSX.Element {
   }, [enterCity, refreshBlocked, refreshPouch, refreshTrade]);
 
   const handleCreate = useCallback(
-    (input: { email: string; password: string; dateOfBirth: string; characterName: string }) => {
+    (input: {
+      email: string;
+      password: string;
+      dateOfBirth: string;
+      characterName: string;
+      appearance?: number;
+    }) => {
       setError(null);
       setBusy(true);
       void (async () => {
@@ -472,6 +483,11 @@ export function App(): JSX.Element {
       {playing && you !== null && (
         <Hud
           name={you.name}
+          appearance={you.appearance ?? 0}
+          onAppearance={() => {
+            setAppearanceError(null);
+            setAppearanceOpen(true);
+          }}
           x={you.x}
           y={you.y}
           nearbyCount={nearbyCount}
@@ -496,6 +512,26 @@ export function App(): JSX.Element {
           notice={chatNotice}
           onSay={handleSay}
           onChoosePlayer={setChosenPlayer}
+        />
+      )}
+      {playing && touch && <TouchControls onStep={(dir) => connectionRef.current?.step(dir)} />}
+      {playing && appearanceOpen && you !== null && (
+        <AppearancePanel
+          current={you.appearance ?? 0}
+          busy={appearanceBusy}
+          error={appearanceError}
+          onClose={() => setAppearanceOpen(false)}
+          onSave={(look) => {
+            setAppearanceBusy(true);
+            void api.setAppearance(look).then((result) => {
+              setAppearanceBusy(false);
+              if (!result.ok) {
+                setAppearanceError(result.message);
+                return;
+              }
+              setAppearanceOpen(false);
+            });
+          }}
         />
       )}
       {pouchOpen && (

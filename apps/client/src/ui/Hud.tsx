@@ -3,10 +3,14 @@
  *
  * It reads state and draws it. It sends nothing and decides nothing.
  */
+import { Icon } from './Icon.js';
+import { Portrait } from './Art.js';
 import { strings } from './strings.js';
 
 export interface HudProps {
   readonly name: string;
+  readonly appearance: number;
+  readonly onAppearance: () => void;
   readonly x: number;
   readonly y: number;
   readonly nearbyCount: number;
@@ -22,6 +26,8 @@ export interface HudProps {
 
 export function Hud({
   name,
+  appearance,
+  onAppearance,
   x,
   y,
   nearbyCount,
@@ -33,23 +39,52 @@ export function Hud({
   onLogOut,
 }: HudProps): JSX.Element {
   return (
-    <>
-      <div className="hud">
-        <span className="hud__dot" aria-hidden="true" />
-        <strong>{name}</strong>
-        <span className="hud__muted">{strings.hud.position(x, y)}</span>
-        <span className="hud__muted">{strings.hud.playersNearby(nearbyCount)}</span>
+    <div className="hud">
+      <div className="resident-card">
+        <Portrait look={appearance} />
+        <div>
+          <strong>{name}</strong>
+          <span className="hud__muted">{strings.hud.playersNearby(nearbyCount)}</span>
+        </div>
+        <span className="online-dot" />
+      </div>
+      <div className="location-card">
+        <Icon name="compass" />
+        <div>
+          <strong>
+            {indoors
+              ? strings.house.title
+              : x >= 69 && y < 52
+                ? strings.welcome.market
+                : x < 61 && y < 61
+                  ? strings.welcome.park
+                  : y > 76
+                    ? strings.welcome.neighbourhood
+                    : strings.welcome.world}
+          </strong>
+          <span className="hud__muted">{strings.hud.position(x, y)}</span>
+        </div>
+      </div>
+      <nav className="town-dock" aria-label={strings.appName}>
         <button type="button" className="hud__button" onClick={onOpenPouch}>
-          {purse === null ? strings.pouch.open : `${strings.pouch.open} · ${purse}`}
+          <Icon name="bag" />
+          <span>{strings.pouch.open}</span>
+          <small>{purse ?? '…'}</small>
         </button>
         <button type="button" className="hud__button" onClick={onGoHome}>
-          {indoors ? strings.house.leave : strings.house.goHome}
+          <Icon name="home" />
+          <span>{indoors ? strings.house.leave : strings.house.goHome}</span>
+        </button>
+        <button type="button" className="hud__button" onClick={onAppearance}>
+          <Icon name="shirt" />
+          <span>{strings.welcome.look}</span>
         </button>
         <button type="button" className="hud__button" onClick={onLogOut}>
-          {strings.auth.logOut}
+          <Icon name="exit" />
+          <span>{strings.auth.logOut}</span>
         </button>
-      </div>
-      <p className="hint">{touch ? strings.hints.touch : strings.hints.desktop}</p>
-    </>
+      </nav>
+      <p className="hint">{touch ? strings.welcome.portraitHint : strings.hints.desktop}</p>
+    </div>
   );
 }

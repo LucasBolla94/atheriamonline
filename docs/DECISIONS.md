@@ -668,3 +668,94 @@ work. Ground the player has walked away from now has its texture deleted too,
 which matters on a phone.
 **Cost to change:** Low, and it stops being an optimisation the moment tiles
 stop being flat colours — real artwork would go back to a full-size texture.
+
+## D-057 — A small original pixel-art set for V1.0
+
+**Date:** 2026-09-12
+**Decision:** Use original generated resident and town artwork with a consistent
+warm palette. Ship six complete resident looks, rather than a combinatorial
+wardrobe. Three resident source sheets each have four directions and six walk
+frames; three alternate clothing dyes complete the catalogue. See
+`ART_PROMPTS.md` and `ASSETS.md` for provenance and reproduction.
+**Why:** The owner requested a full redesign and specifically prioritised simple
+art with good animation. A bounded set keeps clothing, silhouette and movement
+coherent. Studying social-world design principles is permitted by the owner's
+request and the updated specification; no commercial-game assets are used.
+**Cost to change:** Additional looks need their complete directional cycles.
+Independent clothing layers and separate gestures are later work.
+
+## D-058 — Bake sprites before release; share the terrain atlas
+
+**Date:** 2026-09-12
+**Decision:** Keep source sheets but export compact, aligned transparent atlases
+with `scripts/bake-art.mjs`. The browser loads these exports. Terrain uses Phaser
+tilemap layers and one shared small atlas, superseding D-056's flat-colour renderer.
+**Why:** Processing multi-megabyte source sheets on entry caused a visible delay.
+The exported resident sheets are about 48 kB each. Shared terrain avoids allocating
+a million-pixel canvas for each streamed chunk. Chunk creation remains queued.
+**Cost to change:** Re-bake and visually inspect whenever source artwork changes.
+This is not a claim of measured performance on a physical phone.
+
+## D-059 — Appearance is durable, additive and independent of the economy
+
+**Date:** 2026-09-12
+**Decision:** Store a catalogue index from zero to five on the character, with
+zero as the default for existing accounts. Authenticated API requests update only
+the player's own character and publish a world command. Snapshot comparison
+includes appearance, so a stationary neighbour sees the new look. House
+transitions carry it with the player.
+**Why:** The owner asked for working characters, not a local visual preview.
+An additive optional protocol field lets old clients ignore appearance safely.
+Appearance selection does not mint items, charge money or alter movement.
+**Cost to change:** A larger or modular catalogue needs a new validated schema.
+
+## D-060 — Mobile gets visible movement buttons and a resizing stage
+
+**Date:** 2026-09-12
+**Decision:** Keep tap-to-walk and pinch controls, add a press-and-hold direction
+pad for touch devices, and support portrait as well as landscape. Observe the
+stage size so rotating a phone updates the canvas and camera. Dialogs suspend
+movement shortcuts, and Enter does not steal keyboard activation from controls.
+**Why:** Walking and chatting must be discoverable and usable together. Testing
+found a stale canvas size after changing orientation; observing the actual stage
+fixes it. Browser emulation verifies layout and intents; physical-device and
+community testing remain explicit follow-up work.
+**Cost to change:** Low; the controls send the same authoritative intents.
+
+## D-061 — Spend less rendering work behind a dialog
+
+**Date:** 2026-09-12
+**Decision:** Refresh the covered Phaser world at five frames per second while
+a dialog is open. Resume the normal loop automatically when it closes. React,
+network traffic and the authoritative world simulation continue normally.
+**Why:** The desktop trade tests reached their time limit while HTTP operations
+were returning successfully in under 200 ms. Two software-rendered cities kept
+consuming rendering time behind the trade panels. Reducing covered-world work
+also avoids wasting a phone's rendering budget while someone uses a menu.
+**Cost to change:** Low. A covered scene can be up to 200 ms behind the latest
+snapshot; the visible walking scene keeps the normal frame target.
+
+## D-062 — Cottage doors match the south-facing artwork
+
+**Date:** 2026-09-12
+**Decision:** Both public cottage rows have their walkable doorway on the south
+wall, where the new art shows its front steps. Add short approaches and a lane
+below the southern row.
+**Why:** The old schematic map gave the lower row north-facing doors, which did
+not match the new cottage image. The city reachability test and an entrance
+regression test cover the resulting paths. Private owned houses are unaffected.
+**Cost to change:** A north-facing building variant would need matching art and
+the same explicit collision alignment.
+
+## D-063 — Capture review pictures explicitly, retain DOM and network traces
+
+**Date:** 2026-09-12
+**Decision:** Playwright retains DOM snapshots, source and network traces on
+failure, but does not continuously record screenshots of the game canvas.
+Design and live visual-review tests still save explicit screenshots.
+**Why:** This machine renders browser graphics in software. The recorded desktop
+trade trace showed multi-second browser actions while API operations succeeded
+in milliseconds. Continuous canvas image recording adds work unrelated to a
+player's input. Assertions, time limits and production behaviour are unchanged.
+**Cost to change:** Switch trace screenshots on for a specific visual diagnosis;
+the ordinary failure trace still contains the DOM and HTTP evidence.

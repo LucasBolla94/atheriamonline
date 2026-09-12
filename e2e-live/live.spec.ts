@@ -153,3 +153,32 @@ test('the certificate covers www too, and sends people to the short name', async
   expect(response?.status()).toBe(200);
   expect(page.url()).toBe('https://atheriam.online/');
 });
+
+test('the published pixel-art look persists and works on touch', async ({ page }, info) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.goto('/');
+  await page
+    .locator('.welcome-art__image')
+    .evaluate((image) => (image as HTMLImageElement).decode());
+  await page.screenshot({ path: `test-results/live-${info.project.name}-login.png` });
+  const name = await createAccountAndEnter(page);
+  await page.getByRole('button', { name: 'Your look' }).click();
+  await page.getByRole('button', { name: 'Heather violet' }).click();
+  await page.getByRole('button', { name: 'Wear this look' }).click();
+  await expect(page.locator('.resident-card img')).toHaveAttribute('src', '/art/portrait-4.png');
+  await page.reload();
+  await expect(page.locator('.hud')).toContainText(name);
+  await expect(page.locator('.resident-card img')).toHaveAttribute('src', '/art/portrait-4.png');
+  if (info.project.name === 'mobile-landscape') {
+    await page.setViewportSize({ width: 393, height: 851 });
+    await expect
+      .poll(async () => (await page.locator('canvas').boundingBox())?.height)
+      .toBeGreaterThan(840);
+    const before = await page.locator('.location-card').innerText();
+    await page.getByRole('button', { name: 'Walk east', exact: true }).tap();
+    await expect(page.locator('.location-card')).not.toHaveText(before);
+  }
+  await page.screenshot({ path: `test-results/live-${info.project.name}-city.png` });
+  expect(errors).toEqual([]);
+});

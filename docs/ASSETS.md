@@ -1,57 +1,21 @@
-# Atheriam — Assets
+# Atheriam — Assets and provenance
 
-Every image, sound and font used in the game is recorded here, with its
-licence. This is not paperwork for its own sake: the rule in `docs/SPEC.md`
-section 12 is that an asset with an unknown or NonCommercial licence is never
-used, and this file is how we prove it.
+Updated 2026-09-12. V1.0 uses original art generated for Atheriam with the built-in imagegen tool, plus original code-native terrain and UI pictograms. No Habbo, Tibia or other commercial-game artwork is included. Research references are documented in `DESIGN_V1_PLAN.md`; they are not shipping assets.
 
-## The rule, in plain words
+| Files under `apps/client/public/art/`                                                                                                                                                                     | Creator / source                                               | Usage and provenance                                                             | Added      |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------------------------- | ---------- |
+| `resident-source.png`                                                                                                                                                                                     | OpenAI imagegen, original Atheriam prompt                      | Generated for this project; prompt and edits in [ART_PROMPTS.md](ART_PROMPTS.md) | 2026-09-12 |
+| `resident-ponytail-source.png`                                                                                                                                                                            | OpenAI imagegen, edit of the original resident                 | Same project source; original appearance variant                                 | 2026-09-12 |
+| `resident-curly-source.png`                                                                                                                                                                               | OpenAI imagegen, edit of the original resident                 | Same project source; original appearance variant                                 | 2026-09-12 |
+| `town-source.png`                                                                                                                                                                                         | OpenAI imagegen, original Atheriam object prompt               | Generated for this project; no external asset pack                               | 2026-09-12 |
+| `welcome.png`                                                                                                                                                                                             | OpenAI imagegen, original Atheriam village illustration        | Generated for this project; decorative entry illustration                        | 2026-09-12 |
+| `resident-0.png` through `resident-5.png`; `portrait-0.png` through `portrait-5.png`                                                                                                                      | Derived from the resident sources by the game's atlas pipeline | Aligned, chroma-keyed frames; three curated alternate dyes                       | 2026-09-12 |
+| `town.png`; `tree.png`, `well.png`, `stall.png`, `cottage.png`, `oak-stool.png`, `rush-mat.png`, `clay-lamp.png`, `long-table.png`, `wool-rug.png`, `copper-pin.png`, `river-stone.png`, `brass-bell.png` | Derived from `town-source.png` by the game's atlas pipeline    | Runtime atlas and previews of the same twelve original objects                   | 2026-09-12 |
 
-Before a file goes into the repository, write a row in the table below. It
-needs:
+The editable terrain recipe is `apps/client/src/game/terrainArt.ts`; it creates the small shared terrain atlas. UI pictograms are original SVG paths in `apps/client/src/ui/Icon.tsx`. Fonts are the user's installed system fonts and Georgia/Times fallback; no font files are distributed. No sound files are currently distributed.
 
-- the file, as a path in this repository;
-- who made it;
-- where it came from (a link);
-- the licence, which must allow **commercial use and modification**;
-- the date it was added.
+The generated PNGs are retained with their provenance; do not relabel them as hand-drawn human artwork or as CC0 stock assets. The welcome illustration is promotional scene art, not a screenshot of the game. The runtime city uses the documented tiles, objects and residents.
 
-If you cannot fill in all five, the file does not go in. There are no
-temporary exceptions and no placeholders "just for now".
+For future external assets, record file, author, original source URL, exact licence/usage terms and date before import. Commercial use and modification must be permitted. Keep required attribution discoverable from the game. Unknown and NonCommercial licences remain excluded. Paid packs must not be redistributed as stock source assets unless their terms explicitly permit that.
 
-Licences that are fine: CC0, CC-BY (with attribution given below), and anything
-made specifically for this project.
-Licences that are not: NonCommercial (NC), NoDerivatives (ND), "free for
-personal use", anything unlabelled, and anything taken from another game.
-
-## Assets in use
-
-| File         | Author | Source | Licence | Added |
-| ------------ | ------ | ------ | ------- | ----- |
-| _(none yet)_ |        |        |         |       |
-
-**The game uses no image files at all.** Every phase is finished and the
-table above is still empty, which is worth being plain about rather than
-quietly leaving a promise in a document.
-
-The whole world — ground, walls, water, trees, market stalls, furniture and
-the people themselves — is drawn with flat colours taken from the design
-tokens in `apps/client/src/tokens/tokens.ts`. The ground is painted at one
-pixel per tile and scaled up, which is only possible _because_ the tiles are
-flat colours (see D-056).
-
-That was a deliberate choice at the start — the game had to work before any
-art existed, and nothing could slip into the repository unrecorded — and it
-has held all the way through. It is also the honest state of things: the game
-is playable and it looks like coloured squares.
-
-Artwork is therefore the first thing to add that is not on the phase list.
-When it arrives:
-
-- the first row of the table above is written on the same day as the first
-  `.png`, with all five columns filled in;
-- `drawChunk` in `apps/client/src/game/WorldScene.ts` goes back to drawing at
-  full size, or to a tilemap, because the one-pixel-per-tile trick only works
-  for flat colour;
-- nothing is taken from, traced from or renamed out of another game, which is
-  a rule in `docs/SPEC.md` section 2 and not a preference.
+Reproduction commands and the final prompt set are in [ART_PROMPTS.md](ART_PROMPTS.md). Player-facing provenance is available at `/credits.html` from the login screen.

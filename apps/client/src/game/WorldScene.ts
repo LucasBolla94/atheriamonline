@@ -14,15 +14,13 @@
  * darkness, because that is honestly what the client knows about it.
  */
 import Phaser from 'phaser';
-import {
-  CHUNK_SIZE_TILES,
-  MIN_STEP_INTERVAL_MS,
-  TILE_SIZE_PX,
-  type Direction,
-} from '@atheriam/shared';
+import { MIN_STEP_INTERVAL_MS, TILE_SIZE_PX, type Direction } from '@atheriam/shared';
 import type { PlayerView, WorldInfo } from '@atheriam/protocol';
 import { colorTokens, fontFamilyTokens, fontSizeTokens, spaceTokens } from '../tokens/tokens.js';
 import type { HeldChunk, WorldConnection } from '../net/connection.js';
+import { prepareArt, PROP_NAMES } from './art.js';
+import { terrainAtlas, terrainIndex } from './terrainArt.js';
+import { strings } from '../ui/strings.js';
 
 /** How quickly a character catches up with where the server says it is. */
 const MOVE_LERP_PER_MS = 0.012;
@@ -40,26 +38,6 @@ const BUBBLE_LIFETIME_MS = 6_000;
 /** How wide a bubble may get before the text wraps, in pixels. */
 const BUBBLE_WIDTH_PX = 180;
 
-/**
- * One colour per kind of ground, and a second, slightly different one so the
- * grid reads without drawing lines on it.
- */
-const TILE_COLORS: Readonly<Record<string, readonly [number, number]>> = {
-  '.': [colorTokens.tileGrass, colorTokens.tileGrassAlt],
-  ',': [colorTokens.tileRoad, colorTokens.tileRoadAlt],
-  p: [colorTokens.tilePavement, colorTokens.tilePavementAlt],
-  b: [colorTokens.tileBridge, colorTokens.tileBridgeAlt],
-  d: [colorTokens.tileFloor, colorTokens.tileFloorAlt],
-  '+': [colorTokens.tileDoor, colorTokens.tileDoor],
-  s: [colorTokens.tileShore, colorTokens.tileShoreAlt],
-  '#': [colorTokens.tileWall, colorTokens.tileWallAlt],
-  '~': [colorTokens.tileWater, colorTokens.tileWaterAlt],
-  T: [colorTokens.tileTree, colorTokens.tileTree],
-  F: [colorTokens.tileFence, colorTokens.tileFence],
-  M: [colorTokens.tileStall, colorTokens.tileStall],
-  W: [colorTokens.tileWell, colorTokens.tileWell],
-};
-
 const KEY_DIRECTIONS: ReadonlyArray<readonly [string, Direction]> = [
   ['W', 'n'],
   ['S', 's'],
@@ -74,6 +52,11 @@ const KEY_DIRECTIONS: ReadonlyArray<readonly [string, Direction]> = [
 /** One character on screen: its body, its name, and where it is heading. */
 interface Avatar {
   readonly container: Phaser.GameObjects.Container;
+  readonly sprite: Phaser.GameObjects.Sprite;
+  readonly label: Phaser.GameObjects.Text;
+  facing: string;
+  look: number;
+  walkTime: number;
   targetPx: { x: number; y: number };
   /** The speech bubble above this character, while they have one. */
   bubble: Phaser.GameObjects.Container | null;
@@ -89,7 +72,14 @@ interface Avatar {
  */
 export interface HouseScenery {
   /** What is standing in this house, if the player is in one. */
-  furniture: ReadonlyArray<{ id: string; name: string; x: number; y: number; rotation: number }>;
+  furniture: ReadonlyArray<{
+    id: string;
+    definitionId: string;
+    name: string;
+    x: number;
+    y: number;
+    rotation: number;
+  }>;
   /** Goes up whenever the furniture changes, so the scene redraws it. */
   revision: number;
   /**
@@ -113,10 +103,16 @@ export class WorldScene extends Phaser.Scene {
   private scenery!: HouseScenery;
   private drawnFurnitureRevision = -1;
   private drawnRealmRevision = -1;
-  private furniture: Phaser.GameObjects.Container | null = null;
+  private furniture: Phaser.GameObjects.Image[] = [];
+  private ready = false;
+  private groundMap!: Phaser.Tilemaps.Tilemap;
+  private tileset!: Phaser.Tilemaps.Tileset;
+  private props = new Map<string, Phaser.GameObjects.Image[]>();
+  private destination: Phaser.GameObjects.Graphics | null = null;
+  private reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   private avatars = new Map<string, Avatar>();
   /** One drawn square of ground per chunk we hold, by `cx:cy`. */
-  private chunkImages = new Map<string, Phaser.GameObjects.Image>();
+  private chunkImages = new Map<string, Phaser.Tilemaps.TilemapLayer>();
   /**
    * Chunks that have arrived but have not been drawn yet.
    *
@@ -144,12 +140,57 @@ export class WorldScene extends Phaser.Scene {
 
   create(): void {
     this.cameras.main.setBackgroundColor(colorTokens.tileUnknown);
-    this.setUpCamera();
-    this.setUpKeyboard();
-    this.setUpPointer();
+    const loading = this.add
+      .text(this.scale.width / 2, this.scale.height / 2, strings.hud.loadingArt, {
+        fontFamily: fontFamilyTokens.ui,
+        fontSize: `${fontSizeTokens.lg}px`,
+        color: toHex(colorTokens.accentText),
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(100000);
+    void prepareArt()
+      .then((art) => {
+        if (!this.sys.isActive()) return;
+        art.residents.forEach((canvas, i) => {
+          const key = `resident:${i}`;
+          if (!this.textures.exists(key)) {
+            const texture = this.textures.addCanvas(key, canvas)!;
+            for (let frame = 0; frame < 24; frame++)
+              texture.add(frame, 0, (frame % 6) * 32, Math.floor(frame / 6) * 48, 32, 48);
+          }
+        });
+        if (!this.textures.exists('town')) {
+          const texture = this.textures.addCanvas('town', art.props)!;
+          PROP_NAMES.forEach((name, i) =>
+            texture.add(name, 0, (i % 4) * 128, Math.floor(i / 4) * 128, 128, 128),
+          );
+        }
+        if (!this.textures.exists('terrain')) this.textures.addCanvas('terrain', terrainAtlas());
+        this.groundMap = this.make.tilemap({
+          tileWidth: 32,
+          tileHeight: 32,
+          width: 32,
+          height: 32,
+        });
+        this.tileset = this.groundMap.addTilesetImage('terrain', 'terrain', 32, 32)!;
+        this.setUpCamera();
+        this.setUpKeyboard();
+        this.setUpPointer();
+        this.scale.on(Phaser.Scale.Events.RESIZE, this.setUpCamera, this);
+        this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+          this.scale.off(Phaser.Scale.Events.RESIZE, this.setUpCamera, this);
+        });
+        this.ready = true;
+        loading.destroy();
+      })
+      .catch(() => {
+        if (this.sys.isActive()) loading.setText(strings.hud.artError);
+      });
   }
 
   override update(time: number, delta: number): void {
+    if (!this.ready) return;
     this.pollKeyboard();
     this.syncRealm();
     this.syncChunks();
@@ -173,8 +214,20 @@ export class WorldScene extends Phaser.Scene {
     if (world !== null) this.world = world;
     this.setUpCamera();
 
+    // Chunk coordinates can be identical in different realms. Never reuse city
+    // ground or scenery just because a house also has a chunk called 0:0.
+    for (const layer of this.chunkImages.values()) layer.destroy();
+    this.chunkImages.clear();
+    for (const props of this.props.values()) for (const prop of props) prop.destroy();
+    this.props.clear();
+    this.pendingChunks.length = 0;
+    this.drawnChunkRevision = -1;
+    this.destination?.destroy();
+    this.destination = null;
+
     for (const avatar of this.avatars.values()) {
       avatar.bubble?.destroy();
+      avatar.label.destroy();
       avatar.container.destroy();
     }
     this.avatars.clear();
@@ -201,9 +254,9 @@ export class WorldScene extends Phaser.Scene {
       for (const [key, image] of this.chunkImages) {
         if (this.connection.chunks.has(key)) continue;
         image.destroy();
-        // The texture goes with it: ground we have walked away from should not
-        // still be costing memory on a phone.
-        this.textures.remove(`chunk:${key}`);
+        // Dispose the chunk's tile layer and props; the small atlas is shared.
+        for (const prop of this.props.get(key) ?? []) prop.destroy();
+        this.props.delete(key);
         this.chunkImages.delete(key);
       }
     }
@@ -219,65 +272,66 @@ export class WorldScene extends Phaser.Scene {
     this.chunkImages.set(key, this.drawChunk(next));
   }
 
-  /**
-   * Draw one chunk, once, as one image.
-   *
-   * The trick here is the difference between a stutter and nothing at all.
-   *
-   * A chunk is 32x32 tiles and a tile is 32 pixels, so drawing it at full size
-   * means painting a million pixels — over a tenth of a second on a machine
-   * without a graphics card, which is a jolt every time somebody walks into
-   * new ground.
-   *
-   * But every tile is one flat colour. So the chunk is painted at **one pixel
-   * per tile** — a thousand pixels instead of a million — and then blown up
-   * thirty-two times. The renderer is in pixel-art mode, so it scales without
-   * smoothing: exactly the same squares, drawn a thousand times more cheaply.
-   */
-  private drawChunk(chunk: HeldChunk): Phaser.GameObjects.Image {
-    const key = chunkTextureKey(chunk);
-    if (this.textures.exists(key)) this.textures.remove(key);
+  /** Read neighbouring streamed ground when locating a multi-tile decoration. */
+  private tileAt(x: number, y: number): string {
+    const key = `${Math.floor(x / 32)}:${Math.floor(y / 32)}`;
+    return this.connection.chunks.get(key)?.rows[y % 32]?.[x % 32] ?? '';
+  }
 
-    const canvas = this.textures.createCanvas(key, CHUNK_SIZE_TILES, CHUNK_SIZE_TILES);
-    const context = canvas?.getContext() ?? null;
-
-    if (canvas !== null && canvas !== undefined && context !== null) {
-      const pixels = context.createImageData(CHUNK_SIZE_TILES, CHUNK_SIZE_TILES);
-      const originX = chunk.cx * CHUNK_SIZE_TILES;
-      const originY = chunk.cy * CHUNK_SIZE_TILES;
-
-      for (let y = 0; y < CHUNK_SIZE_TILES; y += 1) {
-        const row = chunk.rows[y];
-        for (let x = 0; x < CHUNK_SIZE_TILES; x += 1) {
-          // A chunk is always a full 32x32 square, so the one at an edge is
-          // padded with stone. Drawing that padding would put a slab of wall
-          // outside the world — very visible around a house, which is far
-          // smaller than a single chunk. Nothing is drawn there instead.
-          if (originX + x >= this.world.width || originY + y >= this.world.height) continue;
-
-          const char = row?.[x] ?? '#';
-          const pair = TILE_COLORS[char] ?? TILE_COLORS['#'];
-          const [base, alt] = pair ?? [colorTokens.tileUnknown, colorTokens.tileUnknown];
-          const colour = (x + y) % 2 === 0 ? base : alt;
-
-          const at = (y * CHUNK_SIZE_TILES + x) * 4;
-          pixels.data[at] = (colour >> 16) & 0xff;
-          pixels.data[at + 1] = (colour >> 8) & 0xff;
-          pixels.data[at + 2] = colour & 0xff;
-          pixels.data[at + 3] = 255;
-        }
+  private drawChunk(chunk: HeldChunk): Phaser.Tilemaps.TilemapLayer {
+    const ox = chunk.cx * 32,
+      oy = chunk.cy * 32;
+    const layer = this.groundMap.createBlankLayer(
+      `ground:${chunkKeyOf(chunk)}:${this.drawnRealmRevision}`,
+      this.tileset,
+      ox * 32,
+      oy * 32,
+      32,
+      32,
+    )!;
+    const tiles = chunk.rows.map((row, y) =>
+      [...row].map((char, x) =>
+        ox + x >= this.world.width || oy + y >= this.world.height
+          ? -1
+          : terrainIndex(char, ox + x, oy + y),
+      ),
+    );
+    layer.putTilesAt(tiles, 0, 0);
+    layer.setDepth(0);
+    const props: Phaser.GameObjects.Image[] = [];
+    const add = (name: string, x: number, y: number, w: number, h: number) => {
+      const image = this.add
+        .image(x, y, 'town', name)
+        .setOrigin(0.5, 124 / 128)
+        .setDisplaySize(w, h)
+        .setDepth(100 + y);
+      props.push(image);
+      return image;
+    };
+    for (let y = 0; y < 32; y++)
+      for (let x = 0; x < 32; x++) {
+        const char = chunk.rows[y]?.[x];
+        const tx = ox + x,
+          ty = oy + y;
+        if (char === 'T') add('tree', tx * 32 + 16, ty * 32 + 24, 80, 80);
+        if (char === 'W' && this.tileAt(tx + 1, ty) !== 'W' && this.tileAt(tx, ty + 1) !== 'W')
+          add('well', tx * 32, ty * 32 + 24, 88, 88);
+        if (char === 'M' && this.tileAt(tx - 1, ty) !== 'M' && this.tileAt(tx, ty + 1) !== 'M')
+          add('stall', (tx + 2.5) * 32, ty * 32 + 24, 164, 128);
       }
-
-      context.putImageData(pixels, 0, 0);
-      canvas.refresh();
-    }
-
-    const size = CHUNK_SIZE_TILES * TILE_SIZE_PX;
-    const image = this.add.image(chunk.cx * size, chunk.cy * size, key);
-    image.setOrigin(0, 0);
-    image.setScale(TILE_SIZE_PX);
-    image.setDepth(0);
-    return image;
+    // Original residential footprints retain their doors and walkable interiors.
+    // The building art fades when the local resident is behind it.
+    if (this.world.width === 128)
+      for (const startX of [28, 69])
+        for (const offset of [0, 10, 20])
+          for (const top of [70, 88]) {
+            const tx = startX + offset + 3,
+              ty = top + 3;
+            if (Math.floor(tx / 32) === chunk.cx && Math.floor(ty / 32) === chunk.cy)
+              add('cottage', (tx + 1) * 32, (top + 9) * 32, 256, 288);
+          }
+    this.props.set(chunkKeyOf(chunk), props);
+    return layer;
   }
 
   /**
@@ -317,6 +371,10 @@ export class WorldScene extends Phaser.Scene {
     }
 
     camera.setRoundPixels(true);
+    const self =
+      this.connection.playerId === null ? undefined : this.avatars.get(this.connection.playerId);
+    if (!this.roomFitsOnScreen && self !== undefined)
+      camera.startFollow(self.container, true, 0.15, 0.15);
   }
 
   // -- input --------------------------------------------------------------
@@ -350,7 +408,16 @@ export class WorldScene extends Phaser.Scene {
       // not asking to walk there.
       if (this.scenery.onTileClick?.(tile.x, tile.y) === true) return;
 
+      this.destination?.destroy();
+      this.destination = this.add.graphics().setDepth(1);
+      this.destination.lineStyle(2, colorTokens.accent, 0.8);
+      this.destination.strokeRoundedRect(tile.x * 32 + 4, tile.y * 32 + 4, 24, 24, 5);
       this.connection.walkTo(tile);
+      const marker = this.destination;
+      this.time.delayedCall(1600, () => {
+        marker.destroy();
+        if (this.destination === marker) this.destination = null;
+      });
     });
 
     // Pinch to zoom on a phone, wheel to zoom on a desktop. Both are clamped,
@@ -394,6 +461,13 @@ export class WorldScene extends Phaser.Scene {
    * flooding.
    */
   private pollKeyboard(): void {
+    const active = document.activeElement;
+    if (
+      active instanceof HTMLElement &&
+      (active.matches('input, textarea, select') || active.isContentEditable)
+    )
+      return;
+    if (document.querySelector('[role="dialog"]') !== null) return;
     const nowMs = this.time.now;
     if (nowMs - this.lastStepSentAtMs < MIN_STEP_INTERVAL_MS) return;
 
@@ -439,6 +513,8 @@ export class WorldScene extends Phaser.Scene {
 
     for (const [id, avatar] of this.avatars) {
       if (seen.has(id)) continue;
+      avatar.bubble?.destroy();
+      avatar.label.destroy();
       avatar.container.destroy();
       this.avatars.delete(id);
     }
@@ -450,37 +526,46 @@ export class WorldScene extends Phaser.Scene {
       y: view.y * TILE_SIZE_PX + TILE_SIZE_PX / 2,
     };
 
+    const look = view.appearance ?? 0;
     const existing = this.avatars.get(view.id);
     if (existing !== undefined) {
       existing.targetPx = targetPx;
+      existing.facing = view.facing;
+      if (existing.look !== look) {
+        existing.look = look;
+        existing.sprite.setTexture(`resident:${look}`, 1);
+      }
       return;
     }
-
     const container = this.add.container(targetPx.x, targetPx.y);
-    container.setDepth(isSelf ? 3 : 2);
-
-    const body = this.add.circle(
-      0,
-      0,
-      TILE_SIZE_PX * 0.34,
-      isSelf ? colorTokens.self : colorTokens.other,
-    );
-    body.setStrokeStyle(2, colorTokens.backdrop, 0.8);
-
-    const label = this.add.text(0, -TILE_SIZE_PX * 0.75, view.name, {
-      fontFamily: fontFamilyTokens.ui,
-      fontSize: `${fontSizeTokens.sm}px`,
-      color: toHex(isSelf ? colorTokens.accent : colorTokens.text),
+    const shadow = this.add.ellipse(0, 1, 23, 9, 0x263c2c, 0.24);
+    if (isSelf) shadow.setStrokeStyle(2, 0xffefb0, 0.95);
+    const sprite = this.add.sprite(0, 3, `resident:${look}`, 1).setOrigin(0.5, 44 / 48);
+    sprite.setScale(1.25);
+    const label = this.add
+      .text(targetPx.x, targetPx.y - 55, view.name, {
+        fontFamily: fontFamilyTokens.ui,
+        fontSize: `${fontSizeTokens.sm}px`,
+        color: toHex(colorTokens.accentText),
+        backgroundColor: toHex(isSelf ? colorTokens.accent : colorTokens.text),
+        padding: { x: spaceTokens.sm, y: spaceTokens.xs },
+      })
+      .setOrigin(0.5, 1)
+      .setDepth(20000);
+    container.add([shadow, sprite]);
+    this.avatars.set(view.id, {
+      container,
+      sprite,
+      label,
+      facing: view.facing,
+      look,
+      walkTime: 0,
+      targetPx,
+      bubble: null,
+      bubbleUntilMs: 0,
     });
-    label.setOrigin(0.5, 0.5);
-
-    container.add([body, label]);
-    this.avatars.set(view.id, { container, targetPx, bubble: null, bubbleUntilMs: 0 });
-
-    // Only in the city: a house is centred on screen and the camera stays put.
-    if (isSelf && !this.roomFitsOnScreen) {
-      this.cameras.main.startFollow(container, true, 0.12, 0.12);
-    }
+    if (isSelf && !this.roomFitsOnScreen)
+      this.cameras.main.startFollow(container, true, 0.15, 0.15);
   }
 
   // -- furniture ----------------------------------------------------------
@@ -488,47 +573,32 @@ export class WorldScene extends Phaser.Scene {
   /**
    * Draw what is standing in the house.
    *
-   * Furniture is drawn as a plain block with its name on it, for the same
-   * reason the ground is drawn as flat colour: no picture enters this
-   * repository before `docs/ASSETS.md` can record its licence. The shape is
-   * turned by its rotation, so turning something is visible.
+   * Furniture uses the original prop atlas. Floor coverings rotate flat on
+   * the ground; upright props use mirrored and narrow side representations.
    */
   private syncFurniture(): void {
     if (this.scenery.revision === this.drawnFurnitureRevision) return;
     this.drawnFurnitureRevision = this.scenery.revision;
 
-    this.furniture?.destroy();
-    this.furniture = null;
-    if (this.scenery.furniture.length === 0) return;
-
-    const container = this.add.container(0, 0);
-    container.setDepth(1);
-
+    for (const piece of this.furniture) piece.destroy();
+    this.furniture = [];
     for (const piece of this.scenery.furniture) {
-      const centreX = piece.x * TILE_SIZE_PX + TILE_SIZE_PX / 2;
-      const centreY = piece.y * TILE_SIZE_PX + TILE_SIZE_PX / 2;
-
-      const block = this.add.rectangle(
-        centreX,
-        centreY,
-        TILE_SIZE_PX * 0.8,
-        TILE_SIZE_PX * 0.6,
-        colorTokens.tileFloor,
-      );
-      block.setStrokeStyle(2, colorTokens.accent, 0.9);
-      block.setAngle(piece.rotation);
-
-      const label = this.add.text(centreX, centreY - TILE_SIZE_PX * 0.55, piece.name, {
-        fontFamily: fontFamilyTokens.ui,
-        fontSize: `${fontSizeTokens.sm}px`,
-        color: toHex(colorTokens.textMuted),
-      });
-      label.setOrigin(0.5, 0.5);
-
-      container.add([block, label]);
+      const name = PROP_NAMES.find((key) => key === piece.definitionId) ?? 'oak-stool';
+      const flat = name === 'rush-mat' || name === 'wool-rug';
+      const x = piece.x * 32 + 16,
+        y = piece.y * 32 + 24;
+      const image = this.add
+        .image(x, y, 'town', name)
+        .setOrigin(0.5, flat ? 0.5 : 124 / 128)
+        .setDisplaySize(32, 32);
+      if (flat) image.setAngle(piece.rotation);
+      else {
+        image.setFlipX(piece.rotation === 180 || piece.rotation === 270);
+        if (piece.rotation === 90 || piece.rotation === 270) image.setDisplaySize(24, 32);
+      }
+      image.setDepth(flat ? 1 : 100 + y);
+      this.furniture.push(image);
     }
-
-    this.furniture = container;
   }
 
   // -- speech -------------------------------------------------------------
@@ -587,11 +657,12 @@ export class WorldScene extends Phaser.Scene {
     );
     background.setStrokeStyle(1, colorTokens.border, 1);
 
-    const bubble = this.add.container(avatar.container.x, avatar.container.y - TILE_SIZE_PX, [
+    const bubble = this.add.container(avatar.container.x, avatar.container.y - 78, [
       background,
       label,
     ]);
-    bubble.setDepth(5);
+    bubble.setDepth(30000);
+    bubble.setSize(background.width, background.height);
 
     avatar.bubble = bubble;
     avatar.bubbleUntilMs = nowMs + BUBBLE_LIFETIME_MS;
@@ -604,23 +675,80 @@ export class WorldScene extends Phaser.Scene {
    * last snapshot said; this just stops it teleporting ten times a second.
    */
   private easeAvatars(deltaMs: number): void {
-    const t = Math.min(1, MOVE_LERP_PER_MS * deltaMs);
+    const t = this.reducedMotion ? 1 : Math.min(1, MOVE_LERP_PER_MS * deltaMs);
     for (const avatar of this.avatars.values()) {
       const { container, targetPx } = avatar;
-      const dx = targetPx.x - container.x;
-      const dy = targetPx.y - container.y;
-      if (Math.abs(dx) < SNAP_DISTANCE_PX && Math.abs(dy) < SNAP_DISTANCE_PX) {
+      const dx = targetPx.x - container.x,
+        dy = targetPx.y - container.y;
+      const moving = Math.abs(dx) >= SNAP_DISTANCE_PX || Math.abs(dy) >= SNAP_DISTANCE_PX;
+      if (moving) {
+        container.setPosition(container.x + dx * t, container.y + dy * t);
+        avatar.walkTime += deltaMs;
+      } else {
         container.setPosition(targetPx.x, targetPx.y);
-        continue;
+        avatar.walkTime = 0;
       }
-      container.setPosition(container.x + dx * t, container.y + dy * t);
+      const direction = avatar.facing.startsWith('n')
+        ? 3
+        : avatar.facing.startsWith('s')
+          ? 0
+          : avatar.facing === 'w'
+            ? 1
+            : 2;
+      avatar.sprite.setFrame(direction * 6 + (moving ? Math.floor(avatar.walkTime / 100) % 6 : 1));
+      container.setDepth(100 + container.y);
+      avatar.label.setPosition(Math.round(container.x), Math.round(container.y - 51));
+      avatar.bubble?.setPosition(Math.round(container.x), Math.round(container.y - 78));
     }
-
-    // A bubble belongs to a character, so it follows them rather than hanging
-    // in the air where they were standing when they spoke.
+    // Stack nearby nameplates without shifting the resident or their shadow.
+    const labels: Phaser.GameObjects.Text[] = [];
+    for (const avatar of [...this.avatars.values()].sort((a, b) => a.container.y - b.container.y)) {
+      let y = avatar.label.y;
+      for (const other of labels.slice(-10)) {
+        if (
+          Math.abs(avatar.label.x - other.x) < (avatar.label.width + other.width) / 2 + 4 &&
+          Math.abs(y - other.y) < 20
+        )
+          y = other.y - 21;
+      }
+      avatar.label.y = y;
+      labels.push(avatar.label);
+    }
+    // Speech stays above nearby nameplates, and later bubbles stack above it.
+    const occupied = labels.map((label) => ({
+      x: label.x,
+      width: label.width,
+      top: label.y - label.height,
+      bottom: label.y,
+    }));
     for (const avatar of this.avatars.values()) {
-      avatar.bubble?.setPosition(avatar.container.x, avatar.container.y - TILE_SIZE_PX);
+      const bubble = avatar.bubble;
+      if (bubble === null) continue;
+      let bottom = avatar.label.y - avatar.label.height - spaceTokens.sm;
+      for (let pass = 0; pass <= occupied.length; pass++) {
+        const obstacle = occupied.find(
+          (rect) =>
+            Math.abs(bubble.x - rect.x) < (bubble.width + rect.width) / 2 + spaceTokens.xs &&
+            bottom > rect.top - spaceTokens.sm &&
+            bottom - bubble.height < rect.bottom + spaceTokens.sm,
+        );
+        if (obstacle === undefined) break;
+        bottom = obstacle.top - spaceTokens.sm;
+      }
+      bubble.y = bottom - spaceTokens.xs;
+      occupied.push({ x: bubble.x, width: bubble.width, top: bottom - bubble.height, bottom });
     }
+    const self =
+      this.connection.playerId === null ? undefined : this.avatars.get(this.connection.playerId);
+    if (self !== undefined)
+      for (const props of this.props.values())
+        for (const prop of props) {
+          const covers =
+            Math.abs(prop.x - self.container.x) < prop.displayWidth * 0.4 &&
+            self.container.y < prop.y &&
+            self.container.y > prop.y - prop.displayHeight;
+          prop.setAlpha(covers ? 0.38 : 1);
+        }
   }
 }
 
@@ -630,9 +758,4 @@ function toHex(value: number): string {
 
 function chunkKeyOf(chunk: HeldChunk): string {
   return `${chunk.cx}:${chunk.cy}`;
-}
-
-/** The name the drawn ground of one chunk is stored under. */
-function chunkTextureKey(chunk: HeldChunk): string {
-  return `chunk:${chunkKeyOf(chunk)}`;
 }

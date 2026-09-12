@@ -366,3 +366,37 @@ describe('rate limiting', () => {
     }
   });
 });
+
+describe('saved resident appearances', () => {
+  it('requires a login before changing a look', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/me/appearance',
+      payload: { appearance: 2 },
+    });
+    expect(response.statusCode).toBe(401);
+  });
+
+  it('saves only a catalogue appearance on the authenticated character', async () => {
+    const created = await app.inject({ method: 'POST', url: '/api/auth/register', payload: GOOD });
+    const cookies = { [SESSION_COOKIE]: sessionCookie(created)! };
+    for (const appearance of [-1, 6, 1.5, '2']) {
+      const refused = await app.inject({
+        method: 'POST',
+        url: '/api/me/appearance',
+        cookies,
+        payload: { appearance },
+      });
+      expect(refused.statusCode).toBe(400);
+    }
+    const saved = await app.inject({
+      method: 'POST',
+      url: '/api/me/appearance',
+      cookies,
+      payload: { appearance: 5, characterId: 'somebody-else' },
+    });
+    expect(saved.statusCode).toBe(200);
+    const me = await app.inject({ method: 'GET', url: '/api/me', cookies });
+    expect(me.json().character).toMatchObject({ name: GOOD.characterName, appearance: 5 });
+  });
+});

@@ -17,7 +17,12 @@ function apiBase(): string {
 
 export type ApiResult<T> = { ok: true; data: T } | { ok: false; error: string; message: string };
 
+export function setAppearance(appearance: number): Promise<ApiResult<{ appearance: number }>> {
+  return request('/api/me/appearance', { method: 'POST', body: JSON.stringify({ appearance }) });
+}
+
 export interface CharacterSummary {
+  readonly appearance?: number;
   readonly name: string;
   readonly x?: number;
   readonly y?: number;
@@ -69,6 +74,7 @@ export interface RegisterInput {
   readonly password: string;
   readonly dateOfBirth: string;
   readonly characterName: string;
+  readonly appearance?: number;
   readonly confirmsAdult: true;
 }
 

@@ -150,6 +150,13 @@ export class WorldServer {
     return typeof address === 'object' && address !== null ? address.port : 0;
   }
 
+  setAppearance(characterId: string, appearance: number): void {
+    for (const connection of this.connections.values()) {
+      if (connection.playerId === characterId)
+        this.worldOf(connection).setAppearance(characterId, appearance);
+    }
+  }
+
   /** Start the simulation loop. */
   start(): void {
     this.tickTimer = setInterval(() => this.onTick(), TICK_MS);
@@ -643,7 +650,7 @@ export class WorldServer {
  * answered without comparing whole objects ten times a second.
  */
 function signatureOf(player: PlayerView): string {
-  return `${player.x},${player.y},${player.facing}`;
+  return `${player.x},${player.y},${player.facing},${player.appearance ?? 0}`;
 }
 
 /**
@@ -659,6 +666,7 @@ function carriedState(player: PlayerState): JoiningCharacter {
     x: player.x,
     y: player.y,
     facing: player.facing,
+    appearance: player.appearance,
     mutedUntilMs: player.mutedUntilMs,
     blocked: [...player.blocked],
   };

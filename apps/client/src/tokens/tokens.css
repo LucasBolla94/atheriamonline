@@ -7,15 +7,15 @@
 
 :root {
   /* colour */
-  --color-backdrop: #14110f;
-  --color-surface: #241f1b;
-  --color-surface-raised: #342c26;
-  --color-border: #4a3f36;
-  --color-text: #f2e9dd;
-  --color-text-muted: #a89880;
-  --color-accent: #c9a227;
-  --color-accent-text: #1a1510;
-  --color-danger: #b4472e;
+  --color-backdrop: #edf0e2;
+  --color-surface: #fff9ed;
+  --color-surface-raised: #eee8d8;
+  --color-border: #d3ccb8;
+  --color-text: #334735;
+  --color-text-muted: #68745d;
+  --color-accent: #386b50;
+  --color-accent-text: #fff9ed;
+  --color-danger: #ac453a;
 
   /* spacing */
   --space-xs: 4px;
@@ -35,4 +35,35 @@
   --radius-sm: 4px;
   --radius-md: 8px;
   --radius-pill: 999px;
+}
+
+:root {
+  --color-ink: #233e32;
+  --color-paper: #fff9ed;
+  --color-gold: #e5b66a;
+  --color-gold-dark: #96743d;
+  --color-hero-shade: #142e26;
+  --color-leaf: #6e8c5b;
+  --font-family-display: Georgia, 'Times New Roman', serif;
+  --font-size-hero: clamp(40px, 5.5vw, 78px);
+  --font-size-title: 32px;
+  --font-size-caption: 11px;
+  --space-xxl: 56px;
+  --radius-lg: 20px;
+  --auth-max: 1380px;
+  --auth-form: 440px;
+  --shadow-panel: 0 12px 40px #243e3226;
+  --shadow-button: 0 3px 0 #244c37;
+  --control-height: 46px;
+  --portrait-size: 56px;
+  --mobile-location-reserve: 142px;
+  --chat-max: 360px;
+  --touch-size: 44px;
+  --mobile-hero-height: 190px;
+  --mobile-chat-reserve: 165px;
+  --font-size-input-touch: 16px;
+  --chat-landscape-max: 320px;
+  --chat-landscape-height: 90px;
+  --touch-landscape-bottom: 90px;
+  --dock-landscape-height: 50px;
 }

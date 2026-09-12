@@ -8,7 +8,48 @@
  */
 export const strings = {
   appName: 'Atheriam',
-  tagline: 'A city that only exists while people are in it.',
+  tagline: 'A little world. A place of your own.',
+  welcome: {
+    eyebrow: 'A MEDIEVAL SOCIAL WORLD',
+    title: 'Good company.\nGrand little adventures.',
+    description:
+      'Wander the cobbled streets, find your people, and make a little corner of the world your own.',
+    explore: 'Explore the town',
+    talk: 'Meet your neighbours',
+    decorate: 'Make yourself at home',
+    footer: 'Made for slow afternoons & new friendships.',
+    version: 'V1.0 · A new chapter',
+    loginTitle: 'Welcome home.',
+    createTitle: 'Your story starts here.',
+    loginCopy: 'The square is waiting. Come on in.',
+    createCopy: 'A new face. A new home. A whole town to meet.',
+    world: 'Crown Square',
+    market: 'Market Quarter',
+    park: 'Willow Park',
+    neighbourhood: 'The Neighbourhood',
+    town: 'Atheriam town',
+    online: 'Live world',
+    lookNames: [
+      'River blue',
+      'Autumn coral',
+      'Market gold',
+      'Forest green',
+      'Heather violet',
+      'Evening blue',
+    ],
+    look: 'Your look',
+    chooseLook: 'Choose your look',
+    saveLook: 'Wear this look',
+    lookHelp: 'A little more you. Your neighbours will see your new look.',
+    lookSaved: 'Your new look is saved.',
+    credits: 'Art & credits',
+    controls: 'Walk',
+    north: 'Walk north',
+    south: 'Walk south',
+    west: 'Walk west',
+    east: 'Walk east',
+    portraitHint: 'Tap a path to explore. Open chat to say hello.',
+  },
 
   auth: {
     createTab: 'Create an account',
@@ -60,6 +101,8 @@ export const strings = {
   } as Record<string, string>,
 
   hud: {
+    loadingArt: 'Opening the town gates…',
+    artError: 'The artwork could not load. Please refresh to try again.',
     connecting: 'Connecting…',
     joining: 'Entering the city…',
     playersNearby: (count: number): string =>

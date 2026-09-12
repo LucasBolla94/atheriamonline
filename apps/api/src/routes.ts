@@ -8,7 +8,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { eq } from 'drizzle-orm';
-import { accounts } from '@atheriam/db';
+import { accounts, characters } from '@atheriam/db';
 import { DEFAULT_SPAWN_TILE } from '@atheriam/shared';
 import { displayNameSchema } from '@atheriam/protocol';
 import type { Database } from '@atheriam/db';
@@ -93,6 +93,7 @@ const registerBody = z.object({
   password: z.string().min(MIN_PASSWORD_LENGTH).max(MAX_PASSWORD_LENGTH),
   dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use the form YYYY-MM-DD.'),
   characterName: displayNameSchema,
+  appearance: z.number().int().min(0).max(5).default(0),
   /** The person must tick a box saying they are an adult. */
   confirmsAdult: z.literal(true),
 });
@@ -221,6 +222,7 @@ export async function registerRoutes(app: FastifyInstance, options: RouteOptions
       password: parsed.data.password,
       dateOfBirth: parsed.data.dateOfBirth,
       characterName: parsed.data.characterName,
+      appearance: parsed.data.appearance,
       spawn: DEFAULT_SPAWN,
     });
 
@@ -290,6 +292,22 @@ export async function registerRoutes(app: FastifyInstance, options: RouteOptions
     return reply.clearCookie(SESSION_COOKIE, { path: '/' }).send({ ok: true });
   });
 
+  app.post('/api/me/appearance', async (request, reply) => {
+    const who = await requirePlayer(request, reply);
+    if (who === null) return reply;
+    const parsed = z.object({ appearance: z.number().int().min(0).max(5) }).safeParse(request.body);
+    if (!parsed.success)
+      return reply
+        .code(400)
+        .send({ error: 'invalid-appearance', message: 'Choose one of the available looks.' });
+    await db
+      .update(characters)
+      .set({ appearance: parsed.data.appearance })
+      .where(eq(characters.id, who.character.id));
+    await world.appearance(who.character.id, parsed.data.appearance);
+    return { appearance: parsed.data.appearance };
+  });
+
   app.get('/api/me', async (request, reply) => {
     const session = await currentSession(request.cookies[SESSION_COOKIE]);
     if (session === null) {
@@ -302,7 +320,12 @@ export async function registerRoutes(app: FastifyInstance, options: RouteOptions
     }
 
     return reply.send({
-      character: { name: character.name, x: character.x, y: character.y },
+      character: {
+        name: character.name,
+        x: character.x,
+        y: character.y,
+        appearance: character.appearance,
+      },
     });
   });
 

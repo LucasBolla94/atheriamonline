@@ -74,6 +74,11 @@ export const leaveHouseCommandSchema = z.object({
 });
 
 export const worldCommandSchema = z.discriminatedUnion('t', [
+  z.object({
+    t: z.literal('appearance'),
+    characterId: characterIdSchema,
+    appearance: z.number().int().min(0).max(5),
+  }),
   kickCommandSchema,
   muteCommandSchema,
   blockCommandSchema,

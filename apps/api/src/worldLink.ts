@@ -15,6 +15,7 @@ import type { Redis } from 'ioredis';
 import { WORLD_COMMAND_CHANNEL, type WorldCommand } from '@atheriam/protocol';
 
 export interface WorldLink {
+  appearance(characterId: string, appearance: number): Promise<void>;
   kick(characterId: string, reason: 'kicked' | 'banned'): Promise<void>;
   mute(characterId: string, untilMs: number | null): Promise<void>;
   block(blockerId: string, blockedId: string, blocked: boolean): Promise<void>;
@@ -39,6 +40,7 @@ export function redisWorldLink(redis: Redis, onError?: (error: unknown) => void)
   }
 
   return {
+    appearance: (characterId, appearance) => publish({ t: 'appearance', characterId, appearance }),
     kick: (characterId, reason) => publish({ t: 'kick', characterId, reason }),
     mute: (characterId, untilMs) => publish({ t: 'mute', characterId, untilMs }),
     block: (blockerId, blockedId, blocked) =>
@@ -52,6 +54,7 @@ export function redisWorldLink(redis: Redis, onError?: (error: unknown) => void)
 /** A link that goes nowhere, for tests and for running the API on its own. */
 export function silentWorldLink(): WorldLink {
   return {
+    appearance: async () => Promise.resolve(),
     kick: async () => Promise.resolve(),
     mute: async () => Promise.resolve(),
     block: async () => Promise.resolve(),

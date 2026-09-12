@@ -1,3 +1,4 @@
+import { ItemArt } from './Art.js';
 /**
  * Your own four walls: who may come in, and what is standing in them.
  *
@@ -144,6 +145,7 @@ export function HousePanel({
         <ul className="pouch__list">
           {house.contents.map((item) => (
             <li key={item.id} className="pouch__item">
+              <ItemArt id={item.definitionId} />
               <strong>{item.name}</strong>
               <span className="pouch__muted">{strings.house.at(item.x, item.y)}</span>
               {house.yours && (

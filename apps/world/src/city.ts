@@ -212,11 +212,15 @@ function drawHomes(canvas: Canvas): void {
   for (const originX of [28, 69]) {
     // The lane between the two rows.
     canvas.fill({ x0: originX - 2, y0: 83, x1: originX + 30, y1: 84 }, ',');
+    canvas.fill({ x0: originX - 2, y0: 97, x1: originX + 30, y1: 98 }, ',');
 
     for (const offset of [0, 10, 20]) {
       const x0 = originX + offset;
       drawHouse(canvas, { x0, y0: 70, x1: x0 + 7, y1: 78 }, 's');
-      drawHouse(canvas, { x0, y0: 88, x1: x0 + 7, y1: 96 }, 'n');
+      // Both rows use south-facing cottage artwork. Keep the walkable door
+      // under the visible front steps, with paths connecting it to a lane.
+      drawHouse(canvas, { x0, y0: 88, x1: x0 + 7, y1: 96 }, 's');
+      canvas.fill({ x0: x0 + 3, y0: 79, x1: x0 + 4, y1: 82 }, ',');
     }
   }
 }
@@ -244,6 +248,23 @@ function plantGrid(canvas: Canvas, rect: Rect): void {
   }
 }
 
+/** Small planted islands break up the square while leaving broad social paths. */
+function drawSquareGardens(canvas: Canvas): void {
+  for (const [cx, cy] of [
+    [56, 58],
+    [71, 58],
+    [56, 70],
+    [71, 67],
+  ]) {
+    if (cx === undefined || cy === undefined) continue;
+    for (let y = cy - 1; y <= cy + 1; y++)
+      for (let x = cx - 1; x <= cx + 1; x++) {
+        if (canvas.at(x, y) === 'p') canvas.set(x, y, '.');
+      }
+    if (canvas.at(cx, cy) === '.') canvas.set(cx, cy, 'T');
+  }
+}
+
 /** Draw the whole district and hand back its rows. */
 export function buildStarterDistrict(): string[] {
   const canvas = new Canvas(CITY_SIZE_TILES, CITY_SIZE_TILES, '.');
@@ -254,5 +275,6 @@ export function buildStarterDistrict(): string[] {
   drawMarket(canvas);
   drawHomes(canvas);
   drawOrchards(canvas);
+  drawSquareGardens(canvas);
   return canvas.toRows();
 }

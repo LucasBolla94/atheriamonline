@@ -17,6 +17,7 @@ export interface RegisterInput {
   /** `YYYY-MM-DD`. */
   readonly dateOfBirth: string;
   readonly characterName: string;
+  readonly appearance?: number;
   /** Where a brand new character is placed. */
   readonly spawn: { readonly x: number; readonly y: number };
 }
@@ -85,6 +86,7 @@ export async function register(db: Database, input: RegisterInput): Promise<Regi
           accountId: account.id,
           name: input.characterName.trim(),
           nameNormalised,
+          appearance: input.appearance ?? 0,
           x: input.spawn.x,
           y: input.spawn.y,
         })

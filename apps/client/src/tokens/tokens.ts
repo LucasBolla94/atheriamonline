@@ -14,21 +14,21 @@
 /** Colours, as the numbers Phaser needs. */
 export const colorTokens = {
   /** The page behind everything. */
-  backdrop: 0x14110f,
+  backdrop: 0xedf0e2,
   /** Panels and dialogs. */
-  surface: 0x241f1b,
-  surfaceRaised: 0x342c26,
+  surface: 0xfff9ed,
+  surfaceRaised: 0xeee8d8,
   /** The line around a panel. */
-  border: 0x4a3f36,
+  border: 0xd3ccb8,
   /** Ordinary text. */
-  text: 0xf2e9dd,
+  text: 0x334735,
   /** Text that matters less. */
-  textMuted: 0xa89880,
+  textMuted: 0x68745d,
   /** The kingdom's colour, used for anything the player should act on. */
-  accent: 0xc9a227,
-  accentText: 0x1a1510,
+  accent: 0x386b50,
+  accentText: 0xfff9ed,
   /** Something went wrong. */
-  danger: 0xb4472e,
+  danger: 0xac453a,
 
   // World tiles: one colour per kind of ground, matching the alphabet in
   // `@atheriam/shared`. These are flat colours, not artwork — no image enters
@@ -55,10 +55,10 @@ export const colorTokens = {
   tileStall: 0x8c4a3a,
   tileWell: 0x4a4440,
   /** Ground we have not been sent. Drawn as the night outside the walls. */
-  tileUnknown: 0x0d0b0a,
+  tileUnknown: 0x526c51,
 
   /** Your own character. */
-  self: 0xc9a227,
+  self: 0x386b50,
   /** Everyone else. */
   other: 0xd8d2c8,
 } as const;
