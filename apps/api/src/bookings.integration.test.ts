@@ -1,5 +1,13 @@
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { sql } from 'drizzle-orm';
+import { Redis } from 'ioredis';
+import type { FastifyInstance } from 'fastify';
+import { buildServer } from './server.js';
+import { readConfig } from './config.js';
+import { SessionStore } from './auth/sessions.js';
+import { SESSION_COOKIE } from './routes.js';
+import { silentWorldLink } from './worldLink.js';
+import { testRedisUrl } from '../../../test/integration-setup.js';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { eq, sql } from 'drizzle-orm';
 import {
   accounts,
   characters,
@@ -200,5 +208,204 @@ describe('lounge reservations', () => {
     ]);
     await inviteToBooking(db, host, id, guest, false, now);
     expect((await loungeSchedule(db, guest, now)).bookings).toEqual([]);
+  });
+});
+
+describe('booking HTTP routes', () => {
+  let app: FastifyInstance;
+  const redis = new Redis(testRedisUrl());
+  const nudges: string[] = [];
+  beforeEach(() => {
+    nudges.length = 0;
+  });
+  beforeAll(async () => {
+    app = await buildServer({
+      db,
+      redis,
+      world: {
+        ...silentWorldLink(),
+        enterBooking: async (characterId, id) => {
+          nudges.push(`enter:${characterId}:${id}`);
+        },
+        recheckBooking: async (id) => {
+          nudges.push(`recheck:${id}`);
+        },
+      },
+      config: readConfig({
+        NODE_ENV: 'test',
+        DATABASE_URL: testDatabaseUrl(),
+        REDIS_URL: testRedisUrl(),
+        PUBLIC_ORIGIN: 'http://localhost:5173',
+        SESSION_SECRET: 'b'.repeat(64),
+        GENERAL_RATE_LIMIT_PER_MINUTE: '10000',
+        AUTH_RATE_LIMIT_PER_MINUTE: '10000',
+      }),
+    });
+  });
+  afterAll(async () => {
+    await app.close();
+    redis.disconnect();
+  });
+  async function cookieFor(id: string) {
+    const character = (await db.select().from(characters).where(eq(characters.id, id)))[0]!;
+    const token = await new SessionStore(redis).create({
+      accountId: character.accountId,
+      characterId: id,
+    });
+    return { [SESSION_COOKIE]: token };
+  }
+  async function active(host: string) {
+    const result = await reserveRoom(db, host, input());
+    if (!result.ok) throw new Error(result.reason);
+    return result.data.id;
+  }
+
+  it('requires a logged-in resident for every booking action', async () => {
+    const id = '30000000-0000-4000-8000-000000000001';
+    for (const route of [
+      { method: 'GET' as const, url: '/api/lounge' },
+      { method: 'POST' as const, url: '/api/lounge/bookings' },
+      ...['cancel', 'invitations', 'enter'].map((action) => ({
+        method: 'POST' as const,
+        url: `/api/lounge/bookings/${id}/${action}`,
+      })),
+    ])
+      expect((await app.inject(route)).statusCode).toBe(401);
+    expect(nudges).toEqual([]);
+  });
+
+  it('creates and replays a reserve-now request without moving its time or duplicating it', async () => {
+    const host = await player('Host'),
+      cookies = await cookieFor(host);
+    const route = {
+      method: 'POST' as const,
+      url: '/api/lounge/bookings',
+      cookies,
+      payload: input(),
+    };
+    const first = await app.inject(route),
+      second = await app.inject(route);
+    expect(first.statusCode).toBe(201);
+    expect(second.statusCode).toBe(200);
+    expect(second.json()).toEqual({ ...first.json(), alreadyDone: true });
+    const schedule = (await app.inject({ method: 'GET', url: '/api/lounge', cookies })).json();
+    expect(schedule.bookings).toHaveLength(1);
+    expect(schedule.bookings[0]).toMatchObject({
+      id: first.json().id,
+      title: input().title,
+      yours: true,
+    });
+    expect(
+      Date.parse(schedule.bookings[0].endsAt) - Date.parse(schedule.bookings[0].startsAt),
+    ).toBe(30 * minute);
+    expect(schedule.rooms.map((room: { capacity: number }) => room.capacity)).toEqual([8, 12, 16]);
+  });
+
+  it('validates timezone, duration, identity fields and seven-day horizon on the server', async () => {
+    const cookies = await cookieFor(await player('Host'));
+    for (const change of [
+      { startsAt: '2030-01-01T12:00' },
+      { startsAt: 'bad' },
+      { durationMinutes: 45 },
+      { capacity: 999 },
+      { hostId: 'someone-else' },
+      { title: '' },
+      { startsAt: new Date(Date.now() + 8 * 86400_000).toISOString() },
+    ]) {
+      const result = await app.inject({
+        method: 'POST',
+        url: '/api/lounge/bookings',
+        cookies,
+        payload: { ...input(), ...change },
+      });
+      expect(result.statusCode).toBe(400);
+    }
+    expect(await db.select().from(loungeBookings)).toHaveLength(0);
+    const future = new Date(Date.now() + 3600_000).toISOString();
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/api/lounge/bookings',
+          cookies,
+          payload: { ...input(), startsAt: future },
+        })
+      ).statusCode,
+    ).toBe(201);
+  });
+
+  it('returns useful conflicts for occupied rooms and a full host agenda', async () => {
+    const host = await player('Host'),
+      other = await player('Other');
+    const cookies = await cookieFor(host);
+    await active(host);
+    const conflict = await app.inject({
+      method: 'POST',
+      url: '/api/lounge/bookings',
+      cookies: await cookieFor(other),
+      payload: input(),
+    });
+    expect(conflict.statusCode).toBe(409);
+    expect(conflict.json().error).toBe('room-unavailable');
+    const create = (roomId: string) =>
+      app.inject({
+        method: 'POST',
+        url: '/api/lounge/bookings',
+        cookies,
+        payload: { ...input(), roomId, requestKey: `request-${roomId}` },
+      });
+    expect((await create('terrace')).statusCode).toBe(201);
+    const full = await create('boardroom');
+    expect(full.statusCode).toBe(409);
+    expect(full.json().error).toBe('booking-limit');
+  });
+
+  it('protects invitations, hides private details, and nudges live access after revocation', async () => {
+    const host = await player('Host'),
+      guest = await player('Guest'),
+      outsider = await player('Outsider');
+    const hostCookie = await cookieFor(host),
+      guestCookie = await cookieFor(guest),
+      otherCookie = await cookieFor(outsider);
+    const id = await active(host),
+      url = `/api/lounge/bookings/${id}/invitations`;
+    const change = (cookies: Record<string, string>, invited: boolean) =>
+      app.inject({ method: 'POST', url, cookies, payload: { name: 'guest', invited } });
+    expect((await change(otherCookie, true)).statusCode).toBe(403);
+    expect((await change(hostCookie, true)).statusCode).toBe(200);
+    expect(nudges).toEqual([`recheck:${id}`]);
+    const agenda = async (cookies: Record<string, string>) =>
+      (await app.inject({ method: 'GET', url: '/api/lounge', cookies })).json();
+    expect((await agenda(hostCookie)).bookings[0].guests).toEqual(['Guest']);
+    expect((await agenda(guestCookie)).bookings[0]).toMatchObject({ id, yours: false, guests: [] });
+    const publicView = await agenda(otherCookie);
+    expect(publicView.bookings).toEqual([]);
+    expect(Object.keys(publicView.occupied[0]).sort()).toEqual(['endsAt', 'roomId', 'startsAt']);
+    expect(JSON.stringify(publicView)).not.toContain(input().title);
+    expect((await change(hostCookie, false)).statusCode).toBe(200);
+    expect((await agenda(guestCookie)).bookings).toEqual([]);
+    expect(nudges).toEqual([`recheck:${id}`, `recheck:${id}`]);
+  });
+
+  it('only requests entry for active invited residents and removes everyone on host cancellation', async () => {
+    const host = await player('Host'),
+      guest = await player('Guest');
+    const cookies = await cookieFor(host),
+      guestCookie = await cookieFor(guest),
+      id = await active(host);
+    const enter = (who: Record<string, string>) =>
+      app.inject({ method: 'POST', url: `/api/lounge/bookings/${id}/enter`, cookies: who });
+    expect((await enter(guestCookie)).statusCode).toBe(403);
+    await inviteToBooking(db, host, id, guest, true);
+    expect((await enter(guestCookie)).statusCode).toBe(202);
+    expect(nudges).toEqual([`enter:${guest}:${id}`]);
+    const cancel = (who: Record<string, string>) =>
+      app.inject({ method: 'POST', url: `/api/lounge/bookings/${id}/cancel`, cookies: who });
+    expect((await cancel(guestCookie)).statusCode).toBe(403);
+    expect((await cancel(cookies)).statusCode).toBe(200);
+    expect((await cancel(cookies)).statusCode).toBe(200);
+    expect(nudges.slice(1)).toEqual([`recheck:${id}`, `recheck:${id}`]);
+    expect((await enter(cookies)).statusCode).toBe(403);
+    expect((await enter(guestCookie)).statusCode).toBe(403);
   });
 });

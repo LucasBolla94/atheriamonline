@@ -25,6 +25,7 @@ export interface HousePanelProps {
   readonly onUnwelcome: (name: string) => void;
   readonly onLeave: () => void;
   readonly onShop?: () => void;
+  readonly onMeetings?: () => void;
   readonly onClose: () => void;
 }
 
@@ -46,6 +47,7 @@ export function HousePanel({
   onUnwelcome,
   onLeave,
   onShop,
+  onMeetings,
   onClose,
 }: HousePanelProps): JSX.Element {
   const furniture = inventory.filter((item) => item.kind === 'furniture');
@@ -190,6 +192,11 @@ export function HousePanel({
 
         {notice !== null && <p className="notice notice--quiet">{notice}</p>}
 
+        {onMeetings && (
+          <button type="button" className="button" disabled={busy} onClick={onMeetings}>
+            {strings.lounge.title}
+          </button>
+        )}
         {onShop && (
           <button type="button" className="button" disabled={busy} onClick={onShop}>
             {strings.shop.open}

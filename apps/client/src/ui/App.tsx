@@ -1,3 +1,5 @@
+import { LoungePanel } from './LoungePanel.js';
+import { LOUNGE_ROOMS } from '@atheriam/shared';
 import { ShopPanel } from './ShopPanel.js';
 import { CityPanel } from './CityPanel.js';
 /**
@@ -68,6 +70,14 @@ export function App(): JSX.Element {
   const [tradeBusy, setTradeBusy] = useState(false);
   const [interior, setInterior] = useState<api.InteriorView | null>(null);
   const [house, setHouse] = useState<api.HouseView | null>(null);
+  const [loungeOpen, setLoungeOpen] = useState(false);
+  const [schedule, setSchedule] = useState<api.LoungeSchedule | null>(null);
+  const [loungeLoading, setLoungeLoading] = useState(false);
+  const [loungeError, setLoungeError] = useState<string | null>(null);
+  const [meeting, setMeeting] = useState<WorldConnection['booking']>(null);
+  const [meetingNow, setMeetingNow] = useState(Date.now());
+  const serverClockOffset = useRef(0);
+  const loungeReadVersion = useRef(0);
   const [shopOpen, setShopOpen] = useState(false);
   const [shopItems, setShopItems] = useState<readonly api.ShopItem[]>([]);
   const [shopLoading, setShopLoading] = useState(false);
@@ -175,6 +185,9 @@ export function App(): JSX.Element {
         if (about === 'trade') refreshTradeRef.current?.();
       },
       onRealm: (which, houseId, propertyId) => {
+        setMeeting(connectionRef.current?.booking ?? null);
+        setLoungeOpen(false);
+        loungeReadVersion.current += 1;
         setShopOpen(false);
         setShopItems([]);
         shopReadVersion.current += 1;
@@ -210,6 +223,10 @@ export function App(): JSX.Element {
         else if (reason === 'too-chatty') setChatNotice(strings.chat.tooChatty);
       },
       onClosed: (reason) => {
+        setMeeting(null);
+        setLoungeOpen(false);
+        setSchedule(null);
+        loungeReadVersion.current += 1;
         setShopOpen(false);
         setHousePanelOpen(false);
         setInterior(null);
@@ -283,6 +300,75 @@ export function App(): JSX.Element {
       if (carried.ok) setItems(carried.data.items);
     })();
   }, []);
+
+  const refreshLounge = useCallback(async () => {
+    const version = ++loungeReadVersion.current;
+    const connection = connectionRef.current;
+    const result = await api.loungeSchedule();
+    if (
+      version !== loungeReadVersion.current ||
+      connectionRef.current !== connection ||
+      connection?.currentState !== 'playing'
+    )
+      return;
+    setLoungeLoading(false);
+    setLoungeError(result.ok ? null : result.message);
+    if (result.ok) {
+      setSchedule(result.data);
+      serverClockOffset.current = Date.parse(result.data.now) - Date.now();
+      setMeetingNow(Date.now() + serverClockOffset.current);
+    }
+  }, []);
+  useEffect(() => {
+    if (!playing || (!loungeOpen && !meeting)) return;
+    const clock = window.setInterval(
+      () => setMeetingNow(Date.now() + serverClockOffset.current),
+      1000,
+    );
+    let running = false;
+    const poll = window.setInterval(() => {
+      if (running) return;
+      running = true;
+      void refreshLounge().finally(() => {
+        running = false;
+      });
+    }, 4000);
+    return () => {
+      window.clearInterval(clock);
+      window.clearInterval(poll);
+    };
+  }, [playing, loungeOpen, meeting, refreshLounge]);
+  const openLounge = () => {
+    connectionRef.current?.stop();
+    setHousePanelOpen(false);
+    setLoungeOpen(true);
+    setLoungeLoading(true);
+    setLoungeError(null);
+    void refreshLounge();
+  };
+  const loungeAction = async (action: () => Promise<api.ApiResult<unknown>>) => {
+    loungeReadVersion.current += 1;
+    const result = await action();
+    loungeReadVersion.current += 1;
+    await refreshLounge();
+    return result;
+  };
+  const enterMeeting = async (id: string): Promise<api.ApiResult<unknown>> => {
+    const connection = connectionRef.current;
+    connection?.stop();
+    const result = await api.enterMeeting(id);
+    if (!result.ok) return result;
+    const deadline = Date.now() + 10_000;
+    while (
+      Date.now() < deadline &&
+      connectionRef.current === connection &&
+      connection?.currentState === 'playing'
+    ) {
+      if (connection.booking?.id === id) return result;
+      await new Promise((resolve) => window.setTimeout(resolve, 100));
+    }
+    return { ok: false, error: 'entry-unconfirmed', message: strings.lounge.enterFailed };
+  };
 
   const refreshShop = useCallback(async (id: string) => {
     const revision = ++shopReadVersion.current;
@@ -756,7 +842,16 @@ export function App(): JSX.Element {
           touch={touch}
           purse={purse?.display ?? null}
           indoors={indoors}
-          {...(interior ? { environmentName: interior.name } : {})}
+          {...(meeting
+            ? {
+                environmentName:
+                  LOUNGE_ROOMS.find((room) => room.id === meeting.roomId)?.name ??
+                  strings.lounge.title,
+                leaveLabel: strings.lounge.back,
+              }
+            : interior
+              ? { environmentName: interior.name }
+              : {})}
           onGoHome={() => {
             void (indoors ? api.leaveHouse() : api.goHome());
           }}
@@ -856,6 +951,41 @@ export function App(): JSX.Element {
           onClose={() => setPouchOpen(false)}
         />
       )}
+      {meeting && playing && !loungeOpen && (
+        <div className="meeting-status">
+          <p role="status">
+            {meeting.endsAt - meetingNow <= 5 * 60_000
+              ? strings.lounge.endWarning(
+                  Math.max(0, Math.ceil((meeting.endsAt - meetingNow) / 60_000)),
+                )
+              : strings.lounge.ends(
+                  new Date(meeting.endsAt).toLocaleTimeString(undefined, {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  }),
+                )}
+          </p>
+          <button type="button" className="hud__button" onClick={openLounge}>
+            {strings.lounge.title}
+          </button>
+        </div>
+      )}
+      {loungeOpen && playing && (
+        <LoungePanel
+          schedule={schedule}
+          now={meetingNow}
+          loading={loungeLoading}
+          error={loungeError}
+          canEnter={meeting === null}
+          onReserve={(input) => loungeAction(() => api.reserveMeeting(input))}
+          onInvite={(id, name, invited) =>
+            loungeAction(() => api.meetingInvitation(id, name, invited))
+          }
+          onCancel={(id) => loungeAction(() => api.cancelMeeting(id))}
+          onEnter={enterMeeting}
+          onClose={() => setLoungeOpen(false)}
+        />
+      )}
       {shopOpen && interior && (
         <ShopPanel
           name={interior.name}
@@ -881,6 +1011,12 @@ export function App(): JSX.Element {
           house={house}
           {...(interior ? { title: interior.name } : {})}
           accessInGuide={interior !== null}
+          {...(interior &&
+          properties.some(
+            (property) => property.id === interior.id && property.address?.id === 'central-lounge',
+          )
+            ? { onMeetings: openLounge }
+            : {})}
           {...(interior && !interior.municipal
             ? {
                 onShop: () => {
@@ -956,7 +1092,7 @@ export function App(): JSX.Element {
           onClose={() => setHousePanelOpen(false)}
         />
       )}
-      {indoors && !housePanelOpen && !shopOpen && (
+      {indoors && !meeting && !housePanelOpen && !shopOpen && !loungeOpen && (
         <button
           type="button"
           className="hud__button house__reopen"

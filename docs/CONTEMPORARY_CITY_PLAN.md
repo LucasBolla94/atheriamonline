@@ -269,3 +269,44 @@ The HTTP booking routes, agenda/invitation interface, expiry warning and ordinar
 multi-player browser flow are still pending. The world now understands meeting
 commands, but the public product does not yet expose booking controls. No live
 deployment has been made, and the overall contemporary release remains open.
+
+## Meeting agenda and invitations milestone (2026-09-12)
+
+The public lounge now opens a Meeting rooms panel. Residents can reserve now or
+choose a local date/time, inspect room capacity and occupied intervals, and see
+the meetings they host or are invited to. Hosts manage named invitations and
+confirm cancellation. These controls remain reachable from inside a meeting.
+Entry waits for the actual world realm confirmation; an HTTP request by itself
+never displays a successful entrance. The room displays its end time and switches
+to a warning during the final five minutes. Server clock offset drives the UI;
+the world remains authoritative for admission and expiry. See D-071.
+
+Authenticated HTTP routes expose the agenda, creation, invitations, cancellation
+and entry. The server supplies the host identity, validates durations/timezones
+and the seven-day window, binds retries, hides private meeting details from other
+residents, and nudges live permission checks after invitation/cancellation changes.
+Six new HTTP integration cases cover authentication, retries, invalid/spoofed
+fields, conflicts, agenda privacy, entry authorization and cancellation nudges.
+All 171 integration tests and 303 unit tests passed, as did typecheck, lint and
+the production build.
+
+The ordinary two-resident browser flow passed on desktop (3.3 minutes including
+startup) and mobile landscape (1.7 minutes): enter the lounge, reserve a room,
+invite, confirm guest visibility, enter, keep chat private from the lounge, talk
+together, revoke the guest, invite again, and cancel with both returning to the
+lounge. Product actions use the actual interface, without fixture booking edits.
+The desktop run uses the visible chat send button after a keyboard-completion
+observation timeout; message delivery itself had occurred. The final passing
+flow retains 15-second assertions and action deadlines.
+
+Captured desktop and mobile screens are kept in docs/design/contemporary. The
+rooms are still bare and resident art still needs the contemporary redesign.
+The initial mobile review identified an oversized central meeting notice; its
+layout was moved to the top and the return label shortened to Lounge. The final
+mobile rerun passed in 1.9 minutes, with an added full-viewport/top-quarter check
+for the notice. Its updated captures were visually inspected; the final UI files
+also passed lint.
+The browser suite still needs explicit future-time/expiry-warning/deadline and
+reconnect scenarios as part of the final release regression. Public furnishings,
+social animations, remaining visual work and backed-up live deployment are also
+pending. This milestone has not been deployed and does not complete the goal.

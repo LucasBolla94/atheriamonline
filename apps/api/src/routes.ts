@@ -1,3 +1,4 @@
+import { registerBookingRoutes } from './bookingRoutes.js';
 import { registerShopRoutes } from './shopRoutes.js';
 import { registerInteriorRoutes } from './interiorRoutes.js';
 import { registerPropertyRoutes } from './propertyRoutes.js';
@@ -254,6 +255,7 @@ export async function registerRoutes(app: FastifyInstance, options: RouteOptions
   registerPropertyRoutes(app, { db, world, requirePlayer });
   registerInteriorRoutes(app, { db, world, requirePlayer });
   registerShopRoutes(app, { db, world, requirePlayer });
+  registerBookingRoutes(app, { db, world, requirePlayer });
 
   /** Is the database awake? Used by Docker, by Caddy and by us. */
   app.get('/api/health', async () => {

@@ -888,3 +888,16 @@ places are full, the guest returns to their saved outdoor position instead.
 The existing global connection limit reserves that outdoor place. Protocol v9
 carries the reservation identity and end timestamp to the browser. The API routes
 and booking UI are a following milestone; this does not publish reservations yet.
+
+## D-071 — Meeting controls stay beside the lounge and use local time
+
+Residents open the agenda from Central Lounge. Its public availability lists
+room/time intervals; hosts and invitees see their meetings, and only hosts see
+and edit the guest list. The creation form explicitly labels future input as
+local time and sends an ISO timestamp with timezone. Reserve-now sends null so
+server time remains authoritative and its retry key stays bound to one intent.
+The interface refreshes invitations while open and uses the server clock offset
+for entry availability and the five-minute expiry notice. Entering is complete
+only after the world socket confirms the reservation realm. Hosts can manage
+invitations and cancel from inside their meeting too. Cancellation asks for a
+second click; the server then returns all occupants to the lounge.

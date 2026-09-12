@@ -21,6 +21,7 @@ export interface HudProps {
   /** True when the player is inside a house rather than out in the city. */
   readonly indoors: boolean;
   readonly environmentName?: string;
+  readonly leaveLabel?: string;
   readonly onOpenPouch: () => void;
   readonly onGoHome: () => void;
   readonly onLogOut: () => void;
@@ -38,6 +39,7 @@ export function Hud({
   purse,
   indoors,
   environmentName,
+  leaveLabel,
   onOpenPouch,
   onGoHome,
   onLogOut,
@@ -79,7 +81,7 @@ export function Hud({
         </button>
         <button type="button" className="hud__button" onClick={onGoHome}>
           <Icon name="home" />
-          <span>{indoors ? strings.house.leave : strings.house.goHome}</span>
+          <span>{indoors ? (leaveLabel ?? strings.house.leave) : strings.house.goHome}</span>
         </button>
         <button type="button" className="hud__button" onClick={onAppearance}>
           <Icon name="shirt" />

@@ -485,3 +485,50 @@ export function buyShopItem(
     body: JSON.stringify({ requestKey }),
   });
 }
+
+export interface LoungeBooking {
+  id: string;
+  roomId: string;
+  title: string;
+  startsAt: string;
+  endsAt: string;
+  yours: boolean;
+  guests: string[];
+}
+export interface LoungeSchedule {
+  rooms: { id: string; name: string; capacity: number }[];
+  occupied: { roomId: string; startsAt: string; endsAt: string }[];
+  bookings: LoungeBooking[];
+  now: string;
+}
+export interface ReservationRequest {
+  roomId: string;
+  title: string;
+  startsAt: string | null;
+  durationMinutes: number;
+  requestKey: string;
+}
+export function loungeSchedule(): Promise<ApiResult<LoungeSchedule>> {
+  return request('/api/lounge');
+}
+export function reserveMeeting(
+  input: ReservationRequest,
+): Promise<ApiResult<{ id: string; alreadyDone: boolean }>> {
+  return request('/api/lounge/bookings', { method: 'POST', body: JSON.stringify(input) });
+}
+export function cancelMeeting(id: string): Promise<ApiResult<{ cancelled: true }>> {
+  return request(`/api/lounge/bookings/${id}/cancel`, { method: 'POST' });
+}
+export function meetingInvitation(
+  id: string,
+  name: string,
+  invited: boolean,
+): Promise<ApiResult<{ invited: boolean }>> {
+  return request(`/api/lounge/bookings/${id}/invitations`, {
+    method: 'POST',
+    body: JSON.stringify({ name, invited }),
+  });
+}
+export function enterMeeting(id: string): Promise<ApiResult<{ requested: true; id: string }>> {
+  return request(`/api/lounge/bookings/${id}/enter`, { method: 'POST' });
+}
