@@ -113,6 +113,7 @@ export interface WorldServerOptions {
   }) => Promise<void>;
   /** Injectable clock, so tests do not depend on the wall clock. */
   readonly now?: () => number;
+  readonly heartbeatIntervalMs?: number;
   /** Read-only authorization; rechecked while visitors remain inside. */
   readonly canEnterProperty?: (characterId: string, propertyId: string) => Promise<boolean>;
 }
@@ -125,6 +126,7 @@ export class WorldServer {
   /** The same connections, found by the character playing on them. */
   private readonly byPlayer = new Map<string, Connection>();
   private readonly now: () => number;
+  private readonly heartbeatIntervalMs: number;
   private readonly resolveTicket: WorldServerOptions['resolveTicket'];
   private readonly savePosition: WorldServerOptions['savePosition'];
   private readonly canEnterProperty: (characterId: string, propertyId: string) => Promise<boolean>;
@@ -137,6 +139,7 @@ export class WorldServer {
     this.realms = new Realms(options.world);
     this.canEnterProperty = options.canEnterProperty ?? (async () => false);
     this.now = options.now ?? (() => Date.now());
+    this.heartbeatIntervalMs = options.heartbeatIntervalMs ?? HEARTBEAT_INTERVAL_MS;
     this.resolveTicket = options.resolveTicket;
     this.savePosition = options.savePosition;
     this.wss = new WebSocketServer({ host: options.host, port: options.port });
@@ -174,7 +177,7 @@ export class WorldServer {
   /** Start the simulation loop. */
   start(): void {
     this.tickTimer = setInterval(() => this.onTick(), TICK_MS);
-    this.heartbeatTimer = setInterval(() => this.onHeartbeat(), HEARTBEAT_INTERVAL_MS);
+    this.heartbeatTimer = setInterval(() => this.onHeartbeat(), this.heartbeatIntervalMs);
   }
 
   /** Stop cleanly: tell everyone why, then close. */
@@ -215,6 +218,10 @@ export class WorldServer {
     socket.on('message', (data) => this.onMessage(connection, String(data)));
     socket.on('pong', () => {
       connection.alive = true;
+      // Reading, decorating and waiting for friends are normal social play.
+      // A healthy joined browser stays connected without movement/chat intents.
+      // Unauthenticated sockets still have a deadline to present a ticket.
+      if (connection.playerId !== null) connection.lastMessageAtMs = this.now();
     });
     socket.on('close', () => this.onClose(connection));
     socket.on('error', () => this.onClose(connection));

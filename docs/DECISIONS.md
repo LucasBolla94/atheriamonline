@@ -837,3 +837,15 @@ The game entry retains direct module loading, which also avoids delaying its
 initial authentication behind a React lazy boundary on slower devices.
 **Cost to change:** Public/account links and deployment routing must retain both
 entry points. Browser game tests now begin at `/play/`.
+
+## D-067 — Quiet residents remain connected
+
+The two-player business browser test exposed a one-minute disconnect while a
+visitor waited for the owner to configure their venue. Game-intent inactivity
+is not evidence of a dead social session: reading, waiting and decorating are
+normal play. A joined socket's automatic WebSocket pong now refreshes its live
+connection timestamp. Missing heartbeats still disconnect dead browsers, and
+sockets that have not joined still have a deadline to provide their ticket.
+A real-socket regression advances beyond a minute without game intents and
+checks that the resident can still talk. This does not alter money, permissions
+or capacity limits.

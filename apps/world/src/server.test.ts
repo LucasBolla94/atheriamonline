@@ -1001,3 +1001,49 @@ describe('commercial interiors over real sockets', () => {
     expect(server.occupiedHouses).toBe(0);
   });
 });
+
+describe('quiet social sessions', () => {
+  let server: WorldServer;
+  let nowMs: number;
+  let tickets: FakeTickets;
+  const clients: TestClient[] = [];
+  beforeEach(async () => {
+    nowMs = Date.now();
+    tickets = new FakeTickets();
+    server = new WorldServer({
+      host: '127.0.0.1',
+      port: 0,
+      world: new World(openField),
+      resolveTicket: tickets.spend,
+      savePosition: tickets.save,
+      now: () => nowMs,
+      heartbeatIntervalMs: 25,
+    });
+    server.start();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  });
+  afterEach(async () => {
+    clients.forEach((client) => client.close());
+    clients.length = 0;
+    await server.stop();
+  });
+  it('keeps a healthy joined reader connected beyond a minute without game intents', async () => {
+    const client = await TestClient.connect(server.port);
+    clients.push(client);
+    client.send({ t: 'join', ticket: tickets.issue(character('reader', 'Reader')) });
+    await client.waitFor('snapshot');
+    for (let step = 0; step < 8; step++) {
+      nowMs += 10_000;
+      await new Promise((resolve) => setTimeout(resolve, 75));
+    }
+    expect(client.latest('bye')).toBeUndefined();
+    client.send({ t: 'say', seq: 1, text: 'I was reading' });
+    expect((await client.waitFor('chat')).text).toBe('I was reading');
+  });
+  it('still closes a socket that never presents its join ticket', async () => {
+    const client = await TestClient.connect(server.port);
+    clients.push(client);
+    nowMs += 70_000;
+    expect((await client.waitFor('bye')).reason).toBe('idle');
+  });
+});
