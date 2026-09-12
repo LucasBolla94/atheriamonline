@@ -11,6 +11,7 @@ export interface HudProps {
   readonly name: string;
   readonly appearance: number;
   readonly onAppearance: () => void;
+  readonly onCity: () => void;
   readonly x: number;
   readonly y: number;
   readonly nearbyCount: number;
@@ -28,6 +29,7 @@ export function Hud({
   name,
   appearance,
   onAppearance,
+  onCity,
   x,
   y,
   nearbyCount,
@@ -54,13 +56,11 @@ export function Hud({
           <strong>
             {indoors
               ? strings.house.title
-              : x >= 69 && y < 52
-                ? strings.welcome.market
-                : x < 61 && y < 61
-                  ? strings.welcome.park
-                  : y > 76
-                    ? strings.welcome.neighbourhood
-                    : strings.welcome.world}
+              : y >= 106
+                ? strings.welcome.park
+                : x < 39 || x > 120
+                  ? strings.welcome.neighbourhood
+                  : strings.welcome.world}
           </strong>
           <span className="hud__muted">{strings.hud.position(x, y)}</span>
         </div>
@@ -70,6 +70,10 @@ export function Hud({
           <Icon name="bag" />
           <span>{strings.pouch.open}</span>
           <small>{purse ?? '…'}</small>
+        </button>
+        <button type="button" className="hud__button" onClick={onCity}>
+          <Icon name="compass" />
+          <span>{strings.city.open}</span>
         </button>
         <button type="button" className="hud__button" onClick={onGoHome}>
           <Icon name="home" />

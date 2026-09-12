@@ -1,3 +1,4 @@
+import { CityPanel } from './CityPanel.js';
 /**
  * The whole interface, and the one place that owns the connection.
  *
@@ -82,6 +83,18 @@ export function App(): JSX.Element {
     const found = new URLSearchParams(window.location.search).get('reset');
     return found !== null && found.length >= 16 ? found : null;
   });
+  const [cityOpen, setCityOpen] = useState(false);
+  const [properties, setProperties] = useState<readonly api.PropertyView[]>([]);
+  const [cityLoading, setCityLoading] = useState(false);
+  const [cityError, setCityError] = useState<string | null>(null);
+  const refreshCity = useCallback(async () => {
+    setCityLoading(true);
+    setCityError(null);
+    const result = await api.cityProperties();
+    setCityLoading(false);
+    if (result.ok) setProperties(result.data.properties);
+    else setCityError(result.message);
+  }, []);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [appearanceBusy, setAppearanceBusy] = useState(false);
   const [appearanceError, setAppearanceError] = useState<string | null>(null);
@@ -456,6 +469,8 @@ export function App(): JSX.Element {
       setChat([]);
       setChosenPlayer(null);
       setPouchOpen(false);
+      setCityOpen(false);
+      setProperties([]);
       setPurse(null);
       setItems([]);
       setTrade(null);
@@ -523,6 +538,12 @@ export function App(): JSX.Element {
         <Hud
           name={you.name}
           appearance={you.appearance ?? 0}
+          onCity={() => {
+            connectionRef.current?.stop();
+            void refreshCity();
+            refreshPouch();
+            setCityOpen(true);
+          }}
           onAppearance={() => {
             setAppearanceError(null);
             setAppearanceOpen(true);
@@ -570,6 +591,35 @@ export function App(): JSX.Element {
               }
               setAppearanceOpen(false);
             });
+          }}
+        />
+      )}
+      {playing && cityOpen && (
+        <CityPanel
+          properties={properties}
+          loading={cityLoading}
+          error={cityError}
+          purse={purse?.display ?? null}
+          canLocate={!indoors}
+          onReload={() => {
+            void refreshCity();
+          }}
+          onClose={() => setCityOpen(false)}
+          onLocate={(property) => {
+            if (indoors) return;
+            connectionRef.current?.walkTo(property.address.entrance);
+            setCityOpen(false);
+          }}
+          onBuy={async (id, key) => {
+            const result = await api.buyProperty(id, key);
+            await refreshCity();
+            refreshPouch();
+            return result;
+          }}
+          onSave={async (id, settings) => {
+            const result = await api.configureBusiness(id, settings);
+            if (result.ok) await refreshCity();
+            return result;
           }}
         />
       )}

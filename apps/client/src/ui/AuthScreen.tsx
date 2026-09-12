@@ -56,7 +56,13 @@ export function AuthScreen({
   resetToken,
 }: AuthScreenProps): JSX.Element {
   const [appearance, setAppearance] = useState(0);
-  const [mode, setMode] = useState<AuthMode>(resetToken === null ? 'login' : 'reset');
+  const [mode, setMode] = useState<AuthMode>(
+    resetToken !== null
+      ? 'reset'
+      : new URLSearchParams(window.location.search).has('create')
+        ? 'create'
+        : 'login',
+  );
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [characterName, setCharacterName] = useState('');

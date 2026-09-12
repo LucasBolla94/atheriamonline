@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 async function join(page: Page, prefix: string) {
   const name = `${prefix}${Date.now().toString().slice(-8)}`;
-  await page.goto('/');
+  await page.goto('/play/');
   await page.getByRole('tab', { name: 'Create an account' }).click();
   await page.getByRole('button', { name: 'Autumn coral' }).click();
   await page.getByLabel('Email address').fill(`${name}@example.com`);
@@ -24,7 +24,7 @@ test('visual review: entry, city, saved looks and mobile portrait', async ({
   test.setTimeout(90_000);
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
-  await page.goto('/');
+  await page.goto('/play/');
   await page
     .locator('.welcome-art__image')
     .evaluate((image) => (image as HTMLImageElement).decode());

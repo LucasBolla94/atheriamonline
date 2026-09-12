@@ -346,3 +346,56 @@ export async function resetPassword(
 export async function worldTicket(): Promise<ApiResult<{ ticket: string }>> {
   return request('/api/world/ticket', { method: 'POST' });
 }
+
+export interface PropertyView {
+  readonly id: string;
+  readonly cityId: string;
+  readonly buildingId: string;
+  readonly municipal: boolean;
+  readonly owned: boolean;
+  readonly yours: boolean;
+  readonly price: string;
+  readonly priceDisplay: string;
+  readonly businessName: string;
+  readonly description: string;
+  readonly access: HouseView['access'];
+  readonly published: boolean;
+  readonly floorStyle: 'oak' | 'stone' | 'tile';
+  readonly wallStyle: 'cream' | 'teal' | 'rose';
+  readonly address: import('@atheriam/shared').CityBuilding;
+}
+
+export type BusinessSettings = Pick<
+  PropertyView,
+  'businessName' | 'description' | 'access' | 'published' | 'floorStyle' | 'wallStyle'
+>;
+
+export function cityProperties(): Promise<ApiResult<{ properties: PropertyView[] }>> {
+  return request('/api/city/properties');
+}
+
+export function buyProperty(
+  id: string,
+  requestKey: string,
+): Promise<
+  ApiResult<{
+    property: PropertyView;
+    receiptId: string;
+    alreadyDone: boolean;
+  }>
+> {
+  return request(`/api/properties/${id}/buy`, {
+    method: 'POST',
+    body: JSON.stringify({ requestKey }),
+  });
+}
+
+export function configureBusiness(
+  id: string,
+  settings: BusinessSettings,
+): Promise<ApiResult<{ property: PropertyView }>> {
+  return request(`/api/properties/${id}/settings`, {
+    method: 'POST',
+    body: JSON.stringify(settings),
+  });
+}

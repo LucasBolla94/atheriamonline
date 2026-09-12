@@ -67,3 +67,38 @@
   --touch-landscape-bottom: 90px;
   --dock-landscape-height: 50px;
 }
+
+:root {
+  --city-guide-width: 960px;
+  --city-building-preview-height: 128px;
+  --city-card-min: 230px;
+  --city-form-input-height: 44px;
+  --color-city-teal: #3d887f;
+  --color-city-coral: #cb6d59;
+  --color-city-blue: #5b81a1;
+  --color-city-sand: #b99558;
+  --color-city-lilac: #907ca8;
+}
+
+:root {
+  --landing-paper: #fcfaf5;
+  --landing-ink: #233c38;
+  --landing-muted: #5b6b65;
+  --landing-teal: #276e62;
+  --landing-coral: #be6650;
+  --landing-line: #dadfd3;
+  --landing-cream: #f4eedf;
+  --landing-mint: #e7efdf;
+  --landing-blush: #f4e6dd;
+  --landing-width: 1260px;
+  --landing-gutter: clamp(20px, 4vw, 56px);
+  --landing-section-gap: clamp(56px, 7vw, 100px);
+  --landing-copy-width: 920px;
+  --landing-text-width: 570px;
+  --landing-aside-width: 360px;
+  --landing-hero-size: clamp(44px, 6.5vw, 82px);
+  --landing-title-size: clamp(32px, 4vw, 48px);
+  --landing-art-height: clamp(300px, 43vw, 550px);
+  --landing-shop-height: 560px;
+  --landing-mobile-shop-height: 360px;
+}

@@ -15,7 +15,7 @@ const PASSWORD = 'correct horse battery staple';
 
 async function fillTheCreateForm(page: Page): Promise<string> {
   const name = unique('Pocket');
-  await page.goto('/');
+  await page.goto('/play/');
   await page.getByRole('tab', { name: 'Create an account' }).click();
   await page.getByLabel('Email address').fill(`${name.toLowerCase()}@example.com`);
   await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
@@ -44,7 +44,7 @@ test('the whole sign-up form can be reached on a short screen', async ({ page })
 });
 
 test('the page itself never scrolls sideways', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/play/');
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
   );
@@ -105,7 +105,7 @@ test('every button in a panel can be reached on a short screen', async ({ page }
 });
 
 test('every control can be reached with the keyboard alone', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/play/');
 
   // Tab through the form and check the focus actually lands on things, rather
   // than disappearing into the page.

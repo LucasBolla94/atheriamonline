@@ -44,10 +44,10 @@ atheriam.online {
 
 		# index.html must never be cached, or a player keeps yesterday's game
 		# pointing at today's server.
-		@entry path / /index.html
+		@entry path / /index.html /play /play/ /play/index.html
 		header @entry Cache-Control "no-cache"
 
-		try_files {path} /index.html
+		try_files {path} {path}/index.html /index.html
 		file_server
 	}
 

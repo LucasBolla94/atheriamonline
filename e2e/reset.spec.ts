@@ -25,7 +25,7 @@ async function createAccount(page: Page): Promise<NewPlayer> {
   const name = unique('Forgot');
   const email = `${name.toLowerCase()}@example.com`;
 
-  await page.goto('/');
+  await page.goto('/play/');
   await page.getByRole('tab', { name: 'Create an account' }).click();
   await page.getByLabel('Email address').fill(email);
   await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
@@ -153,6 +153,6 @@ test('a link that has already been used says so plainly', async ({ page }) => {
 });
 
 test('the way in is offered on the login form, not hidden', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/play/');
   await expect(page.getByRole('button', { name: 'I have forgotten my password' })).toBeVisible();
 });

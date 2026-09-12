@@ -18,7 +18,7 @@ async function createAccountAndEnter(page: Page): Promise<NewPlayer> {
   const name = unique('Aldric');
   const email = `${name.toLowerCase()}@example.com`;
 
-  await page.goto('/');
+  await page.goto('/play/');
   await page.getByRole('tab', { name: 'Create an account' }).click();
   await page.getByLabel('Email address').fill(email);
   await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
@@ -40,7 +40,7 @@ async function readPosition(page: Page): Promise<{ x: number; y: number }> {
 }
 
 test('the page loads and offers a way in', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/play/');
   await expect(page.getByRole('heading', { name: 'Atheriam' })).toBeVisible();
   await expect(page.getByRole('tab', { name: 'Log in' })).toBeVisible();
   await expect(page.getByText('You must be 18 or over')).toBeVisible();
@@ -48,7 +48,7 @@ test('the page loads and offers a way in', async ({ page }) => {
 
 test('somebody under 18 cannot create an account', async ({ page }) => {
   const name = unique('Child');
-  await page.goto('/');
+  await page.goto('/play/');
   await page.getByRole('tab', { name: 'Create an account' }).click();
   await page.getByLabel('Email address').fill(`${name.toLowerCase()}@example.com`);
   await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
@@ -62,7 +62,7 @@ test('somebody under 18 cannot create an account', async ({ page }) => {
 });
 
 test('a short password is refused before it is even sent', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/play/');
   await page.getByRole('tab', { name: 'Create an account' }).click();
   await page.getByLabel('Email address').fill('someone@example.com');
   await page.getByLabel('Password', { exact: true }).fill('short');
@@ -134,7 +134,7 @@ test('the same character name cannot be registered twice', async ({ page, browse
 
   const second = await browser.newPage();
   try {
-    await second.goto('/');
+    await second.goto('/play/');
     await second.getByRole('tab', { name: 'Create an account' }).click();
     await second.getByLabel('Email address').fill(`other-${player.email}`);
     await second.getByLabel('Password', { exact: true }).fill(PASSWORD);
@@ -181,7 +181,7 @@ test('a returning player does not have to log in again', async ({ page }) => {
 });
 
 test('the city cannot be entered without an account', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/play/');
   await expect(page.locator('canvas')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Enter the city' })).toBeVisible();
 });

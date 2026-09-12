@@ -17,7 +17,7 @@ const ADULT_BIRTHDAY = '1990-05-04';
 async function createAccountAndEnter(page: Page): Promise<string> {
   const name = unique('Talker');
 
-  await page.goto('/');
+  await page.goto('/play/');
   await page.getByRole('tab', { name: 'Create an account' }).click();
   await page.getByLabel('Email address').fill(`${name.toLowerCase()}@example.com`);
   await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
