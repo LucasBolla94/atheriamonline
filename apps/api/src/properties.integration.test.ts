@@ -1,3 +1,6 @@
+import { decorateInterior, mayEnterProperty, setPropertyGuest, viewInterior } from './interiors.js';
+import { ensureCatalogue, createItemFor, inventoryOf } from './items.js';
+import { itemInstances } from '@atheriam/db';
 import { Redis } from 'ioredis';
 import type { FastifyInstance } from 'fastify';
 import { buildServer } from './server.js';
@@ -66,7 +69,7 @@ async function address(buildingId = 'west-1') {
 
 beforeEach(async () => {
   await db.execute(
-    sql`TRUNCATE accounts, characters, cities, properties, property_purchases, transfers, ledger_entries CASCADE`,
+    sql`TRUNCATE accounts, characters, cities, properties, property_purchases, transfers, ledger_entries, item_instances CASCADE`,
   );
   await ensureCityProperties(db);
 });
@@ -392,5 +395,188 @@ describe('property HTTP routes', () => {
         })
       ).statusCode,
     ).toBe(400);
+  });
+});
+
+describe('business interiors and decoration', () => {
+  beforeEach(async () => {
+    await ensureCatalogue(db);
+  });
+  async function owned() {
+    const owner = await player('decorator');
+    const site = await address();
+    await buyProperty(db, owner, site.id, 'interior-key');
+    return { owner, site: (await propertyById(db, site.id))! };
+  }
+
+  it('opens municipal venues and denies unsold commercial interiors', async () => {
+    const visitor = await player('visitor');
+    expect((await viewInterior(db, (await address('central-lounge')).id, visitor)).ok).toBe(true);
+    expect(await viewInterior(db, (await address()).id, visitor)).toEqual({
+      ok: false,
+      reason: 'not-welcome',
+    });
+  });
+
+  it('enforces private, invited and public access and keeps guest lists private', async () => {
+    const { owner, site } = await owned();
+    const visitor = await player('invited');
+    expect(await mayEnterProperty(db, site, owner)).toBe(true);
+    expect(await mayEnterProperty(db, site, visitor)).toBe(false);
+    await setPropertyGuest(db, owner, site.id, visitor, true);
+    await configureBusiness(db, owner, site.id, {
+      businessName: 'Studio',
+      description: '',
+      access: 'welcomed',
+      published: false,
+      floorStyle: 'oak',
+      wallStyle: 'cream',
+    });
+    expect(await viewInterior(db, site.id, visitor)).toMatchObject({
+      ok: true,
+      data: { guests: [], yours: false },
+    });
+    expect(await viewInterior(db, site.id, owner)).toMatchObject({
+      ok: true,
+      data: { guests: ['invited'] },
+    });
+    await setPropertyGuest(db, owner, site.id, visitor, false);
+    expect(await viewInterior(db, site.id, visitor)).toEqual({ ok: false, reason: 'not-welcome' });
+    await configureBusiness(db, owner, site.id, {
+      businessName: 'Studio',
+      description: '',
+      access: 'everyone',
+      published: true,
+      floorStyle: 'tile',
+      wallStyle: 'teal',
+    });
+    expect(await viewInterior(db, site.id, visitor)).toMatchObject({
+      ok: true,
+      data: { floorStyle: 'tile', wallStyle: 'teal' },
+    });
+  });
+
+  it('refuses guest and furniture edits by a different resident', async () => {
+    const { owner, site } = await owned();
+    const stranger = await player('intruder');
+    const item = await createItemFor(db, 'oak-stool', owner);
+    expect(await setPropertyGuest(db, stranger, site.id, stranger, true)).toEqual({
+      ok: false,
+      reason: 'not-owner',
+    });
+    expect(
+      await decorateInterior(db, stranger, site.id, {
+        action: 'place',
+        itemId: item.id,
+        x: 3,
+        y: 3,
+        rotation: 0,
+      }),
+    ).toEqual({ ok: false, reason: 'not-owner' });
+    expect(await inventoryOf(db, owner)).toHaveLength(1);
+  });
+
+  it('moves one item repeatedly without copying it and retains rotation', async () => {
+    const { owner, site } = await owned();
+    const item = await createItemFor(db, 'oak-stool', owner);
+    for (let i = 0; i < 10; i++) {
+      expect(
+        (
+          await decorateInterior(db, owner, site.id, {
+            action: 'place',
+            itemId: item.id,
+            x: 3,
+            y: 3,
+            rotation: 0,
+          })
+        ).ok,
+      ).toBe(true);
+      expect(await inventoryOf(db, owner)).toHaveLength(0);
+      expect(
+        await decorateInterior(db, owner, site.id, {
+          action: 'rotate',
+          itemId: item.id,
+          rotation: 90,
+        }),
+      ).toMatchObject({ ok: true, data: [{ id: item.id, rotation: 90 }] });
+      expect(
+        (await decorateInterior(db, owner, site.id, { action: 'take', itemId: item.id })).ok,
+      ).toBe(true);
+      expect(await inventoryOf(db, owner)).toHaveLength(1);
+    }
+    expect(await db.select().from(itemInstances)).toHaveLength(1);
+    expect(await ledgerSum(db)).toBe(0n);
+  });
+
+  it('serializes competing placements so two items cannot occupy one tile', async () => {
+    const { owner, site } = await owned();
+    const a = await createItemFor(db, 'oak-stool', owner);
+    const b = await createItemFor(db, 'oak-stool', owner);
+    const results = await Promise.all(
+      [a, b].map((item) =>
+        decorateInterior(db, owner, site.id, {
+          action: 'place',
+          itemId: item.id,
+          x: 4,
+          y: 4,
+          rotation: 0,
+        }),
+      ),
+    );
+    expect(results.filter((r) => r.ok)).toHaveLength(1);
+    expect(results.filter((r) => !r.ok)).toEqual([{ ok: false, reason: 'tile-taken' }]);
+    expect(await inventoryOf(db, owner)).toHaveLength(1);
+    expect(await db.select().from(itemInstances)).toHaveLength(2);
+  });
+
+  it('never takes an item from another owner or another property', async () => {
+    const { owner, site } = await owned();
+    const stranger = await player('itemowner');
+    const item = await createItemFor(db, 'oak-stool', stranger);
+    expect(
+      await decorateInterior(db, owner, site.id, {
+        action: 'place',
+        itemId: item.id,
+        x: 2,
+        y: 2,
+        rotation: 0,
+      }),
+    ).toEqual({ ok: false, reason: 'not-your-item' });
+    expect(await decorateInterior(db, owner, site.id, { action: 'take', itemId: item.id })).toEqual(
+      { ok: false, reason: 'not-your-item' },
+    );
+    expect(await inventoryOf(db, stranger)).toHaveLength(1);
+  });
+
+  it('keeps the entry aisle and walls clear and validates rotations', async () => {
+    const { owner, site } = await owned();
+    const item = await createItemFor(db, 'oak-stool', owner);
+    for (const [x, y] of [
+      [0, 0],
+      [10, 14],
+      [9, 12],
+      [20, 2],
+      [1.5, 2],
+    ]) {
+      expect(
+        await decorateInterior(db, owner, site.id, {
+          action: 'place',
+          itemId: item.id,
+          x: x!,
+          y: y!,
+          rotation: 0,
+        }),
+      ).toEqual({ ok: false, reason: 'bad-place' });
+    }
+    expect(
+      await decorateInterior(db, owner, site.id, {
+        action: 'place',
+        itemId: item.id,
+        x: 3,
+        y: 3,
+        rotation: 45,
+      }),
+    ).toEqual({ ok: false, reason: 'bad-rotation' });
+    expect(await inventoryOf(db, owner)).toHaveLength(1);
   });
 });

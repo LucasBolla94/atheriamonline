@@ -109,3 +109,21 @@ mobile against the surviving test servers: page artwork, navigation, FAQ and
 account-creation entry all worked with no browser errors and the same 15-second
 visibility bound. Reviewed captures are retained in `docs/design/contemporary`.
 The three orphaned test-server process groups were stopped after this check.
+
+## Interior data foundation (2026-09-12)
+
+Migration 0007 adds commercial guest lists. A shared 20 × 16 interior plan keeps
+the doorway and arrival aisle undecorated. Interior reads enforce public/private/
+invited access; only owners can edit guests or furniture. Edits lock the property
+and move the existing item instance within one transaction, preventing concurrent
+placements on the same tile. Existing house-holder storage also identifies the
+commercial interior by its persistent UUID; no item copies are introduced.
+
+Typecheck and lint passed. The property/interior integration suite passed all
+22 cases, including repeated place/rotate/retrieve conservation, competing tile
+placements, guest revocation and cross-owner refusals. Two floor-plan unit tests
+passed. The initial conservation test exposed an incomplete test fixture reset
+(the generic item holder has no character FK); truncating test item instances
+fixed isolation while preserving the exact conservation assertions.
+
+This data foundation still needs HTTP, realtime realm transitions and editor UI.

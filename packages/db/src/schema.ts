@@ -521,3 +521,19 @@ export const propertyPurchases = pgTable(
 );
 
 export type Property = typeof properties.$inferSelect;
+
+/** Guests welcomed into a commercial interior by its current owner. */
+export const propertyGuests = pgTable(
+  'property_guests',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    propertyId: uuid('property_id')
+      .notNull()
+      .references(() => properties.id, { onDelete: 'cascade' }),
+    characterId: uuid('character_id')
+      .notNull()
+      .references(() => characters.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex('property_guests_pair_key').on(table.propertyId, table.characterId)],
+);

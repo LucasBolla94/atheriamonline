@@ -50,6 +50,13 @@
       "when": 1789233088108,
       "tag": "0006_wealthy_excalibur",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1789235468658,
+      "tag": "0007_spooky_songbird",
+      "breakpoints": true
     }
   ]
 }
