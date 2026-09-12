@@ -1,6 +1,6 @@
 # Atheriam — project memory
 
-Browser multiplayer social world: original medieval kingdom-city, top-down 2D
+Browser multiplayer social world: original contemporary social city, top-down 2D
 tiles, continuous open world, adults 18+, English UI, desktop + mobile
 (landscape). Domain: atheriam.online.
 

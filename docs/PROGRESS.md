@@ -10,6 +10,12 @@ Last updated: 2026-09-12
 
 ## Current phase
 
+**Contemporary city release — IN PROGRESS.** See
+[CONTEMPORARY_CITY_PLAN.md](CONTEMPORARY_CITY_PLAN.md). The previous release below
+is the preserved production baseline, not completion evidence for this release.
+
+## Previous production baseline
+
 **V1.0 visual redesign — PUBLISHED AND VERIFIED.** The redesigned game is live at
 https://atheriam.online: accounts, a city, chat and moderation, money and
 items, trading, and a house each.

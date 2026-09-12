@@ -799,3 +799,17 @@ says without sending themselves anything. Ignoring it in production is the
 important half: an outbox nobody reads is a password reset that silently never
 arrives, which is worse than a route that says plainly it is not set up.
 **Cost to change:** None.
+
+
+## D-064 — A contemporary city with a fixed first property supply
+
+**Date:** 2026-09-12
+**Decision:** Follow the owner's new setting and 15-building requirement: five
+public venues and ten purchasable commercial properties in a 160 × 160 city.
+Keep private homes and existing property/items intact. Use stable city and
+building IDs for future expansion. Crowns remain the currency; property sales
+are in-game only. Initial reservations are free with bounded durations and quotas.
+**Why:** This implements the owner's business/community direction while retaining
+existing residents' possessions and the authoritative economy guarantees.
+**Cost to change:** Future cities add definitions and persistent rows. Price and
+booking policies are explicit configuration rather than client authority.

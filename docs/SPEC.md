@@ -12,11 +12,11 @@ Last updated: 2026-09-12
 
 Atheriam is a **browser-based multiplayer social world**.
 
-- Setting: an **original medieval kingdom-city**. Everything (names, map, art,
+- Setting: an **original contemporary social city**. Everything (names, map, art,
   lore) is invented for this project.
 - View: **top-down 2D**, drawn on a **tile grid**.
-- World: **continuous and open**. There are no separate "rooms" that players
-  load into. The city is one connected space, streamed in pieces as you walk.
+- World: a **continuous outdoor city**, streamed in chunks, with separate
+  interiors for homes, public venues, businesses and reserved meeting rooms.
 - Players: **adults, 18+ only**.
 - Language of the product: **English** (all in-game text and UI).
 - Devices: **desktop browsers** and **mobile browsers in landscape**.
@@ -256,7 +256,7 @@ Stored as BIGINT minor units; 1 Crown = 100 minor units. Displayed as `1.00 c`.
 ### V1.0 visual direction (2026-09-12)
 
 The owner has requested a complete, playable pixel-art redesign. Use original,
-simple animated residents, a warm sandstone/terracotta/green city, illustrated
+simple animated contemporary residents, a warm cream/teal/coral city, illustrated
 login and registration, and a consistent mobile interface. Studying general
 social-game design principles is allowed; production art must be original or
 appropriately licensed, never copied from a commercial game. This clarifies
@@ -306,3 +306,54 @@ A change is only finished when all of these pass:
 - **Minor unit** — the smallest indivisible piece of currency (like a cent).
 - **Idempotency key** — a unique string that makes a repeated request safe.
 - **Escrow** — a temporary holding place during a trade.
+
+
+## 15. Contemporary city release (owner request, 2026-09-12)
+
+This direction supersedes the medieval setting and its visual plan. The first
+city, Atheriam Central, is 160 × 160 tiles. Its central pedestrian square is the
+arrival and meeting point, with a fountain, seating, planting and easy routes.
+A park, lake, bridge and pier make a connected walking loop around the core.
+
+There are exactly **15 addressable buildings**: **10 commercial properties for
+sale** and **5 city-owned public buildings** (City Hall, Central Lounge, Creative
+Hub, Market Hall and Events Hall). Public buildings cannot be purchased. Each
+building has a stable city/address identifier and an entrance matching its art
+and server collision. Definitions support future cities; this release opens one.
+
+Commercial ownership is durable and purchased exclusively with Crowns. A purchase
+atomically transfers money to the city treasury and assigns the property, using
+idempotency and row locks. Concurrent buyers cannot buy the same property. The
+confirmation shows the price and balance; insufficient funds change nothing.
+No real-money purchases, investment returns or cash-out are part of this release.
+Owners name and describe their business, choose access, decorate its interior,
+and publish it in the directory. Visitors can enter public businesses and buy
+listed item instances through an atomic, idempotent sale. Items and money must
+remain conserved. Existing homes, inventory, balances and accounts are retained.
+
+The lounge includes public social space and three reservable private meeting
+rooms. Reservations are initially free, last 30 or 60 minutes, and may be made
+up to seven days ahead. One owner may have at most two upcoming/active bookings.
+A room cannot be booked for overlapping times. Only the host and invited players
+may enter during the reservation. Hosts can revoke invitations, remove guests
+and cancel. Capacity is enforced, chat stays inside, and the server removes
+occupants when permission or booking time ends. The UI warns before expiry.
+
+The environment editor supports furniture placement, rotation and retrieval,
+floor/wall style, names, descriptions and access. A public directory connects
+players to published businesses and environments. Sitting and waving are social
+animations, synchronized and validated by the world server.
+
+The visual redesign covers buildings, terrain, contemporary outfits, furniture,
+responsive HUD, authentication and a complete public landing page. The landing
+page explains social play, creating environments and running in-game businesses,
+with functioning account entry points, original city art and mobile layouts.
+All product copy remains English. All original assets are recorded in ASSETS.md.
+
+Delivery uses a feature branch, focused commits by phase, a GitHub reviewable
+history, automated checks and browser verification. Release requires testing
+purchases (including races/retries), permissions, decoration, sales, reservations,
+chat isolation, movement, authentication and desktop/mobile flows, plus visual
+inspection. A deployment backup and live checks follow publication. Absolute
+absence of bugs or measured real-phone performance is never claimed without
+corresponding evidence.
