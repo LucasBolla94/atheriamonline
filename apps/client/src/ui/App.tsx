@@ -52,6 +52,7 @@ function worldUrl(): string {
 export function App(): JSX.Element {
   const [state, setState] = useState<ConnectionState>('idle');
   const [error, setError] = useState<string | null>(null);
+  const [updateRequired, setUpdateRequired] = useState(false);
   const [busy, setBusy] = useState(true);
   const [you, setYou] = useState<PlayerView | null>(null);
   const [nearbyCount, setNearbyCount] = useState(0);
@@ -170,6 +171,7 @@ export function App(): JSX.Element {
   const enterCity = useCallback(async () => {
     const ticket = await api.worldTicket();
     if (!ticket.ok) {
+      setUpdateRequired(ticket.error === 'client-update-required');
       setError(ticket.message);
       setBusy(false);
       return;
@@ -228,6 +230,7 @@ export function App(): JSX.Element {
         else if (reason === 'too-chatty') setChatNotice(strings.chat.tooChatty);
       },
       onClosed: (reason) => {
+        setUpdateRequired(reason === 'client-update-required');
         setSocialOpen(false);
         setMeeting(null);
         setLoungeOpen(false);
@@ -1179,7 +1182,8 @@ export function App(): JSX.Element {
       )}
       {!playing && (
         <AuthScreen
-          busy={busy || connecting}
+          busy={busy || connecting || updateRequired}
+          {...(updateRequired ? { onReload: () => window.location.reload() } : {})}
           error={error}
           onCreate={handleCreate}
           onLogIn={handleLogIn}

@@ -986,3 +986,22 @@ Playwright serves that prepared bundle; normal deployment dist is untouched.
 The generated directory is excluded from source lint, formatting and Git.
 The interactive browser-test command runs the same preparation. Workspace
 release builds also run in dependency order with one build at a time.
+
+
+## D-077 — Check release compatibility before issuing or spending a world ticket
+
+Protocol v12 identifies the browser version in the ticket HTTP request and the
+WebSocket join. The API refuses missing or mismatched versions with HTTP 409 and
+a plain refresh instruction before issuing a ticket. Even pre-v12 tabs already
+display API error messages, so this reaches existing residents after deployment.
+The world independently refuses missing/mismatched joins before consuming their
+one-use ticket or sending a map. It uses the existing protocol-error goodbye
+plus an optional reload hint, preserving the old message shape. The current
+client also checks the welcome version before accepting world state.
+
+Current clients display a Load the latest version button and block account-form
+submission until refreshed. Reload uses the existing session cookie; account,
+items and money are unchanged. There is no automatic reload loop. Closed
+connections ignore late packets, preserving the specific update explanation.
+The load-test client sends the same version. Browser preparation rebuilds shared
+package exports before compiling the client so stale dist cannot mask a mismatch.

@@ -261,6 +261,8 @@ export const strings = {
   },
 
   auth: {
+    reload: 'Load the latest version',
+    updateRequired: 'Update required',
     createTab: 'Create an account',
     loginTab: 'Log in',
 
@@ -318,6 +320,8 @@ export const strings = {
     kicked: 'A moderator removed you from the city.',
     banned: 'This account is banned from Atheriam.',
     shutdown: 'The city is restarting. Come back shortly.',
+    'client-update-required':
+      'The city has been updated. Load the latest version to continue; your account and belongings are saved.',
     'protocol-error': 'The connection sent something unexpected and was closed.',
     idle: 'You were away for a long time, so you left the city.',
     'could not reach the world': 'Could not reach the city. Is the world server running?',

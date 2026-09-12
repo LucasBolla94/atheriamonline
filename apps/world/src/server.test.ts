@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { WebSocket } from 'ws';
 import {
   decodeServerMessage,
+  PROTOCOL_VERSION,
   encode,
   type ClientMessage,
   type ServerMessage,
@@ -72,7 +73,9 @@ class TestClient {
   }
 
   send(message: ClientMessage): void {
-    this.socket.send(encode(message));
+    this.socket.send(
+      encode(message.t === 'join' ? { protocolVersion: PROTOCOL_VERSION, ...message } : message),
+    );
   }
 
   sendRaw(raw: string): void {
@@ -150,6 +153,20 @@ describe('the world server over a real socket', () => {
     clients.push(client);
     return client;
   }
+
+  it.each([undefined, PROTOCOL_VERSION - 1, PROTOCOL_VERSION + 1])(
+    'rejects incompatible join version %s without consuming the ticket',
+    async (protocolVersion) => {
+      const ticket = tickets.issue(character('version-check', 'VersionCheck'));
+      const old = await connect();
+      old.sendRaw(JSON.stringify({ t: 'join', ticket, protocolVersion }));
+      expect(await old.waitFor('bye')).toMatchObject({ reason: 'protocol-error', reload: true });
+      expect(old.received.some((m) => ['welcome', 'chunk', 'snapshot'].includes(m.t))).toBe(false);
+      const current = await connect();
+      current.send({ t: 'join', ticket });
+      expect(await current.waitFor('welcome')).toMatchObject({ playerId: 'version-check' });
+    },
+  );
 
   it('streams a social pose and its expiry even when neither neighbour moves', async () => {
     const actor = await connect();

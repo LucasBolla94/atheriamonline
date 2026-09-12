@@ -32,8 +32,9 @@ import { CHUNK_SIZE_TILES, MAX_CHAT_LENGTH, VENUE_IDS } from '@atheriam/shared';
  * 9: time-limited private meeting realms.
  * 10: furnished public venue layouts, shared with collision maps.
  * 11: authoritative social poses and exclusive public seats.
+ * 12: versioned admission and an explicit refresh hint for outdated clients.
  */
-export const PROTOCOL_VERSION = 11;
+export const PROTOCOL_VERSION = 12;
 
 /** The eight directions a player may step in. */
 export const directionSchema = z.enum(['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw']);
@@ -79,6 +80,8 @@ export const displayNameSchema = z
 export const joinIntentSchema = z.object({
   t: z.literal('join'),
   ticket: z.string().min(16).max(256),
+  // Decode legacy joins so the server can close them with a useful response.
+  protocolVersion: z.number().int().positive().optional(),
 });
 
 /** Ask to take exactly one step. Sent by the keyboard controls. */
@@ -277,6 +280,7 @@ export const rejectSchema = z.object({
 /** The connection is being closed, with a reason a human can read. */
 export const byeSchema = z.object({
   t: z.literal('bye'),
+  reload: z.boolean().optional(),
   reason: z.enum([
     'bad-ticket',
     'already-online',

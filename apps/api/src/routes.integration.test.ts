@@ -1,4 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { PROTOCOL_VERSION } from '@atheriam/protocol';
 import { Redis } from 'ioredis';
 import { sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
@@ -234,6 +235,35 @@ describe('POST /api/auth/logout', () => {
 });
 
 describe('POST /api/world/ticket', () => {
+  it.each([undefined, PROTOCOL_VERSION - 1, PROTOCOL_VERSION + 1])(
+    'tells a logged-in legacy client with version %s to refresh without issuing a ticket',
+    async (protocolVersion) => {
+      const registered = await app.inject({
+        method: 'POST',
+        url: '/api/auth/register',
+        payload: GOOD,
+      });
+      const token = sessionCookie(registered) ?? '';
+      const before = await redis.keys('ticket:*');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/world/ticket',
+        cookies: { [SESSION_COOKIE]: token },
+        ...(protocolVersion === undefined ? {} : { payload: { protocolVersion } }),
+      });
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toMatchObject({ error: 'client-update-required' });
+      expect(response.json()['message']).toContain('Refresh this page');
+      expect(await redis.keys('ticket:*')).toEqual(before);
+      const current = await app.inject({
+        method: 'POST',
+        url: '/api/world/ticket',
+        cookies: { [SESSION_COOKIE]: token },
+        payload: { protocolVersion: PROTOCOL_VERSION },
+      });
+      expect(current.statusCode).toBe(200);
+    },
+  );
   it('refuses somebody who is not logged in', async () => {
     const response = await app.inject({ method: 'POST', url: '/api/world/ticket' });
     expect(response.statusCode).toBe(401);
@@ -250,6 +280,7 @@ describe('POST /api/world/ticket', () => {
     const response = await app.inject({
       method: 'POST',
       url: '/api/world/ticket',
+      payload: { protocolVersion: PROTOCOL_VERSION },
       cookies: { [SESSION_COOKIE]: token },
     });
 
@@ -269,6 +300,7 @@ describe('POST /api/world/ticket', () => {
     const response = await app.inject({
       method: 'POST',
       url: '/api/world/ticket',
+      payload: { protocolVersion: PROTOCOL_VERSION },
       cookies: { [SESSION_COOKIE]: token },
     });
     const ticket = response.json()['ticket'] as string;

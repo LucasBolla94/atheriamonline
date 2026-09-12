@@ -475,3 +475,29 @@ The harness now compiles its production bundle before starting test services
 The final preparations compiled successfully in about sixteen seconds. Full
 release regression, protocol upgrade handling and backed-up deployment remain
 pending.
+
+
+### Compatible release entry — 2026-09-12
+
+Protocol v12 checks compatibility at ticket issuance, socket admission and client
+welcome. Legacy tabs receive an actionable API refresh message; current clients
+show a Load the latest version button. Tickets are neither issued nor spent for
+incompatible requests, no map is sent, and late packets cannot revive a closed
+connection. See D-077. The load-test script sends the current protocol version.
+
+All 338 unit tests passed, including old/future server rejection, server refusal
+of legacy/mismatched joins without consuming the ticket, and client handling of
+the refresh hint. All 174 integration tests passed, including authenticated HTTP
+legacy/old/future requests, no issued ticket and unchanged valid-session access.
+Typecheck passed. Six browser cases passed in 56.2 seconds on desktop/mobile: an
+HTTP mismatch, an outgoing join mismatch and an incoming welcome mismatch all
+show the notice, prevent a game canvas, and let the resident refresh into the
+same account with 50 Crowns and the same three initial items. The first mobile
+assertion incorrectly expected the compact dock to expose its hidden balance;
+the final test opens the actual purse and checks both balance and inventory.
+
+Browser preparation now rebuilds shared package exports before client compilation,
+so it cannot silently use an older built protocol. Full browser regression,
+production backup/deployment and live verification remain pending.
+
+Final source lint and the complete production build also passed for v12.

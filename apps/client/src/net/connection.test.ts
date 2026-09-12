@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { encode, type ServerMessage } from '@atheriam/protocol';
+import { PROTOCOL_VERSION, encode, type ServerMessage } from '@atheriam/protocol';
 import {
   CHAT_HISTORY,
   MAX_INTENTS_PER_SECOND,
@@ -30,7 +30,7 @@ const TICKET = 'ticket-for-the-tests-0123456789';
 
 const WELCOME: ServerMessage = {
   t: 'welcome',
-  protocolVersion: 3,
+  protocolVersion: PROTOCOL_VERSION,
   playerId: 'p1',
   tickMs: 100,
   spawn: { x: 2, y: 2 },
@@ -57,6 +57,38 @@ function chatFrom(name: string, text: string): ServerMessage {
 }
 
 describe('WorldConnection', () => {
+  it.each([PROTOCOL_VERSION - 1, PROTOCOL_VERSION + 1])(
+    'refuses server version %s before loading any world state',
+    (protocolVersion) => {
+      const socket = new FakeSocket();
+      const onClosed = vi.fn();
+      const onWelcome = vi.fn();
+      const connection = new WorldConnection({ onClosed, onWelcome });
+      connection.attach(socket, TICKET);
+      connection.handleOpen();
+      connection.handleMessage(encode({ ...WELCOME, protocolVersion }));
+      connection.handleMessage(encode(chunk(0, 0)));
+      connection.handleMessage(encode(snapshot(2, 2)));
+      connection.handleClose('connection lost');
+      expect(connection.currentState).toBe('closed');
+      expect(connection.chunks.size).toBe(0);
+      expect(connection.you).toBeNull();
+      expect(socket.closed).toBe(true);
+      expect(onWelcome).not.toHaveBeenCalled();
+      expect(onClosed).toHaveBeenCalledTimes(1);
+      expect(onClosed).toHaveBeenCalledWith('client-update-required');
+    },
+  );
+
+  it('recognizes the server refresh hint without accepting a new world', () => {
+    const onClosed = vi.fn();
+    const connection = new WorldConnection({ onClosed });
+    connection.attach(new FakeSocket(), TICKET);
+    connection.handleOpen();
+    connection.handleMessage(encode({ t: 'bye', reason: 'protocol-error', reload: true }));
+    expect(connection.currentState).toBe('closed');
+    expect(onClosed).toHaveBeenCalledWith('client-update-required');
+  });
   let socket: FakeSocket;
   let connection: WorldConnection;
   let clock: number;
@@ -145,7 +177,11 @@ describe('WorldConnection', () => {
     expect(connection.currentState).toBe('connecting');
     connection.handleOpen();
     expect(connection.currentState).toBe('joining');
-    expect(socket.parsed()[0]).toEqual({ t: 'join', ticket: TICKET });
+    expect(socket.parsed()[0]).toEqual({
+      t: 'join',
+      ticket: TICKET,
+      protocolVersion: PROTOCOL_VERSION,
+    });
   });
 
   it('starts playing when the server welcomes it, and remembers how big the city is', () => {

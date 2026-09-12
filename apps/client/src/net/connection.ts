@@ -14,6 +14,7 @@
  */
 import {
   decodeServerMessage,
+  PROTOCOL_VERSION,
   encode,
   type ClientMessage,
   type PlayerView,
@@ -181,11 +182,12 @@ export class WorldConnection {
     // A ticket is good for one use, so it is dropped the moment it is spent.
     this.pendingTicket = null;
     this.setState('joining');
-    this.sendRaw({ t: 'join', ticket });
+    this.sendRaw({ t: 'join', ticket, protocolVersion: PROTOCOL_VERSION });
   }
 
   /** Call with every raw message the socket delivers. */
   handleMessage(raw: string): void {
+    if (this.state === 'closed') return;
     const decoded = decodeServerMessage(raw);
     if (!decoded.ok) {
       // Something we do not understand. Dropping it is correct: acting on a
@@ -262,6 +264,12 @@ export class WorldConnection {
   private apply(message: ServerMessage): void {
     switch (message.t) {
       case 'welcome': {
+        if (message.protocolVersion !== PROTOCOL_VERSION) {
+          const socket = this.socket;
+          this.handleClose('client-update-required');
+          socket?.close();
+          return;
+        }
         this.playerId = message.playerId;
         this.world = message.world;
         this.setState('playing');
@@ -301,7 +309,7 @@ export class WorldConnection {
         return;
       }
       case 'bye': {
-        this.handleClose(message.reason);
+        this.handleClose(message.reload ? 'client-update-required' : message.reason);
         return;
       }
       case 'chat': {

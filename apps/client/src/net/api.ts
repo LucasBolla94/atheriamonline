@@ -8,6 +8,8 @@
  */
 
 /** Where the API lives. In production Caddy serves it under /api. */
+import { PROTOCOL_VERSION } from '@atheriam/protocol';
+
 function apiBase(): string {
   const fromEnv = import.meta.env['VITE_API_URL'];
   if (typeof fromEnv === 'string' && fromEnv.length > 0) return fromEnv;
@@ -344,7 +346,10 @@ export async function resetPassword(
 
 /** Ask for a ticket to open the WebSocket with. */
 export async function worldTicket(): Promise<ApiResult<{ ticket: string }>> {
-  return request('/api/world/ticket', { method: 'POST' });
+  return request('/api/world/ticket', {
+    method: 'POST',
+    body: JSON.stringify({ protocolVersion: PROTOCOL_VERSION }),
+  });
 }
 
 export interface PropertyView {

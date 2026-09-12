@@ -20,6 +20,8 @@
  *   - how much the server sent, so that bandwidth per player is a fact rather
  *     than a hope.
  */
+import { PROTOCOL_VERSION } from '../packages/protocol/dist/index.js';
+
 const URL_BASE = process.env.URL ?? 'http://127.0.0.1:3001';
 const WORLD_URL =
   process.env.WORLD_URL ??
@@ -79,7 +81,8 @@ async function newPlayer(index) {
 
   const ticket = await fetch(`${URL_BASE}/api/world/ticket`, {
     method: 'POST',
-    headers: { cookie },
+    headers: { cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ protocolVersion: PROTOCOL_VERSION }),
   });
   if (!ticket.ok) throw new Error(`ticket said ${ticket.status}`);
   return (await ticket.json()).ticket;
@@ -104,7 +107,7 @@ function playFor(ticket, stopAtMs) {
     };
 
     socket.addEventListener('open', () => {
-      socket.send(JSON.stringify({ t: 'join', ticket }));
+      socket.send(JSON.stringify({ t: 'join', ticket, protocolVersion: PROTOCOL_VERSION }));
     });
 
     socket.addEventListener('message', (event) => {

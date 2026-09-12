@@ -27,6 +27,7 @@ export type AuthMode = 'create' | 'login' | 'forgot' | 'reset';
 export interface AuthScreenProps {
   readonly busy: boolean;
   readonly error: string | null;
+  readonly onReload?: () => void;
   readonly onCreate: (input: {
     email: string;
     password: string;
@@ -49,6 +50,7 @@ export interface AuthScreenProps {
 export function AuthScreen({
   busy,
   error,
+  onReload,
   onCreate,
   onLogIn,
   onForgot,
@@ -79,6 +81,7 @@ export function AuthScreen({
 
   function handleSubmit(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
+    if (busy || working || onReload) return;
     setLocalError(null);
     setDone(null);
 
@@ -393,15 +396,17 @@ export function AuthScreen({
           )}
 
           <button className="button" type="submit" disabled={waiting}>
-            {waiting
-              ? strings.auth.working
-              : resetting
-                ? strings.auth.resetSubmit
-                : forgetting
-                  ? strings.auth.forgotSubmit
-                  : creating
-                    ? strings.auth.createSubmit
-                    : strings.auth.loginSubmit}
+            {onReload
+              ? strings.auth.updateRequired
+              : waiting
+                ? strings.auth.working
+                : resetting
+                  ? strings.auth.resetSubmit
+                  : forgetting
+                    ? strings.auth.forgotSubmit
+                    : creating
+                      ? strings.auth.createSubmit
+                      : strings.auth.loginSubmit}
           </button>
 
           {mode === 'login' && (
@@ -437,6 +442,11 @@ export function AuthScreen({
             </p>
           )}
 
+          {onReload && (
+            <button type="button" className="button" onClick={onReload}>
+              {strings.auth.reload}
+            </button>
+          )}
           <p className="notice notice--quiet">{strings.auth.ageNotice}</p>
         </form>
         <footer className="welcome-footer">

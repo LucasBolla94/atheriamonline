@@ -9,6 +9,15 @@
 import { spawnSync } from 'node:child_process';
 import { e2eEnv, prepareDatabase } from './global-setup.js';
 
+// Workspace imports resolve built exports. Never test yesterday's protocol or
+// schema after editing shared source files.
+const packages = spawnSync(
+  'pnpm',
+  ['--filter', './packages/**', '--workspace-concurrency=1', 'build'],
+  { stdio: 'inherit' },
+);
+if (packages.status !== 0) process.exit(packages.status ?? 1);
+
 await prepareDatabase();
 console.warn('[e2e] the test database is ready.');
 

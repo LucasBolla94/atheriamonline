@@ -323,6 +323,10 @@ export class WorldServer {
     }
 
     if (message.t === 'join') {
+      if (message.protocolVersion !== PROTOCOL_VERSION) {
+        this.disconnect(connection, 'protocol-error', true);
+        return;
+      }
       void this.handleJoin(connection, message.ticket, nowMs);
       return;
     }
@@ -885,8 +889,8 @@ export class WorldServer {
     }
   }
 
-  private disconnect(connection: Connection, reason: Bye['reason']): void {
-    this.send(connection, { t: 'bye', reason });
+  private disconnect(connection: Connection, reason: Bye['reason'], reload = false): void {
+    this.send(connection, { t: 'bye', reason, ...(reload ? { reload: true } : {}) });
     connection.socket.close();
     this.onClose(connection);
   }

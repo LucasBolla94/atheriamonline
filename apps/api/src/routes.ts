@@ -14,7 +14,7 @@ import { z } from 'zod';
 import { eq } from 'drizzle-orm';
 import { accounts, characters } from '@atheriam/db';
 import { DEFAULT_SPAWN_TILE } from '@atheriam/shared';
-import { displayNameSchema } from '@atheriam/protocol';
+import { displayNameSchema, PROTOCOL_VERSION } from '@atheriam/protocol';
 import type { Database } from '@atheriam/db';
 import {
   accountByEmail,
@@ -475,6 +475,19 @@ export async function registerRoutes(app: FastifyInstance, options: RouteOptions
     const session = await currentSession(request.cookies[SESSION_COOKIE]);
     if (session === null) {
       return reply.code(401).send({ error: 'not-logged-in', message: 'Please log in.' });
+    }
+
+    const version = z
+      .object({ protocolVersion: z.literal(PROTOCOL_VERSION) })
+      .safeParse(request.body);
+    if (!version.success) {
+      // Older clients already display API error messages, so even a tab from
+      // before version checking existed receives an actionable refresh notice.
+      return reply.code(409).send({
+        error: 'client-update-required',
+        message:
+          'The city has been updated. Refresh this page to continue. Your account and belongings are saved.',
+      });
     }
 
     const character = await characterOf(db, session.accountId);
