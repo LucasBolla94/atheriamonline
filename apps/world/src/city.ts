@@ -1,6 +1,7 @@
 /** Original contemporary city. Building footprints and addresses are shared. */
 import {
   CITY_BUILDINGS,
+  CITY_FURNITURE,
   DEFAULT_SPAWN_TILE,
   STARTER_CITY,
   type TerrainChar,
@@ -104,5 +105,6 @@ export function buildStarterDistrict(): string[] {
       if (rows[cy + dy]?.[cx + dx] === '.') rect(cx + dx, cy + dy, 1, 1, 'T');
     }
   }
+  for (const item of CITY_FURNITURE) rect(item.x, item.y, item.width, item.height, 'o');
   return rows.map((row) => row.join(''));
 }

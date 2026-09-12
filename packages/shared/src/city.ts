@@ -96,3 +96,17 @@ export const LOUNGE_ROOMS = [
   { id: 'terrace', name: 'The Terrace', capacity: 12 },
   { id: 'boardroom', name: 'The Boardroom', capacity: 16 },
 ] as const;
+
+/** Fixed outdoor furniture; the world and renderer use the same footprints. */
+export const CITY_FURNITURE = [
+  { art: 'bench', x: 72, y: 72, width: 3, height: 1 },
+  { art: 'bench', x: 85, y: 72, width: 3, height: 1 },
+  { art: 'bench', x: 68, y: 81, width: 3, height: 1 },
+  { art: 'bench', x: 89, y: 81, width: 3, height: 1 },
+  { art: 'bench', x: 72, y: 91, width: 3, height: 1 },
+  { art: 'bench', x: 85, y: 91, width: 3, height: 1 },
+  { art: 'planter', x: 72, y: 70, width: 3, height: 1 },
+  { art: 'planter', x: 85, y: 70, width: 3, height: 1 },
+  { art: 'planter', x: 67, y: 77, width: 3, height: 1 },
+  { art: 'planter', x: 90, y: 77, width: 3, height: 1 },
+] as const;

@@ -17,6 +17,9 @@ test('the five public entrances lead to furnished spaces with a usable exit', as
   await page.getByRole('checkbox').check();
   await page.getByRole('button', { name: 'Create my account' }).click();
   await expect(page.locator('.hud')).toContainText(name);
+  await expect(page.locator('canvas')).toBeVisible();
+  await page.waitForTimeout(1500);
+  await page.screenshot({ path: `test-results/${info.project.name}-square-furnished.png` });
   for (const id of ['central-lounge', 'city-hall', 'creative-hub', 'events-hall', 'market-hall']) {
     const building = CITY_BUILDINGS.find((entry) => entry.id === id)!;
     await page.getByRole('button', { name: 'City guide', exact: true }).click();

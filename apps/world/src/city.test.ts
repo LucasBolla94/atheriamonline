@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CHUNK_SIZE_TILES,
   CITY_BUILDINGS,
+  CITY_FURNITURE,
   STARTER_CITY,
   isWalkableChar,
   isTerrainChar,
@@ -62,6 +63,16 @@ describe('the starter district', () => {
     for (let y = CITY_SPAWN.y - 3; y <= CITY_SPAWN.y + 3; y++) {
       for (let x = CITY_SPAWN.x - 3; x <= CITY_SPAWN.x + 3; x++) {
         expect(isWalkableChar(charAt(x, y))).toBe(true);
+      }
+    }
+  });
+
+  it('gives square furniture solid footprints and accessible fronts', () => {
+    for (const item of CITY_FURNITURE) {
+      for (let x = item.x; x < item.x + item.width; x++) {
+        expect(charAt(x, item.y)).toBe('o');
+        expect(isWalkableChar(charAt(x, item.y))).toBe(false);
+        expect(isWalkableChar(charAt(x, item.y + item.height))).toBe(true);
       }
     }
   });

@@ -920,3 +920,18 @@ rooms which fit on screen still use the existing centred overview.
 Before release, verify reload/version handling for already-open clients as well
 as deploying matching API/world/client builds. A version number alone is not
 proof that an old browser will reload after new layout rules are introduced.
+
+## D-073 — Keep the square's meeting area and routes clear
+
+Six benches and four planters occupy the sides of Central Square. Shared outdoor
+footprints drive both blocked map cells and the existing original furniture
+atlas. The three-tile radius around arrival remains open, furniture fronts are
+accessible, and the whole city's walkable ground stays connected. These fixtures
+are municipal scenery, separate from owned inventory. Sitting is still a later
+server-authoritative social interaction.
+
+The old well is replaced with an original code-drawn contemporary stone fountain.
+Six 64-pixel frames share one texture, playing at eight frames per second; only
+water highlights and droplets change. Phaser owns playback and destroys the
+sprite with its streamed chunk. There are no per-frame canvas redraws or network
+messages for decorative water. The fountain retains its existing solid footprint.

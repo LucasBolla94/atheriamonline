@@ -353,3 +353,25 @@ expiry-warning/deadline and reconnect browser cases; full regression/performance
 and client-version reload checks; and backed-up deployment/live verification.
 The standalone production build passed after a command-wrapper interruption.
 The release is still in progress and this milestone has not been deployed.
+
+### Central Square scenery milestone — 2026-09-12
+
+The square now has six benches and four planters around its clear arrival area.
+The old well has been replaced by an original pixel-drawn stone fountain with a
+six-frame water loop. Outdoor furniture shares collision footprints between the
+server and renderer; it uses the public venue furniture atlas. The fountain's
+texture is generated once and its animation is local decoration.
+
+All 315 unit tests, typecheck and lint passed. The new map check covers solid
+furniture footprints and accessible fronts; existing checks still establish
+complete walkable connectivity, a clear arrival area and all fifteen entrances.
+Sitting interaction, contemporary residents and the remaining release gates
+listed above are still pending. This change has not been deployed.
+
+The five public-door walkthroughs passed on both desktop and mobile (two cases,
+2.8 minutes). A separate square approach check passed on both devices (two cases,
+49.6 seconds), including four individual northward touch steps on mobile.
+Desktop and mobile arrival/approach captures were reviewed and retained under
+`docs/design/contemporary`. The mobile close approach shows both fountain and
+resident within the short landscape viewport.
+The production build and final lint check also passed for this milestone.

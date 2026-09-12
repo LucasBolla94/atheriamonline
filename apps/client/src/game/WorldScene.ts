@@ -16,6 +16,7 @@
 import Phaser from 'phaser';
 import {
   CITY_BUILDINGS,
+  CITY_FURNITURE,
   VENUE_PROP_NAMES,
   publicVenue,
   STARTER_CITY,
@@ -27,6 +28,7 @@ import type { PlayerView, WorldInfo } from '@atheriam/protocol';
 import { colorTokens, fontFamilyTokens, fontSizeTokens, spaceTokens } from '../tokens/tokens.js';
 import type { HeldChunk, WorldConnection } from '../net/connection.js';
 import { prepareArt, PROP_NAMES, BUILDING_NAMES } from './art.js';
+import { fountainAtlas } from './fountainArt.js';
 import { terrainAtlas, terrainIndex } from './terrainArt.js';
 import { strings } from '../ui/strings.js';
 
@@ -189,6 +191,17 @@ export class WorldScene extends Phaser.Scene {
             texture.add(name, 0, (i % 3) * 128, Math.floor(i / 3) * 128, 128, 128),
           );
         }
+        if (!this.textures.exists('fountain')) {
+          const texture = this.textures.addCanvas('fountain', fountainAtlas())!;
+          for (let frame = 0; frame < 6; frame++) texture.add(frame, 0, frame * 64, 0, 64, 64);
+        }
+        if (!this.anims.exists('fountain-flow'))
+          this.anims.create({
+            key: 'fountain-flow',
+            frames: this.anims.generateFrameNumbers('fountain', { start: 0, end: 5 }),
+            frameRate: 8,
+            repeat: -1,
+          });
         if (!this.textures.exists('terrain')) this.textures.addCanvas('terrain', terrainAtlas());
         this.groundMap = this.make.tilemap({
           tileWidth: 32,
@@ -315,6 +328,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private interiorTile(char: string): string {
+    if (this.connection.realm === 'city' && char === 'o') return 'p';
     if (this.connection.realm !== 'property' && this.connection.realm !== 'booking') return char;
     const venue = publicVenue(this.connection.venueId);
     const floor = venue?.floor ?? this.scenery.floorStyle;
@@ -361,7 +375,14 @@ export class WorldScene extends Phaser.Scene {
           ty = oy + y;
         if (char === 'T') add('tree', tx * 32 + 16, ty * 32 + 24, 80, 80);
         if (char === 'W' && this.tileAt(tx + 1, ty) !== 'W' && this.tileAt(tx, ty + 1) !== 'W')
-          add('well', tx * 32, ty * 32 + 24, 88, 88);
+          props.push(
+            this.add
+              .sprite(tx * 32, (ty + 1) * 32, 'fountain', 0)
+              .setOrigin(0.5, 1)
+              .setDisplaySize(64, 64)
+              .setDepth(100 + (ty + 1) * 32)
+              .play('fountain-flow'),
+          );
         if (char === 'M' && this.tileAt(tx - 1, ty) !== 'M' && this.tileAt(tx, ty + 1) !== 'M')
           add('stall', (tx + 2.5) * 32, ty * 32 + 24, 164, 128);
       }
@@ -388,20 +409,20 @@ export class WorldScene extends Phaser.Scene {
       }
     }
     const venue = publicVenue(this.connection.venueId);
-    if (venue)
-      for (const item of venue.props) {
-        if (Math.floor(item.x / 32) !== chunk.cx || Math.floor(item.y / 32) !== chunk.cy) continue;
-        const x = (item.x + item.width / 2) * 32;
-        const y = (item.y + item.height) * 32;
-        const width = item.width * 32;
-        props.push(
-          this.add
-            .image(x, y, 'venue-props', item.art)
-            .setOrigin(0.5, 188 / 192)
-            .setDisplaySize(width, (width * 192) / 128)
-            .setDepth(100 + y),
-        );
-      }
+    const fixedProps = this.connection.realm === 'city' ? CITY_FURNITURE : (venue?.props ?? []);
+    for (const item of fixedProps) {
+      if (Math.floor(item.x / 32) !== chunk.cx || Math.floor(item.y / 32) !== chunk.cy) continue;
+      const x = (item.x + item.width / 2) * 32;
+      const y = (item.y + item.height) * 32;
+      const width = item.width * 32;
+      props.push(
+        this.add
+          .image(x, y, 'venue-props', item.art)
+          .setOrigin(0.5, 188 / 192)
+          .setDisplaySize(width, (width * 192) / 128)
+          .setDepth(100 + y),
+      );
+    }
     this.props.set(chunkKeyOf(chunk), props);
     return layer;
   }

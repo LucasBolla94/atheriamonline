@@ -61,3 +61,12 @@ screen, replacing the medieval promotional image there.
   which crossed the source sheet's nominal grid line into the chair cell.
 - Permanent public scenery is defined in `packages/shared/src/venues.ts` and is
   separate from player-owned item instances. No inventory assets were replaced.
+
+## Central Square furnishings and fountain — 2026-09-12
+
+- Benches and planters reuse the original `city-furniture.png` atlas documented
+  above; their outdoor placement is defined in `packages/shared/src/city.ts`.
+- `apps/client/src/game/fountainArt.ts` is an original code-drawn pixel-art recipe
+  created for Atheriam. It creates six transparent 64 × 64 frames of a stone
+  fountain with turquoise water. No external image or asset pack is used.
+- The client shares this atlas across streamed chunks and animates it at 8 fps.
