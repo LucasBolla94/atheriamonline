@@ -10,9 +10,25 @@ Last updated: 2026-09-12
 
 ## Current phase
 
-**Contemporary city release — IN PROGRESS.** See
-[CONTEMPORARY_CITY_PLAN.md](CONTEMPORARY_CITY_PLAN.md). The previous release below
-is the preserved production baseline, not completion evidence for this release.
+**Contemporary city release — PUBLISHED AND VERIFIED.** Live at
+https://atheriam.online, with game entry at https://atheriam.online/play/.
+The 160 × 160 city contains a central square, park, ten saleable commercial
+properties and five municipal buildings. Residents can configure/decorate their
+businesses, sell inventory items for Crowns, and reserve invite-only lounge rooms.
+The public website, modern pixel residents, walk/wave/sit animation and responsive
+game interface are published.
+
+Final evidence: 341 unit tests, 174 integration tests, a full browser regression
+with the four failing scenarios corrected/rechecked in a 14-pass run, and **18
+passing live checks**. Two mobile keyboard cases are intentionally inapplicable.
+Typecheck, lint and production build passed. Backup restoration and post-migration
+comparison verified existing accounts, items and ledger records. Services are
+active and published files match the build. All phase commits are pushed on
+`feat/contemporary-city-v1`; see [CONTEMPORARY_CITY_PLAN.md](CONTEMPORARY_CITY_PLAN.md)
+for the acceptance matrix, actual run history, backup location and limitations.
+
+Next: community playtest and physical-phone performance checks. The earlier
+production baseline below is retained as history, not current release evidence.
 
 ## Previous production baseline
 

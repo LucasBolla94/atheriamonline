@@ -16,9 +16,9 @@ buildings. Preserve all existing accounts and possessions.
   listings/sales; authoritative permissions and inventory conservation.
 - [x] Lounge bookings/invitations, expiry and removal, isolated chat, capacity
   and booking conflicts; integration and multi-player browser tests.
-- [ ] Original contemporary pixel assets, social animations, consistent game UI
+- [x] Original contemporary pixel assets, social animations, consistent game UI
   and complete responsive public landing page; visual review at mobile/desktop.
-- [ ] Full unit/integration/browser gates, build, GitHub reviewable commits,
+- [x] Full unit/integration/browser gates, build, GitHub reviewable commits,
   backup, deployment and live verification; update release documentation.
 
 ## Acceptance evidence
@@ -534,3 +534,51 @@ isolated database with the current schema proved that the fixture and its
 booking are removed, while an ordinary resident and booking, a mismatched
 name/email pair and a commercial owner remain. The verification database was
 removed afterwards. Shell syntax, source lint and typecheck passed.
+
+### Publication and final acceptance — 2026-09-12, 22:52 UTC
+
+Published to https://atheriam.online with the game at /play/. Final release code
+is commit `1d8e296` on `feat/contemporary-city-v1`; the full feature history is
+pushed to GitHub. The standard deploy gate passed dependency verification,
+typecheck, lint, all **341 unit tests** and the complete production build. The
+previous **174 integration tests** cover the unchanged API/world/economy code.
+Browser evidence is the 106-case run and the successful 14-case correction
+recheck documented above.
+
+Deployment initially stopped before migration because MAIL_FROM was parsed as
+shell syntax. D-079 fixes the installer to parse literal environment values.
+Shell syntax and fixtures with angle brackets and command-like literal text
+passed, and the real migration target was checked without printing secrets.
+The retry reused the just-passed code gates, rebuilt, migrated successfully,
+published the client and restarted the services. API, world and Caddy are active;
+HTTPS health answers, and the published client exactly matches the build.
+
+**All 18 live browser checks passed in 1.6 minutes**, covering desktop/mobile
+HTTPS, real registration, walking, chat, purse/home, trading, saved modern looks
+after reload, portrait touch input and the city guide/reserve/enter/cancel flow.
+Live desktop and portrait screenshots were visually inspected and retained here
+under `docs/design/contemporary/live-*.png`. The 16 exact smoke accounts and
+their two free reservation records were removed using the verified cleanup.
+
+The backup is `/var/backups/atheriam/pre-city-20260912T224723Z`, containing a
+database archive and the old client. A separate restore succeeded. A comparison
+after publication proved preservation of all four baseline accounts and
+characters, the existing home, all 291 item identities/holders/placements and
+all 196 ledger entries. Production has exactly 15 addresses: five municipal and
+ten commercial. The ledger sums to zero. The temporary 2 GB test swap was
+disabled and its file removed; no persistent machine setting was added.
+
+| Requirement | Acceptance evidence |
+| --- | --- |
+| Larger contemporary city, square, park and 15 addresses | Shared city reachability/inventory tests, city purchase browser case, public venue/plaza captures and live address count |
+| Ten saleable businesses, durable ownership and decoration | Property and house integration tests, purchase/configuration and decoration browser cases, immutable receipts and inventory checks |
+| Businesses sell items for game currency | Shop integration races/retries/rollback/conservation and two-resident browser sale |
+| Public lounge and scheduled private meetings | Booking integration conflicts/permissions, multi-resident invitation/chat tests, real deadline/reconnect browser cases and live reservation |
+| Simple original modern pixel art and social animation | Asset provenance, six saved appearances, directional walk/wave/sit frames, socket pose tests, two-resident social browser cases and reviewed captures |
+| Responsive public website and game | Landing, design, mobile and ordinary game browser cases; live HTTPS, appearance persistence and portrait touch checks |
+| Existing accounts, possessions and currency retained | Restored pre-release backup comparison and ledger conservation after migration |
+| Versioned, backed-up, functioning publication | GitHub staged history, final build/gates, successful restore, active services, exact published files and 18 live passes |
+
+Physical-phone frame-rate measurement and community preference testing remain
+follow-up validation. This release does not claim an absolute absence of bugs
+or a measured player capacity based on RAM alone.
