@@ -59,7 +59,11 @@ export interface ConnectionHandlers {
   /** Something the player is part of changed. Go and ask the API about it. */
   onNotice?: (about: 'trade') => void;
   /** The player is somewhere else now: the city, or inside a house. */
-  onRealm?: (realm: 'city' | 'house', houseId: string | null) => void;
+  onRealm?: (
+    realm: 'city' | 'house' | 'property',
+    houseId: string | null,
+    propertyId?: string | null,
+  ) => void;
   onReject?: (reason: RejectReason) => void;
   onClosed?: (reason: string) => void;
 }
@@ -99,10 +103,11 @@ export class WorldConnection {
   world: WorldInfo | null = null;
 
   /** Where the player is: the city, or the inside of one house. */
-  realm: 'city' | 'house' = 'city';
+  realm: 'city' | 'house' | 'property' = 'city';
 
   /** Whose house they are in, when they are in one. */
   houseId: string | null = null;
+  propertyId: string | null = null;
 
   /** Goes up whenever the player moves between the city and a house. */
   realmRevision = 0;
@@ -304,13 +309,14 @@ export class WorldConnection {
         // true in the place we are now standing.
         this.realm = message.realm;
         this.houseId = message.houseId;
+        this.propertyId = message.propertyId ?? null;
         this.world = message.world;
         this.chunks.clear();
         this.nearby.clear();
         this.you = null;
         this.chunkRevision += 1;
         this.realmRevision += 1;
-        this.handlers.onRealm?.(message.realm, message.houseId);
+        this.handlers.onRealm?.(message.realm, message.houseId, message.propertyId ?? null);
         return;
       }
       case 'notice': {

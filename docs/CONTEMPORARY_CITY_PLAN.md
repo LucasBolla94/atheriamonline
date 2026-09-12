@@ -127,3 +127,30 @@ passed. The initial conservation test exposed an incomplete test fixture reset
 fixed isolation while preserving the exact conservation assertions.
 
 This data foundation still needs HTTP, realtime realm transitions and editor UI.
+
+## Interior access and realtime milestone (2026-09-12)
+
+Properties now have separate live worlds, each with its own map, occupants and
+chat. The world server reads shared database permissions before admission and
+rechecks occupants every five seconds as a fallback to immediate permission
+nudges. Revoked guests return to their saved outdoor position. Admission reserves
+outdoor capacity for indoor residents and rejects a second session of the same
+character across realms. A disconnected player cannot be moved by a late access
+response. Protocol version 8 carries the property identifier.
+
+Authenticated HTTP routes expose interior views, requested entry, named guest
+management and furniture placement/rotation/retrieval. Settings and guest changes
+request a live permission refresh. Entry returns HTTP 202: the live realm message
+is the confirmation of admission; an HTTP response alone does not prove entry.
+The browser entry flow must wait for that message and handle a missing response.
+
+Validation: all 287 unit tests passed, including eight new socket cases for
+properties. All 24 focused property integration tests passed, including HTTP
+invitation/revocation and actual item editing/conservation. Typecheck and lint
+passed. HTTP testing caught swapped view arguments; correcting the route calls
+restored the intended permission checks. Rotation validation uses the existing
+0/90/180/270-degree convention, with a 90-degree HTTP regression assertion.
+
+The client currently understands the protocol identifier but still needs the
+property entrance/editor UI and rendered interior finishes. This milestone is
+not a playable complete release and has not been deployed.

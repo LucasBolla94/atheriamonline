@@ -1,6 +1,7 @@
 /** Access and furniture changes for public venues and player businesses. */
 import { and, eq } from 'drizzle-orm';
 import {
+  mayEnterProperty,
   characters,
   properties,
   propertyGuests,
@@ -12,6 +13,8 @@ import {
 import { canDecorateInterior, isRotation } from '@atheriam/shared';
 import { contentsOf, type PlacedItem } from './houses.js';
 import { moveItem } from './items.js';
+
+export { mayEnterProperty } from '@atheriam/db';
 
 type Executor = Database | Parameters<Parameters<Database['transaction']>[0]>[0];
 export type InteriorFailure =
@@ -25,24 +28,6 @@ export type InteriorFailure =
   | 'bad-rotation'
   | 'tile-taken';
 export type InteriorResult<T> = { ok: true; data: T } | { ok: false; reason: InteriorFailure };
-
-export async function mayEnterProperty(
-  db: Executor,
-  property: Property,
-  visitorId: string,
-): Promise<boolean> {
-  if (property.municipal || property.ownerId === visitorId) return true;
-  if (property.ownerId === null || property.access === 'nobody') return false;
-  if (property.access === 'everyone') return true;
-  const guests = await db
-    .select({ id: propertyGuests.id })
-    .from(propertyGuests)
-    .where(
-      and(eq(propertyGuests.propertyId, property.id), eq(propertyGuests.characterId, visitorId)),
-    )
-    .limit(1);
-  return guests.length > 0;
-}
 
 export async function propertyGuestNames(db: Executor, propertyId: string): Promise<string[]> {
   const guests = await db

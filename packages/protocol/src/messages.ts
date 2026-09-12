@@ -28,8 +28,9 @@ import { CHUNK_SIZE_TILES, MAX_CHAT_LENGTH } from '@atheriam/shared';
  * 6: the server can nudge a player to go and look at something that changed.
  * 7: a player can be somewhere other than the city — inside a house — and is
  *    told when that changes.
+ * 8: public and commercial properties have separate interior realms.
  */
-export const PROTOCOL_VERSION = 7;
+export const PROTOCOL_VERSION = 8;
 
 /** The eight directions a player may step in. */
 export const directionSchema = z.enum(['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw']);
@@ -295,9 +296,10 @@ export const noticeSchema = z.object({
  */
 export const realmSchema = z.object({
   t: z.literal('realm'),
-  realm: z.enum(['city', 'house']),
+  realm: z.enum(['city', 'house', 'property']),
   /** Whose house, when it is a house. The browser asks the API what is in it. */
   houseId: z.string().min(1).max(64).nullable(),
+  propertyId: z.string().uuid().nullable().optional(),
   world: worldInfoSchema,
   spawn: tilePosSchema,
 });

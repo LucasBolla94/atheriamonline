@@ -1,3 +1,4 @@
+import { silentWorldLink } from './worldLink.js';
 import { decorateInterior, mayEnterProperty, setPropertyGuest, viewInterior } from './interiors.js';
 import { ensureCatalogue, createItemFor, inventoryOf } from './items.js';
 import { itemInstances } from '@atheriam/db';
@@ -245,9 +246,22 @@ describe('commercial properties in a real city', () => {
 
 describe('property HTTP routes', () => {
   let app: FastifyInstance;
+  const nudges: string[] = [];
+  beforeEach(() => {
+    nudges.length = 0;
+  });
   const redis = new Redis(testRedisUrl());
   beforeAll(async () => {
     app = await buildServer({
+      world: {
+        ...silentWorldLink(),
+        enterProperty: async (characterId, propertyId) => {
+          nudges.push(`enter:${characterId}:${propertyId}`);
+        },
+        recheckProperty: async (propertyId) => {
+          nudges.push(`recheck:${propertyId}`);
+        },
+      },
       db,
       redis,
       config: readConfig({
@@ -281,8 +295,131 @@ describe('property HTTP routes', () => {
       { method: 'GET' as const, url: '/api/city/properties' },
       { method: 'POST' as const, url: `/api/properties/${site.id}/buy` },
       { method: 'POST' as const, url: `/api/properties/${site.id}/settings` },
+      { method: 'GET' as const, url: `/api/properties/${site.id}/interior` },
+      { method: 'POST' as const, url: `/api/properties/${site.id}/enter` },
+      { method: 'POST' as const, url: `/api/properties/${site.id}/guests` },
+      { method: 'POST' as const, url: `/api/properties/${site.id}/decorate` },
     ])
       expect((await app.inject(route)).statusCode).toBe(401);
+  });
+
+  it('enforces invitations through HTTP and requests live permission updates', async () => {
+    const owner = await player('host');
+    const visitor = await player('guest');
+    const site = await address();
+    await buyProperty(db, owner, site.id, 'guest-http-key');
+    const ownerCookie = await cookieFor(owner);
+    const guestCookie = await cookieFor(visitor);
+    const url = `/api/properties/${site.id}`;
+    for (const route of [
+      { method: 'GET' as const, url: `${url}/interior` },
+      { method: 'POST' as const, url: `${url}/enter` },
+    ]) {
+      expect((await app.inject({ ...route, cookies: guestCookie })).statusCode).toBe(403);
+    }
+    expect(nudges).toEqual([]);
+    const settings = await app.inject({
+      method: 'POST',
+      url: `${url}/settings`,
+      cookies: ownerCookie,
+      payload: {
+        businessName: 'Guest Studio',
+        description: '',
+        access: 'welcomed',
+        published: false,
+        floorStyle: 'tile',
+        wallStyle: 'teal',
+      },
+    });
+    expect(settings.statusCode).toBe(200);
+    expect(nudges).toContain(`recheck:${site.id}`);
+    const invited = await app.inject({
+      method: 'POST',
+      url: `${url}/guests`,
+      cookies: ownerCookie,
+      payload: { name: 'guest', welcomed: true },
+    });
+    expect(invited.statusCode).toBe(200);
+    expect(invited.json().guests).toEqual(['guest']);
+    const interior = await app.inject({
+      method: 'GET',
+      url: `${url}/interior`,
+      cookies: guestCookie,
+    });
+    expect(interior.statusCode).toBe(200);
+    expect(interior.json()).toMatchObject({
+      name: 'Guest Studio',
+      yours: false,
+      guests: [],
+      floorStyle: 'tile',
+    });
+    const enter = await app.inject({ method: 'POST', url: `${url}/enter`, cookies: guestCookie });
+    expect(enter.statusCode).toBe(202);
+    expect(enter.json()).toEqual({ requested: true, id: site.id });
+    expect(nudges).toContain(`enter:${visitor}:${site.id}`);
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: `${url}/guests`,
+          cookies: guestCookie,
+          payload: { name: 'host', welcomed: true },
+        })
+      ).statusCode,
+    ).toBe(403);
+    const revoked = await app.inject({
+      method: 'POST',
+      url: `${url}/guests`,
+      cookies: ownerCookie,
+      payload: { name: 'guest', welcomed: false },
+    });
+    expect(revoked.statusCode).toBe(200);
+    expect(revoked.json().guests).toEqual([]);
+    expect(nudges.filter((value) => value === `recheck:${site.id}`)).toHaveLength(3);
+    expect(
+      (await app.inject({ method: 'GET', url: `${url}/interior`, cookies: guestCookie }))
+        .statusCode,
+    ).toBe(403);
+  });
+
+  it('decorates through HTTP with session ownership and strict item intents', async () => {
+    await ensureCatalogue(db);
+    const owner = await player('furnisher');
+    const other = await player('intruder');
+    const site = await address();
+    await buyProperty(db, owner, site.id, 'furniture-http-key');
+    const item = await createItemFor(db, 'oak-stool', owner);
+    const cookies = await cookieFor(owner);
+    const url = `/api/properties/${site.id}/decorate`;
+    const payload = { action: 'place', itemId: item.id, x: 4, y: 4, rotation: 0 };
+    expect(
+      (await app.inject({ method: 'POST', url, cookies: await cookieFor(other), payload }))
+        .statusCode,
+    ).toBe(403);
+    expect(
+      (await app.inject({ method: 'POST', url, cookies, payload: { ...payload, ownerId: owner } }))
+        .statusCode,
+    ).toBe(400);
+    const placed = await app.inject({ method: 'POST', url, cookies, payload });
+    expect(placed.statusCode).toBe(200);
+    expect(placed.json().contents).toHaveLength(1);
+    const rotated = await app.inject({
+      method: 'POST',
+      url,
+      cookies,
+      payload: { action: 'rotate', itemId: item.id, rotation: 90 },
+    });
+    expect(rotated.statusCode).toBe(200);
+    expect(rotated.json().contents[0].rotation).toBe(90);
+    const taken = await app.inject({
+      method: 'POST',
+      url,
+      cookies,
+      payload: { action: 'take', itemId: item.id },
+    });
+    expect(taken.statusCode).toBe(200);
+    expect(taken.json().contents).toEqual([]);
+    expect((await inventoryOf(db, owner)).filter((entry) => entry.id === item.id)).toHaveLength(1);
   });
 
   it('returns prices as strings and an owned property after purchase and refresh', async () => {

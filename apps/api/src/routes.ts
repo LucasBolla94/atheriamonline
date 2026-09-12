@@ -1,3 +1,4 @@
+import { registerInteriorRoutes } from './interiorRoutes.js';
 import { registerPropertyRoutes } from './propertyRoutes.js';
 /**
  * The HTTP surface.
@@ -249,7 +250,8 @@ export async function registerRoutes(app: FastifyInstance, options: RouteOptions
     maxAge: SESSION_TTL_SECONDS,
   };
 
-  registerPropertyRoutes(app, { db, requirePlayer });
+  registerPropertyRoutes(app, { db, world, requirePlayer });
+  registerInteriorRoutes(app, { db, world, requirePlayer });
 
   /** Is the database awake? Used by Docker, by Caddy and by us. */
   app.get('/api/health', async () => {

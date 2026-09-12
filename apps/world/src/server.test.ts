@@ -863,3 +863,141 @@ describe('logging out from inside a house', () => {
     expect(tickets.saved[0]).toMatchObject({ id: 'c-aldric', x: 30, y: 40 });
   });
 });
+
+describe('commercial interiors over real sockets', () => {
+  const propertyId = '10000000-0000-4000-8000-000000000001';
+  const otherPropertyId = '10000000-0000-4000-8000-000000000002';
+  let server: WorldServer;
+  let world: World;
+  let tickets: FakeTickets;
+  let nowMs: number;
+  let allow: (id: string, property: string) => Promise<boolean>;
+  const clients: TestClient[] = [];
+
+  beforeEach(async () => {
+    tickets = new FakeTickets();
+    nowMs = Date.now();
+    world = new World(openField, { maxPlayers: 3 });
+    allow = async () => true;
+    server = new WorldServer({
+      now: () => nowMs,
+      host: '127.0.0.1',
+      port: 0,
+      world,
+      resolveTicket: tickets.spend,
+      savePosition: tickets.save,
+      canEnterProperty: (id, property) => allow(id, property),
+    });
+    server.start();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  });
+  afterEach(async () => {
+    clients.forEach((client) => client.close());
+    clients.length = 0;
+    await server.stop();
+  });
+  async function connect(id: string): Promise<TestClient> {
+    const client = await TestClient.connect(server.port);
+    clients.push(client);
+    client.send({ t: 'join', ticket: tickets.issue(character(id, id, 12, 14)) });
+    return client;
+  }
+  async function join(id: string): Promise<TestClient> {
+    const client = await connect(id);
+    await client.waitFor('snapshot');
+    return client;
+  }
+
+  it('streams the correct interior and returns to the saved outdoor position', async () => {
+    const client = await join('owner');
+    expect(await server.enterProperty('owner', propertyId)).toBe(true);
+    expect(await client.waitFor('realm')).toMatchObject({
+      realm: 'property',
+      propertyId,
+      houseId: null,
+      world: { width: 20, height: 16 },
+    });
+    expect(world.playerCount).toBe(0);
+    client.clear();
+    expect(server.leaveHouse('owner')).toBe(true);
+    expect(await client.waitFor('realm')).toMatchObject({ realm: 'city', spawn: { x: 12, y: 14 } });
+  });
+  it('refuses private access and database failures without moving the player', async () => {
+    const client = await join('visitor');
+    allow = async () => false;
+    expect(await server.enterProperty('visitor', propertyId)).toBe(false);
+    allow = async () => {
+      throw new Error('database unavailable');
+    };
+    expect(await server.enterProperty('visitor', propertyId)).toBe(false);
+    expect(world.playerCount).toBe(1);
+    expect(client.latest('realm')).toBeUndefined();
+  });
+  it('removes a guest after permission is revoked', async () => {
+    const client = await join('guest');
+    await server.enterProperty('guest', propertyId);
+    await client.waitFor('realm');
+    client.clear();
+    allow = async () => false;
+    server.recheckProperty(propertyId);
+    expect(await client.waitFor('realm')).toMatchObject({ realm: 'city', spawn: { x: 12, y: 14 } });
+    expect(world.playerCount).toBe(1);
+  });
+  it('rechecks permissions periodically even if a live nudge is lost', async () => {
+    const client = await join('guest');
+    await server.enterProperty('guest', propertyId);
+    await client.waitFor('realm');
+    client.clear();
+    allow = async () => false;
+    nowMs += 6000;
+    expect(await client.waitFor('realm')).toMatchObject({ realm: 'city' });
+  });
+
+  it('keeps conversations inside their own business', async () => {
+    const owner = await join('owner');
+    const guest = await join('guest');
+    const other = await join('other');
+    await server.enterProperty('owner', propertyId);
+    await server.enterProperty('guest', propertyId);
+    await server.enterProperty('other', otherPropertyId);
+    await Promise.all([owner.waitFor('realm'), guest.waitFor('realm'), other.waitFor('realm')]);
+    other.clear();
+    owner.send({ t: 'say', seq: 1, text: 'Private business conversation' });
+    expect((await guest.waitFor('chat')).text).toBe('Private business conversation');
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(other.latest('chat')).toBeUndefined();
+  });
+  it('rejects a second login while the same player is indoors', async () => {
+    await join('owner');
+    await server.enterProperty('owner', propertyId);
+    const duplicate = await connect('owner');
+    expect((await duplicate.waitFor('bye')).reason).toBe('already-online');
+    expect(server.leaveHouse('owner')).toBe(true);
+    expect(world.playerCount).toBe(1);
+  });
+  it('reserves city capacity so an indoor guest can always leave', async () => {
+    await join('owner');
+    await server.enterProperty('owner', propertyId);
+    await join('two');
+    await join('three');
+    const extra = await connect('four');
+    expect((await extra.waitFor('bye')).reason).toBe('server-full');
+    expect(server.leaveHouse('owner')).toBe(true);
+    expect(world.playerCount).toBe(3);
+  });
+  it('does not move a disconnected player after a slow permission response', async () => {
+    const client = await join('visitor');
+    let resolve!: (allowed: boolean) => void;
+    allow = () =>
+      new Promise<boolean>((done) => {
+        resolve = done;
+      });
+    const entering = server.enterProperty('visitor', propertyId);
+    client.close();
+    await new Promise((done) => setTimeout(done, 100));
+    resolve(true);
+    expect(await entering).toBe(false);
+    expect(world.playerCount).toBe(0);
+    expect(server.occupiedHouses).toBe(0);
+  });
+});

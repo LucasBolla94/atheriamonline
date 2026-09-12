@@ -119,6 +119,10 @@ export class World {
     return this.currentRevision;
   }
 
+  get capacity(): number {
+    return this.maxPlayers;
+  }
+
   get playerCount(): number {
     return this.players.size;
   }

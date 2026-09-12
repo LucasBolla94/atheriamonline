@@ -83,6 +83,12 @@ export const worldCommandSchema = z.discriminatedUnion('t', [
   muteCommandSchema,
   blockCommandSchema,
   notifyCommandSchema,
+  z.object({
+    t: z.literal('enter-property'),
+    characterId: characterIdSchema,
+    propertyId: z.string().uuid(),
+  }),
+  z.object({ t: z.literal('recheck-property'), propertyId: z.string().uuid() }),
   enterHouseCommandSchema,
   leaveHouseCommandSchema,
 ]);

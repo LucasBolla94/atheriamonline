@@ -11,12 +11,12 @@
  * is not here: furniture belongs to the API, and the browser asks it. The world
  * server only needs to know where the walls are.
  */
-import { HOUSE_ROWS } from '@atheriam/shared';
+import { HOUSE_ROWS, INTERIOR_ROWS } from '@atheriam/shared';
 import { GameMap } from './map.js';
 import { World } from './world.js';
 
 /** The name of a realm: the city, or one house. */
-export type RealmId = 'city' | `house:${string}`;
+export type RealmId = 'city' | `house:${string}` | `property:${string}`;
 
 export function houseRealm(houseId: string): RealmId {
   return `house:${houseId}`;
@@ -24,11 +24,18 @@ export function houseRealm(houseId: string): RealmId {
 
 /** The id of the house a realm is, or null for the city. */
 export function houseIdOf(realm: RealmId): string | null {
-  return realm === 'city' ? null : realm.slice('house:'.length);
+  return realm.startsWith('house:') ? realm.slice('house:'.length) : null;
 }
 
 /** Every house is the same room inside. It is read-only, so one is enough. */
 const houseMap = new GameMap(HOUSE_ROWS);
+const propertyMap = new GameMap(INTERIOR_ROWS);
+export function propertyRealm(id: string): RealmId {
+  return `property:${id}`;
+}
+export function propertyIdOf(realm: RealmId): string | null {
+  return realm.startsWith('property:') ? realm.slice('property:'.length) : null;
+}
 
 export class Realms {
   /** The city. It always exists, whether or not anybody is in it. */
@@ -51,7 +58,9 @@ export class Realms {
     const existing = this.houses.get(realm);
     if (existing !== undefined) return existing;
 
-    const made = new World(houseMap, { maxPlayers: 20 });
+    const made = new World(realm.startsWith('property:') ? propertyMap : houseMap, {
+      maxPlayers: realm.startsWith('property:') ? 40 : 20,
+    });
     this.houses.set(realm, made);
     return made;
   }

@@ -1,3 +1,4 @@
+import type { WorldLink } from './worldLink.js';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { Database, Property } from '@atheriam/db';
@@ -61,13 +62,14 @@ export function registerPropertyRoutes(
   app: FastifyInstance,
   options: {
     db: Database;
+    world: WorldLink;
     requirePlayer: (
       request: FastifyRequest,
       reply: FastifyReply,
     ) => Promise<{ character: { id: string } } | null>;
   },
 ): void {
-  const { db, requirePlayer } = options;
+  const { db, world, requirePlayer } = options;
   app.get('/api/city/properties', async (request, reply) => {
     const who = await requirePlayer(request, reply);
     if (who === null) return reply;
@@ -115,6 +117,7 @@ export function registerPropertyRoutes(
       return reply
         .code(result.reason === 'not-owner' ? 403 : 400)
         .send({ error: result.reason, message: MESSAGES[result.reason] });
+    await world.recheckProperty(params.data.id);
     return { property: view(result.data, who.character.id) };
   });
 }

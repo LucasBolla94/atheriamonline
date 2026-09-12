@@ -15,6 +15,8 @@ import type { Redis } from 'ioredis';
 import { WORLD_COMMAND_CHANNEL, type WorldCommand } from '@atheriam/protocol';
 
 export interface WorldLink {
+  enterProperty(characterId: string, propertyId: string): Promise<void>;
+  recheckProperty(propertyId: string): Promise<void>;
   appearance(characterId: string, appearance: number): Promise<void>;
   kick(characterId: string, reason: 'kicked' | 'banned'): Promise<void>;
   mute(characterId: string, untilMs: number | null): Promise<void>;
@@ -40,6 +42,9 @@ export function redisWorldLink(redis: Redis, onError?: (error: unknown) => void)
   }
 
   return {
+    enterProperty: (characterId, propertyId) =>
+      publish({ t: 'enter-property', characterId, propertyId }),
+    recheckProperty: (propertyId) => publish({ t: 'recheck-property', propertyId }),
     appearance: (characterId, appearance) => publish({ t: 'appearance', characterId, appearance }),
     kick: (characterId, reason) => publish({ t: 'kick', characterId, reason }),
     mute: (characterId, untilMs) => publish({ t: 'mute', characterId, untilMs }),
@@ -54,6 +59,8 @@ export function redisWorldLink(redis: Redis, onError?: (error: unknown) => void)
 /** A link that goes nowhere, for tests and for running the API on its own. */
 export function silentWorldLink(): WorldLink {
   return {
+    enterProperty: async () => Promise.resolve(),
+    recheckProperty: async () => Promise.resolve(),
     appearance: async () => Promise.resolve(),
     kick: async () => Promise.resolve(),
     mute: async () => Promise.resolve(),

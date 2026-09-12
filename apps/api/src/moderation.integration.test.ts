@@ -14,7 +14,7 @@ import { testDatabaseUrl, testRedisUrl } from '../../../test/integration-setup.j
 import { buildServer } from './server.js';
 import { readConfig } from './config.js';
 import { SESSION_COOKIE } from './routes.js';
-import type { WorldLink } from './worldLink.js';
+import { silentWorldLink, type WorldLink } from './worldLink.js';
 
 const handle: DatabaseHandle = connect(testDatabaseUrl(), 4);
 const redis = new Redis(testRedisUrl());
@@ -35,6 +35,7 @@ const config = readConfig({
 function spyLink(): WorldLink & { calls: string[] } {
   const calls: string[] = [];
   return {
+    ...silentWorldLink(),
     calls,
     kick: async (id, reason) => {
       calls.push(`kick:${id}:${reason}`);

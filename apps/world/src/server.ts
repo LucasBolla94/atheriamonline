@@ -9,6 +9,7 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import {
   CHUNK_SIZE_TILES,
   HOUSE_ENTRANCE,
+  INTERIOR_ENTRANCE,
   TICK_MS,
   chunkKey,
   type TilePos,
@@ -22,7 +23,14 @@ import {
   type ServerMessage,
 } from '@atheriam/protocol';
 import { spawnPoint } from './map.js';
-import { Realms, houseIdOf, houseRealm, type RealmId } from './realms.js';
+import {
+  Realms,
+  houseIdOf,
+  houseRealm,
+  propertyIdOf,
+  propertyRealm,
+  type RealmId,
+} from './realms.js';
 import { chunksInView, diffChunks } from './streaming.js';
 import type { JoiningCharacter, PlayerState, World } from './world.js';
 
@@ -105,6 +113,8 @@ export interface WorldServerOptions {
   }) => Promise<void>;
   /** Injectable clock, so tests do not depend on the wall clock. */
   readonly now?: () => number;
+  /** Read-only authorization; rechecked while visitors remain inside. */
+  readonly canEnterProperty?: (characterId: string, propertyId: string) => Promise<boolean>;
 }
 
 export class WorldServer {
@@ -117,11 +127,15 @@ export class WorldServer {
   private readonly now: () => number;
   private readonly resolveTicket: WorldServerOptions['resolveTicket'];
   private readonly savePosition: WorldServerOptions['savePosition'];
+  private readonly canEnterProperty: (characterId: string, propertyId: string) => Promise<boolean>;
+  private readonly checkingProperties = new Set<Connection>();
+  private nextPropertyCheck = 0;
   private tickTimer: NodeJS.Timeout | null = null;
   private heartbeatTimer: NodeJS.Timeout | null = null;
 
   constructor(options: WorldServerOptions) {
     this.realms = new Realms(options.world);
+    this.canEnterProperty = options.canEnterProperty ?? (async () => false);
     this.now = options.now ?? (() => Date.now());
     this.resolveTicket = options.resolveTicket;
     this.savePosition = options.savePosition;
@@ -331,6 +345,16 @@ export class WorldServer {
     // The socket may have gone away while we were asking about the ticket.
     if (!this.connections.has(connection.socket)) return;
 
+    // Reserve outdoor capacity for indoor residents and reject duplicate sessions
+    // across every realm, not only the people currently standing outside.
+    if (this.byPlayer.has(character.id)) {
+      this.disconnect(connection, 'already-online');
+      return;
+    }
+    if (this.byPlayer.size >= this.world.capacity) {
+      this.disconnect(connection, 'server-full');
+      return;
+    }
     const result = this.world.join(character, nowMs);
     if (!result.ok) {
       this.disconnect(connection, result.reason);
@@ -446,6 +470,53 @@ export class WorldServer {
     return this.moveRealm(connection, houseRealm(houseId), HOUSE_ENTRANCE);
   }
 
+  async enterProperty(characterId: string, propertyId: string): Promise<boolean> {
+    const connection = this.byPlayer.get(characterId);
+    if (connection === undefined || connection.realm !== 'city') return false;
+    let allowed = false;
+    try {
+      allowed = await this.canEnterProperty(characterId, propertyId);
+    } catch {
+      return false;
+    }
+    if (!allowed || this.byPlayer.get(characterId) !== connection || connection.realm !== 'city')
+      return false;
+    const player = this.world.get(characterId);
+    if (player === undefined) return false;
+    connection.cityPosition = { x: player.x, y: player.y };
+    const entered = this.moveRealm(connection, propertyRealm(propertyId), INTERIOR_ENTRANCE);
+    if (!entered) connection.cityPosition = null;
+    return entered;
+  }
+
+  recheckProperty(propertyId: string): void {
+    for (const connection of this.connections.values()) {
+      if (propertyIdOf(connection.realm) === propertyId) void this.validateProperty(connection);
+    }
+  }
+
+  private async validateProperty(connection: Connection): Promise<void> {
+    const propertyId = propertyIdOf(connection.realm),
+      characterId = connection.playerId;
+    if (propertyId === null || characterId === null || this.checkingProperties.has(connection))
+      return;
+    this.checkingProperties.add(connection);
+    let allowed = false;
+    try {
+      allowed = await this.canEnterProperty(characterId, propertyId);
+    } catch {
+      /* Fail closed. */
+    } finally {
+      this.checkingProperties.delete(connection);
+    }
+    if (
+      !allowed &&
+      this.byPlayer.get(characterId) === connection &&
+      propertyIdOf(connection.realm) === propertyId
+    )
+      this.leaveHouse(characterId);
+  }
+
   /** Send a player back out into the city, where they came in. */
   leaveHouse(characterId: string): boolean {
     const connection = this.byPlayer.get(characterId);
@@ -453,8 +524,9 @@ export class WorldServer {
     if (connection.realm === 'city') return false;
 
     const back = connection.cityPosition;
-    connection.cityPosition = null;
-    return this.moveRealm(connection, 'city', back);
+    const left = this.moveRealm(connection, 'city', back);
+    if (left) connection.cityPosition = null;
+    return left;
   }
 
   /**
@@ -496,8 +568,9 @@ export class WorldServer {
     const houseId = houseIdOf(to);
     this.send(connection, {
       t: 'realm',
-      realm: houseId === null ? 'city' : 'house',
+      realm: propertyIdOf(to) !== null ? 'property' : houseId === null ? 'city' : 'house',
       houseId,
+      ...(propertyIdOf(to) === null ? {} : { propertyId: propertyIdOf(to) }),
       world: {
         width: target.map.width,
         height: target.map.height,
@@ -520,6 +593,10 @@ export class WorldServer {
 
   private onTick(): void {
     const nowMs = this.now();
+    if (nowMs >= this.nextPropertyCheck) {
+      this.nextPropertyCheck = nowMs + 5000;
+      for (const connection of this.connections.values()) void this.validateProperty(connection);
+    }
     // The city, and the inside of every house somebody is standing in.
     for (const world of this.realms.all()) world.advance(nowMs);
 

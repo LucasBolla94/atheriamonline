@@ -12,7 +12,7 @@ import { Redis } from 'ioredis';
 import { eq } from 'drizzle-orm';
 import { CHAT_RADIUS_TILES, TICK_HZ, VIEW_RADIUS_TILES, type Direction } from '@atheriam/shared';
 import { PROTOCOL_VERSION, WORLD_COMMAND_CHANNEL, decodeWorldCommand } from '@atheriam/protocol';
-import { accounts, blocks, characters, connect } from '@atheriam/db';
+import { accounts, blocks, characters, connect, properties, mayEnterProperty } from '@atheriam/db';
 import { starterDistrict } from './map.js';
 import { World, type JoiningCharacter } from './world.js';
 import { WorldServer } from './server.js';
@@ -107,7 +107,19 @@ async function savePosition(character: {
     .where(eq(characters.id, character.id));
 }
 
-const server = new WorldServer({ host, port, world, resolveTicket, savePosition });
+const server = new WorldServer({
+  host,
+  port,
+  world,
+  resolveTicket,
+  savePosition,
+  canEnterProperty: async (characterId, propertyId) => {
+    const property = (
+      await database.db.select().from(properties).where(eq(properties.id, propertyId)).limit(1)
+    )[0];
+    return property !== undefined && (await mayEnterProperty(database.db, property, characterId));
+  },
+});
 server.start();
 
 /**
@@ -141,6 +153,12 @@ commands.on('message', (_channel, raw) => {
       return;
     case 'notify':
       server.notify(command.characterId, command.about);
+      return;
+    case 'enter-property':
+      void server.enterProperty(command.characterId, command.propertyId);
+      return;
+    case 'recheck-property':
+      server.recheckProperty(command.propertyId);
       return;
     case 'enter-house':
       server.enterHouse(command.characterId, command.houseId);
