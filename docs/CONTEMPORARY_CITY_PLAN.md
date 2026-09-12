@@ -188,3 +188,38 @@ public venue furnishings, booking rooms, item listings/sales, contemporary
 resident/social animations and the final full regression/deployment gates.
 The initial website copy must remain unpublished until those advertised features
 are complete. This milestone does not complete the overall release.
+
+## Business item sales milestone (2026-09-12)
+
+Migration 0008 adds item listings and immutable sale receipts. An owner lists a
+real inventory item at an exact Crown price; it moves to listing escrow until
+bought or withdrawn. Creating a listing and buying both bind retry keys to the
+original intent. Buying locks the business/listing, checks current entry access,
+and transfers item plus full payment in one transaction. Withdrawing returns the
+same item. Prices are immutable; a different price needs a new listing. See D-068.
+
+The environment panel now opens a Shop. Owners choose an inventory item and
+price, list it, or withdraw it. Visitors review the item, price and balance before
+confirming. The shop refreshes listings and purses, including the seller's balance
+when somebody else buys. Leaving the realm or disconnecting closes its shop.
+The compact landscape confirmation keeps the price and full purchase button in
+the viewport, checked by the final mobile browser test.
+
+Verification: all 157 integration tests passed, including 13 shop cases covering
+concurrent buyers/retries, cross-business overspending, cancellation races,
+unauthorized changes, exact HTTP money strings and rollback after a forced receipt
+failure. All 289 unit tests passed. Typecheck, lint and production build passed;
+client typecheck/lint/build passed again after compacting the review layout.
+
+The ordinary two-resident browser flow passed on desktop and mobile: buy a
+business, configure/open it, reserve an item, refuse an unaffordable purchase,
+withdraw/relist, buy at 12.50 Crowns, and inspect both balances and the buyer's
+actual inventory. The final mobile rerun passed in 1.3 minutes, retaining the
+15-second UI assertions and adding viewport checks. Initial desktop and final
+mobile review captures are retained in docs/design/contemporary. Browser fixture
+funding was written only to the guarded, isolated e2e ledger.
+
+Still required for the full release: reservable lounge rooms/invitations/expiry,
+public venue furnishing and entrance walkthrough, contemporary resident art and
+social animations, final complete browser/visual regression and backed-up live
+deployment. This milestone has not been deployed and does not complete the goal.

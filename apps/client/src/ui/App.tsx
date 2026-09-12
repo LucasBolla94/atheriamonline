@@ -1,3 +1,4 @@
+import { ShopPanel } from './ShopPanel.js';
 import { CityPanel } from './CityPanel.js';
 /**
  * The whole interface, and the one place that owns the connection.
@@ -67,6 +68,11 @@ export function App(): JSX.Element {
   const [tradeBusy, setTradeBusy] = useState(false);
   const [interior, setInterior] = useState<api.InteriorView | null>(null);
   const [house, setHouse] = useState<api.HouseView | null>(null);
+  const [shopOpen, setShopOpen] = useState(false);
+  const [shopItems, setShopItems] = useState<readonly api.ShopItem[]>([]);
+  const [shopLoading, setShopLoading] = useState(false);
+  const [shopError, setShopError] = useState<string | null>(null);
+  const shopReadVersion = useRef(0);
   const [housePanelOpen, setHousePanelOpen] = useState(false);
   const [houseNotice, setHouseNotice] = useState<string | null>(null);
   const [houseBusy, setHouseBusy] = useState(false);
@@ -169,6 +175,9 @@ export function App(): JSX.Element {
         if (about === 'trade') refreshTradeRef.current?.();
       },
       onRealm: (which, houseId, propertyId) => {
+        setShopOpen(false);
+        setShopItems([]);
+        shopReadVersion.current += 1;
         setIndoors(which !== 'city');
         setChat([]);
         setCityOpen(false);
@@ -201,6 +210,12 @@ export function App(): JSX.Element {
         else if (reason === 'too-chatty') setChatNotice(strings.chat.tooChatty);
       },
       onClosed: (reason) => {
+        setShopOpen(false);
+        setHousePanelOpen(false);
+        setInterior(null);
+        setHouse(null);
+        setIndoors(false);
+        setPicked(null);
         setError(errorMessage(reason));
         setYou(null);
         setWorld(null);
@@ -268,6 +283,42 @@ export function App(): JSX.Element {
       if (carried.ok) setItems(carried.data.items);
     })();
   }, []);
+
+  const refreshShop = useCallback(async (id: string) => {
+    const revision = ++shopReadVersion.current;
+    const result = await api.shopListings(id);
+    if (connectionRef.current?.propertyId !== id || revision !== shopReadVersion.current) return;
+    setShopLoading(false);
+    setShopError(result.ok ? null : result.message);
+    if (result.ok) setShopItems(result.data.items);
+  }, []);
+  const shopPropertyId = interior?.id;
+  useEffect(() => {
+    if (!playing || !shopOpen || !shopPropertyId) return;
+    const id = shopPropertyId;
+    let running = false;
+    const interval = window.setInterval(() => {
+      if (running) return;
+      running = true;
+      void refreshShop(id).finally(() => {
+        running = false;
+      });
+      refreshPouch();
+    }, 4000);
+    return () => window.clearInterval(interval);
+  }, [playing, shopOpen, shopPropertyId, refreshShop, refreshPouch]);
+  const shopAction = useCallback(
+    async (action: () => Promise<api.ApiResult<unknown>>) => {
+      const id = connectionRef.current?.propertyId;
+      shopReadVersion.current += 1;
+      const result = await action();
+      shopReadVersion.current += 1;
+      refreshPouch();
+      if (id && connectionRef.current?.propertyId === id) await refreshShop(id);
+      return result;
+    },
+    [refreshShop, refreshPouch],
+  );
 
   // The trade actions need to refresh the purse, and the purse refresher is
   // defined below them; a ref keeps the two from having to be one function.
@@ -599,6 +650,8 @@ export function App(): JSX.Element {
       setItems([]);
       setTrade(null);
       setHouse(null);
+      setShopOpen(false);
+      setShopItems([]);
       setInterior(null);
       setIndoors(false);
       setState('idle');
@@ -803,11 +856,44 @@ export function App(): JSX.Element {
           onClose={() => setPouchOpen(false)}
         />
       )}
+      {shopOpen && interior && (
+        <ShopPanel
+          name={interior.name}
+          yours={interior.yours}
+          items={shopItems}
+          inventory={items}
+          purse={purse?.display ?? null}
+          loading={shopLoading}
+          error={shopError}
+          onCreate={(itemId, price, key) =>
+            shopAction(() => api.listShopItem(interior.id, itemId, price, key))
+          }
+          onBuy={(id, key) => shopAction(() => api.buyShopItem(id, key))}
+          onCancel={(id) => shopAction(() => api.cancelShopListing(id))}
+          onClose={() => {
+            setShopOpen(false);
+            setHousePanelOpen(true);
+          }}
+        />
+      )}
       {housePanelOpen && house !== null && (
         <HousePanel
           house={house}
           {...(interior ? { title: interior.name } : {})}
           accessInGuide={interior !== null}
+          {...(interior && !interior.municipal
+            ? {
+                onShop: () => {
+                  setHousePanelOpen(false);
+                  setPicked(null);
+                  setShopOpen(true);
+                  setShopLoading(true);
+                  setShopError(null);
+                  refreshPouch();
+                  void refreshShop(interior.id);
+                },
+              }
+            : {})}
           inventory={items}
           picked={picked}
           busy={houseBusy}
@@ -870,7 +956,7 @@ export function App(): JSX.Element {
           onClose={() => setHousePanelOpen(false)}
         />
       )}
-      {indoors && !housePanelOpen && (
+      {indoors && !housePanelOpen && !shopOpen && (
         <button
           type="button"
           className="hud__button house__reopen"

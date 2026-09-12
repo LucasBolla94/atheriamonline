@@ -1529,3 +1529,53 @@ button:active:not(:disabled) {
     text-overflow: ellipsis;
   }
 }
+
+.shop-panel .pouch__item {
+  flex-wrap: wrap;
+}
+.shop-panel .pouch__item > div {
+  flex: 1;
+  min-width: 0;
+}
+.shop-panel .pouch__item p {
+  margin: var(--space-xs) 0;
+  color: var(--color-text-muted);
+}
+.shop-review__item {
+  display: flex;
+  gap: var(--space-md);
+  align-items: center;
+}
+.shop-review__item h3,
+.shop-review__item p {
+  margin: var(--space-xs) 0;
+}
+@media (max-height: 480px) and (min-width: 651px) {
+  .shop-panel {
+    padding: var(--space-sm) var(--space-md);
+  }
+  .shop-panel > h2,
+  .shop-panel > p {
+    margin: var(--space-xs) 0;
+  }
+  .shop-panel .city-guide__confirmation {
+    padding: var(--space-sm);
+    margin-top: var(--space-sm);
+  }
+  .shop-panel .city-guide__actions {
+    margin-top: var(--space-sm);
+  }
+}
+
+@media (max-height: 480px) and (min-width: 651px) {
+  .shop-panel > h2 {
+    font-size: var(--font-size-lg);
+  }
+  .shop-panel .city-guide__confirmation > p {
+    margin: var(--space-xs) 0;
+    font-size: var(--font-size-sm);
+  }
+  .shop-panel .shop-review__item h3 {
+    font-size: var(--font-size-md);
+  }
+}

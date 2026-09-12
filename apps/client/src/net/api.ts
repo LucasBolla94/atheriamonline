@@ -439,3 +439,49 @@ export function decorateProperty(
     body: JSON.stringify(intent),
   });
 }
+
+export interface ShopItem {
+  id: string;
+  itemId: string;
+  definitionId: string;
+  name: string;
+  description: string;
+  price: string;
+  priceDisplay: string;
+}
+export function shopListings(
+  id: string,
+): Promise<ApiResult<{ yours: boolean; items: ShopItem[] }>> {
+  return request(`/api/properties/${id}/listings`);
+}
+export function listShopItem(
+  propertyId: string,
+  itemId: string,
+  price: string,
+  requestKey: string,
+): Promise<ApiResult<{ id: string; alreadyDone: boolean }>> {
+  return request(`/api/properties/${propertyId}/listings`, {
+    method: 'POST',
+    body: JSON.stringify({ itemId, price, requestKey }),
+  });
+}
+export function cancelShopListing(id: string): Promise<ApiResult<{ alreadyDone: boolean }>> {
+  return request(`/api/listings/${id}/cancel`, { method: 'POST' });
+}
+export function buyShopItem(
+  id: string,
+  requestKey: string,
+): Promise<
+  ApiResult<{
+    receiptId: string;
+    itemId: string;
+    price: string;
+    priceDisplay: string;
+    alreadyDone: boolean;
+  }>
+> {
+  return request(`/api/listings/${id}/buy`, {
+    method: 'POST',
+    body: JSON.stringify({ requestKey }),
+  });
+}
