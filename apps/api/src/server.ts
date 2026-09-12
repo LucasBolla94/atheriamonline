@@ -1,3 +1,4 @@
+import { ensureCityProperties } from './properties.js';
 /**
  * Building the Fastify application.
  *
@@ -105,6 +106,7 @@ export async function buildServer(options: BuildOptions): Promise<FastifyInstanc
   // adding one is a line of code rather than a line of SQL somebody has to
   // remember to run on the server.
   await ensureCatalogue(db);
+  await ensureCityProperties(db);
 
   const mailer =
     options.mailer ??

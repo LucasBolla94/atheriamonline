@@ -24,7 +24,7 @@ import { isMovableAmount, type Money } from './money.js';
  * be destroyed.
  */
 export type LedgerAccount =
-  `player:${string}` | 'system:mint' | 'system:sink' | `escrow:trade:${string}`;
+  `player:${string}` | `city:${string}` | 'system:mint' | 'system:sink' | `escrow:trade:${string}`;
 
 export const MINT: LedgerAccount = 'system:mint';
 export const SINK: LedgerAccount = 'system:sink';

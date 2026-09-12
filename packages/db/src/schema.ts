@@ -461,3 +461,63 @@ export type House = typeof houses.$inferSelect;
 export type HouseGuest = typeof houseGuests.$inferSelect;
 export type Trade = typeof trades.$inferSelect;
 export type TradeItem = typeof tradeItems.$inferSelect;
+
+/** Cities have persistent identities; the first release opens one. */
+export const cities = pgTable('cities', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Each public or commercial address has exactly one durable record/interior. */
+export const properties = pgTable(
+  'properties',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    cityId: text('city_id')
+      .notNull()
+      .references(() => cities.id, { onDelete: 'restrict' }),
+    buildingId: text('building_id').notNull(),
+    municipal: boolean('municipal').notNull(),
+    ownerId: uuid('owner_id').references(() => characters.id, { onDelete: 'restrict' }),
+    price: bigint('price', { mode: 'bigint' }).notNull(),
+    businessName: text('business_name').notNull(),
+    description: text('description').notNull().default(''),
+    access: houseAccess('access').notNull().default('nobody'),
+    published: boolean('published').notNull().default(false),
+    floorStyle: text('floor_style').notNull().default('oak'),
+    wallStyle: text('wall_style').notNull().default('cream'),
+    purchasedAt: timestamp('purchased_at', { withTimezone: true }),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('properties_address_key').on(table.cityId, table.buildingId),
+    index('properties_owner_idx').on(table.ownerId),
+  ],
+);
+
+/** Successful purchase receipts bind a retry key to the original buyer/address. */
+export const propertyPurchases = pgTable(
+  'property_purchases',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    propertyId: uuid('property_id')
+      .notNull()
+      .references(() => properties.id, { onDelete: 'restrict' }),
+    buyerId: uuid('buyer_id')
+      .notNull()
+      .references(() => characters.id, { onDelete: 'restrict' }),
+    requestKey: text('request_key').notNull(),
+    transferId: uuid('transfer_id')
+      .notNull()
+      .references(() => transfers.id, { onDelete: 'restrict' }),
+    price: bigint('price', { mode: 'bigint' }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('property_purchases_request_key').on(table.buyerId, table.requestKey),
+    uniqueIndex('property_purchases_property_key').on(table.propertyId),
+  ],
+);
+
+export type Property = typeof properties.$inferSelect;

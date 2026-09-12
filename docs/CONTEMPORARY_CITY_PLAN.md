@@ -10,7 +10,7 @@ buildings. Preserve all existing accounts and possessions.
   the complete existing history.
 - [ ] Shared city/building definitions, 160 × 160 layout, walkable plaza, park,
   lake and correct entrances; reachability and exact inventory tests.
-- [ ] Persistent cities/properties, atomic Crown purchases, ownership and
+- [x] Persistent cities/properties, atomic Crown purchases, ownership and
   business configuration; concurrency, idempotency and conservation tests.
 - [ ] Public and business interiors, environment editing, directory and item
   listings/sales; authoritative permissions and inventory conservation.
@@ -45,3 +45,20 @@ The new authoritative terrain includes the square, fountain, lake, bridge and pi
 All walkable tiles are reachable from arrival, respecting diagonal corner rules.
 Typecheck and lint passed; all 277 unit tests passed. Rendering/entrance interaction
 is pending the client/interior phases, so this is not yet a playable release.
+
+
+## Phase 2 evidence (durable ownership and HTTP)
+
+Migration 0006 adds cities, properties and immutable initial-purchase receipts.
+The API seeds fifteen addresses without resetting ownership/configuration.
+Purchases serialize retries and property ownership, use the existing ledger
+transaction, and bind request keys to buyer/address. Five city-owned venues are
+unsaleable. Configuration checks the authenticated owner and validates fields.
+
+Typecheck and lint passed. All 277 unit tests passed. A full integration run
+passed 130 tests before the HTTP integration was added; the final focused property
+suite passed all 14 tests (including four actual Fastify/session tests). Tests
+cover concurrent buyers/retries, overdrafts across properties, insufficient
+funds, receipt-failure rollback, conservation, startup persistence, bad client
+payloads and unauthorized edits. Full integration will run again with the next
+phase. These API capabilities still need the client and interior workflows.
