@@ -825,3 +825,15 @@ properties or changing existing balances. Prices are server-owned, displayed
 before confirmation, and can be tuned before launch from playtest feedback.
 **Cost to change:** Seed values for new cities; existing unsold rows need a
 controlled price update. Existing purchases retain their original audit record.
+
+## D-066 — Separate public and game HTML entries
+
+**Date:** 2026-09-12
+**Decision:** Serve the public website at `/` and the game at `/play/`, using two
+Vite build inputs. Redirect old password-recovery links to the game with their
+query preserved. Apply no-cache to both HTML entries in Caddy.
+**Why:** Visitors can discover Atheriam without downloading/parsing Phaser.
+The game entry retains direct module loading, which also avoids delaying its
+initial authentication behind a React lazy boundary on slower devices.
+**Cost to change:** Public/account links and deployment routing must retain both
+entry points. Browser game tests now begin at `/play/`.

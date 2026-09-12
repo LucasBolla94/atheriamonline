@@ -62,3 +62,50 @@ cover concurrent buyers/retries, overdrafts across properties, insufficient
 funds, receipt-failure rollback, conservation, startup persistence, bad client
 payloads and unauthorized edits. Full integration will run again with the next
 phase. These API capabilities still need the client and interior workflows.
+
+## Client and public website milestone (2026-09-12)
+
+The City guide now browses all fifteen addresses, filters municipal/available/owned
+properties, reviews the Crown price and purse, purchases through the API, and
+saves business name, description, access, publication and finish choices.
+Unpublished business details are hidden from other residents. The public website
+has original city art, discovery/creation sections, working FAQ and account links.
+It is a separate HTML entry from `/play/`; its production build does not import
+Phaser. Previously issued root password-reset links redirect to the game entry.
+The game's fifteen footprints now render six original contemporary facade types.
+
+Verification: typecheck, lint, production build and 277 unit tests passed. The
+focused property integration suite passed 15 tests. Both City guide and public
+website browser scenarios passed on desktop and mobile landscape (four cases,
+2.1 minutes), covering insufficient funds, buying, business configuration and
+reload persistence. Explicit labels fixed a select accessibility defect found
+by the browser test. Mobile portrait website review also passed after adding
+capture coverage. A later concurrent unit/browser run exceeded the desktop
+account-entry wait; do not run the heavy suites concurrently on this 4 GB host.
+A subsequent isolated runner terminated with SIGTERM and left its three test
+servers running; that interrupted invocation is not counted as passing evidence.
+
+Commits: 65181de (unpublished business privacy), 7bb511a (building sprites),
+03ac774 (guide and public website), pushed on the feature branch.
+
+## Still required before release
+
+- Public/commercial interiors connected to actual entrances and directory entry.
+- Property guest permissions, furniture editing and authoritative access updates.
+- Item listing and purchase UI, inventory/money conservation and concurrent sales.
+- Lounge reservation/invitation/expiry/capacity flows and private conversation.
+- Contemporary resident outfits, sitting/waving, fountain, furniture and other
+  environment details; modernize the still-medieval authentication art/copy.
+- Complete game/website visual review and full integration/browser regression,
+  including old recovery links, movement, chat, houses and moderation.
+- Final production build, GitHub delivery, backup, deployment and live tests.
+
+Nothing from this release has been deployed. Landing copy describes the intended
+complete release and must not be published while the advertised features remain
+unfinished. This milestone does not complete the owner's goal.
+
+An isolated real-browser check subsequently passed on both desktop and portrait
+mobile against the surviving test servers: page artwork, navigation, FAQ and
+account-creation entry all worked with no browser errors and the same 15-second
+visibility bound. Reviewed captures are retained in `docs/design/contemporary`.
+The three orphaned test-server process groups were stopped after this check.
