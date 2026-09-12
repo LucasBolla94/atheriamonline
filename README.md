@@ -1,7 +1,12 @@
 # Atheriam Online
 
-A browser multiplayer social world set in an original medieval kingdom-city.
-Top-down 2D tiles, one continuous open world, for adults (18+).
+A browser multiplayer social world set in an original contemporary city.
+Top-down 2D tiles, a shared outdoor city, player-owned businesses and private
+interiors, for adults (18+).
+
+The contemporary release is in development on `feat/contemporary-city-v1`.
+See [the release plan](docs/CONTEMPORARY_CITY_PLAN.md) for completed checks and
+remaining publication work; the live site still runs the previous release.
 
 **Site:** https://atheriam.online — live, on desktop and on a phone in
 landscape.

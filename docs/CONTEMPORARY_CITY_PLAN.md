@@ -14,7 +14,7 @@ buildings. Preserve all existing accounts and possessions.
   business configuration; concurrency, idempotency and conservation tests.
 - [x] Public and business interiors, environment editing, directory and item
   listings/sales; authoritative permissions and inventory conservation.
-- [ ] Lounge bookings/invitations, expiry and removal, isolated chat, capacity
+- [x] Lounge bookings/invitations, expiry and removal, isolated chat, capacity
   and booking conflicts; integration and multi-player browser tests.
 - [ ] Original contemporary pixel assets, social animations, consistent game UI
   and complete responsive public landing page; visual review at mobile/desktop.
@@ -440,3 +440,38 @@ sequence on this 4 GB host. An earlier concurrent build was killed with exit 137
 while lint was incorrectly parsing the generated browser-test bundle. The isolated
 output is now excluded from source lint/format checks, just like ordinary dist
 output; source lint passed again.
+
+
+### Reservation clock and reconnect browser coverage — 2026-09-12
+
+The new ordinary-interface scenario creates a reservation for tomorrow, refuses
+early entry, reloads and finds the same reservation, cancels it, then creates an
+active meeting. Reloading inside that meeting returns the resident to the city
+while preserving the booking; they can return through Central Lounge and enter
+again. Both desktop and mobile cases passed (2.6 minutes including build/startup).
+
+For the deadline portion, the already-created reservation is moved near the end
+of its thirty-minute interval in the guarded `atheriam_e2e` database, before
+renewed admission. The browser and world use real time: the UI shows the final
+minute warning, the server removes the occupant at the actual deadline, the
+warning disappears and the expired reservation leaves the agenda. No fake realm
+messages, client clock fast-forward or shortened production duration are used.
+Cleanup cancels only the test host's reservations, including after a failed case.
+Initial fixture failures (a select locator and a reset room choice after reload)
+were corrected before this passing run.
+
+The first deadline capture preceded the scene's next frame and showed the lounge
+under the new room heading. Visual captures now wait half a second after the
+authoritative room/warning assertions, as the existing layout tests do. Final
+settled desktop and mobile captures were reviewed and retained under
+`docs/design/contemporary`. The revised desktop case passed in 1.1 minutes;
+the isolated mobile case passed in 1.1 minutes (1.4 minutes including startup).
+A grouped capture rerun was terminated externally with exit 143 before its
+mobile completion; the absent runner was confirmed and only its orphan test
+service groups were stopped before the successful isolated rerun.
+
+The harness now compiles its production bundle before starting test services
+(D-076), after a build with services already running was killed with SIGKILL.
+The final preparations compiled successfully in about sixteen seconds. Full
+release regression, protocol upgrade handling and backed-up deployment remain
+pending.

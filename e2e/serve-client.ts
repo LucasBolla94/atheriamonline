@@ -1,18 +1,10 @@
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 
 // Exercise the production React/Vite bundle without touching deployment output.
 // In-browser development transforms and StrictMode are not release behaviour.
 const env = { ...process.env, NODE_ENV: 'production' };
 const args = ['--filter', '@atheriam/client', 'exec', 'vite'];
-const build = spawnSync(
-  'pnpm',
-  [...args, 'build', '--outDir', '../../.e2e-client', '--emptyOutDir'],
-  {
-    env,
-    stdio: 'inherit',
-  },
-);
-if (build.status !== 0) process.exit(build.status ?? 1);
+// pretest:e2e builds this isolated output before the backend servers start.
 const preview = spawn(
   'pnpm',
   [

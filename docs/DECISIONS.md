@@ -974,3 +974,15 @@ failIfMajorPerformanceCaveat. Two-resident social browser coverage passes with
 the native Canvas fallback. That establishes functionality in this environment,
 not measured hardware-phone performance. Full visual and regression checks are
 still required before release.
+
+
+## D-076 — Prepare the production browser bundle before test services
+
+Browser tests use the minified production React/Vite client and isolated test
+API/world addresses. The pretest step resets only `atheriam_e2e`, then compiles
+the client into `.e2e-client` before any test services or browsers start. This
+prevents the compiler and several live processes competing for the same 4 GB.
+Playwright serves that prepared bundle; normal deployment dist is untouched.
+The generated directory is excluded from source lint, formatting and Git.
+The interactive browser-test command runs the same preparation. Workspace
+release builds also run in dependency order with one build at a time.

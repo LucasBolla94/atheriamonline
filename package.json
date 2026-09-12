@@ -24,6 +24,7 @@
     "pretest:e2e": "tsx e2e/prepare-database.ts",
     "test:e2e": "playwright test",
     "test:live": "playwright test --config playwright.live.config.ts",
+    "pretest:e2e:ui": "tsx e2e/prepare-database.ts",
     "test:e2e:ui": "playwright test --ui",
     "test:integration": "vitest run --config vitest.integration.config.ts"
   },

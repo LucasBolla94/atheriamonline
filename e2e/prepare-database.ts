@@ -6,7 +6,26 @@
  * after the API has connected to it produces a confusing error about a missing
  * table rather than a clear one about the order things happened in.
  */
-import { prepareDatabase } from './global-setup.js';
+import { spawnSync } from 'node:child_process';
+import { e2eEnv, prepareDatabase } from './global-setup.js';
 
 await prepareDatabase();
 console.warn('[e2e] the test database is ready.');
+
+// Build before Playwright starts API/world/browser processes: their combined
+// memory plus Vite's compiler exceeds this small host's available RAM.
+const client = spawnSync(
+  'pnpm',
+  [
+    '--filter',
+    '@atheriam/client',
+    'exec',
+    'vite',
+    'build',
+    '--outDir',
+    '../../.e2e-client',
+    '--emptyOutDir',
+  ],
+  { env: { ...process.env, ...e2eEnv(), NODE_ENV: 'production' }, stdio: 'inherit' },
+);
+if (client.status !== 0) process.exit(client.status ?? 1);
