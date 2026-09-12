@@ -87,13 +87,21 @@ else
 fi
 
 say "Applying database migrations"
-# The migration tool reads DATABASE_URL from the environment, and the live one
-# is in the settings file rather than in .env.
-set -a
-# shellcheck disable=SC1090
-. <(sudo cat "$ENV_FILE")
-set +a
-pnpm --filter @atheriam/db migrate
+# This is an environment file, not shell code. Mail display names may contain
+# spaces and angle brackets. Parse values literally and override development
+# settings only for the migration child, without executing configuration text.
+node --input-type=module - "$ENV_FILE" <<'MIGRATE'
+import { readFileSync } from 'node:fs';
+import { parseEnv } from 'node:util';
+import { spawnSync } from 'node:child_process';
+const env = { ...process.env, ...parseEnv(readFileSync(process.argv[2], 'utf8')) };
+const result = spawnSync('pnpm', ['--filter', '@atheriam/db', 'migrate'], {
+  env,
+  stdio: 'inherit',
+});
+if (result.error) throw result.error;
+process.exit(result.status ?? 1);
+MIGRATE
 
 say "Publishing the browser client"
 sudo mkdir -p "$CLIENT_DIRECTORY"

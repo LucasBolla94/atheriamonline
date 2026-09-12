@@ -1016,3 +1016,12 @@ so rapid tapping cannot build a long route. Releasing a finger stops held repeat
 but preserves an intentional tap; cancellation, blur and unmount discard it.
 The callback checks for an open dialog before sending. Server speed validation
 is unchanged. Unit tests cover quick taps, bounded replacement and cancellation.
+
+## D-079 — Parse production settings as data during deployment
+
+The deployment gate passed, but the migration step stopped before changing the
+database because the existing MAIL_FROM display name includes angle brackets.
+Sourcing the environment file as shell code interpreted those characters as
+syntax. The deploy script now uses Node's built-in environment parser and passes
+the resulting values to the migration child, overriding development values.
+Configuration text is never executed. Existing production settings are retained.
