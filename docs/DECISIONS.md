@@ -1005,3 +1005,14 @@ items and money are unchanged. There is no automatic reload loop. Closed
 connections ignore late packets, preserving the specific update explanation.
 The load-test client sends the same version. Browser preparation rebuilds shared
 package exports before compiling the client so stale dist cannot mask a mismatch.
+
+## D-078 — Preserve one recent touch step during the walking interval
+
+The full browser regression exposed a dropped second tap on the mobile direction
+pad. Touch input sent immediately even when the server's 180 ms walking interval
+had not elapsed. Keep at most one pending direction and send it after the interval
+plus the existing 20 ms touch margin. New taps replace that pending direction,
+so rapid tapping cannot build a long route. Releasing a finger stops held repeat
+but preserves an intentional tap; cancellation, blur and unmount discard it.
+The callback checks for an open dialog before sending. Server speed validation
+is unchanged. Unit tests cover quick taps, bounded replacement and cancellation.

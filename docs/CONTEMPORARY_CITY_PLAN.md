@@ -501,3 +501,20 @@ so it cannot silently use an older built protocol. Full browser regression,
 production backup/deployment and live verification remain pending.
 
 Final source lint and the complete production build also passed for v12.
+
+### Full browser regression and touch correction — 2026-09-12
+
+The 106-case desktop/mobile run completed with 100 passes, two intentionally
+inapplicable mobile keyboard skips and four failures. Three desktop cases
+(appearance, closed house and lounge invitations) exceeded action deadlines
+during measured memory pressure on the 4 GB development host. A temporary 2 GB
+swap file reduced memory stall pressure. The fourth failure exposed a real quick
+tap being rejected inside the walking interval; D-078 adds one bounded pending
+touch step without changing server speed rules.
+
+The three touch scheduler unit cases, typecheck and lint passed. A fresh normal
+browser invocation rebuilt the client and reran all four affected files on both
+projects: **14 passed in 2.1 minutes**, including the unchanged square approach
+assertions and all previously failing cases. This is a full regression followed
+by a targeted correction/recheck, not a claim that the first run was all green.
+Production publication and live checks remain pending.
