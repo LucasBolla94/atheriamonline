@@ -10,6 +10,7 @@ import {
   CHUNK_SIZE_TILES,
   HOUSE_ENTRANCE,
   INTERIOR_ENTRANCE,
+  LOUNGE_ROOMS,
   TICK_MS,
   chunkKey,
   type TilePos,
@@ -25,6 +26,8 @@ import {
 import { spawnPoint } from './map.js';
 import {
   Realms,
+  bookingIdOf,
+  bookingRealm,
   houseIdOf,
   houseRealm,
   propertyIdOf,
@@ -46,6 +49,14 @@ const IDLE_TIMEOUT_MS = 60_000;
 
 /** How often we check for silent, half-dead connections. */
 const HEARTBEAT_INTERVAL_MS = 15_000;
+
+export interface MeetingAdmission {
+  bookingId: string;
+  roomId: string;
+  capacity: number;
+  endsAt: number;
+  loungePropertyId: string;
+}
 
 interface Connection {
   readonly socket: WebSocket;
@@ -83,6 +94,7 @@ interface Connection {
    */
   cityPosition: TilePos | null;
   alive: boolean;
+  meeting: MeetingAdmission | null;
 }
 
 /**
@@ -93,6 +105,11 @@ interface Connection {
  * a database connection of its own.
  */
 export interface WorldServerOptions {
+  readonly bookingAdmission?: (
+    characterId: string,
+    bookingId: string,
+    nowMs: number,
+  ) => Promise<MeetingAdmission | null>;
   readonly host: string;
   readonly port: number;
   readonly world: World;
@@ -131,12 +148,15 @@ export class WorldServer {
   private readonly savePosition: WorldServerOptions['savePosition'];
   private readonly canEnterProperty: (characterId: string, propertyId: string) => Promise<boolean>;
   private readonly checkingProperties = new Set<Connection>();
+  private readonly getBookingAdmission: NonNullable<WorldServerOptions['bookingAdmission']>;
+  private readonly checkingBookings = new Set<Connection>();
   private nextPropertyCheck = 0;
   private tickTimer: NodeJS.Timeout | null = null;
   private heartbeatTimer: NodeJS.Timeout | null = null;
 
   constructor(options: WorldServerOptions) {
     this.realms = new Realms(options.world);
+    this.getBookingAdmission = options.bookingAdmission ?? (async () => null);
     this.canEnterProperty = options.canEnterProperty ?? (async () => false);
     this.now = options.now ?? (() => Date.now());
     this.heartbeatIntervalMs = options.heartbeatIntervalMs ?? HEARTBEAT_INTERVAL_MS;
@@ -212,6 +232,7 @@ export class WorldServer {
       realm: 'city',
       cityPosition: null,
       alive: true,
+      meeting: null,
     };
     this.connections.set(socket, connection);
 
@@ -496,6 +517,89 @@ export class WorldServer {
     return entered;
   }
 
+  /** The door is inside the public lounge; every reservation has its own crowd. */
+  async enterBooking(characterId: string, bookingId: string): Promise<boolean> {
+    const connection = this.byPlayer.get(characterId);
+    if (!connection || propertyIdOf(connection.realm) === null) return false;
+    const from = connection.realm;
+    const admission = await this.readAdmission(characterId, bookingId);
+    if (
+      !admission ||
+      this.byPlayer.get(characterId) !== connection ||
+      connection.realm !== from ||
+      propertyIdOf(from) !== admission.loungePropertyId ||
+      admission.endsAt <= this.now()
+    )
+      return false;
+    connection.meeting = admission;
+    const entered = this.moveRealm(
+      connection,
+      bookingRealm(bookingId),
+      INTERIOR_ENTRANCE,
+      admission.capacity,
+    );
+    if (!entered) connection.meeting = null;
+    return entered;
+  }
+
+  /** A stalled permission lookup must not keep a revoked visitor inside indefinitely. */
+  private async readAdmission(
+    characterId: string,
+    bookingId: string,
+  ): Promise<MeetingAdmission | null> {
+    let timeout: NodeJS.Timeout | undefined;
+    try {
+      const admission = await Promise.race([
+        this.getBookingAdmission(characterId, bookingId, this.now()),
+        new Promise<null>((resolve) => {
+          timeout = setTimeout(() => resolve(null), 2000);
+        }),
+      ]);
+      const room = LOUNGE_ROOMS.find((entry) => entry.id === admission?.roomId);
+      if (
+        !admission ||
+        admission.bookingId !== bookingId ||
+        !room ||
+        room.capacity !== admission.capacity ||
+        !Number.isSafeInteger(admission.endsAt) ||
+        admission.endsAt <= this.now()
+      )
+        return null;
+      return admission;
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  recheckBooking(bookingId: string): void {
+    for (const connection of this.connections.values()) {
+      if (bookingIdOf(connection.realm) === bookingId) void this.validateBooking(connection);
+    }
+  }
+
+  private async validateBooking(connection: Connection): Promise<void> {
+    const meeting = connection.meeting,
+      characterId = connection.playerId;
+    if (!meeting || characterId === null || this.checkingBookings.has(connection)) return;
+    this.checkingBookings.add(connection);
+    const admission = await this.readAdmission(characterId, meeting.bookingId);
+    this.checkingBookings.delete(connection);
+    // An old lookup must never evict someone who left and re-entered meanwhile.
+    if (this.byPlayer.get(characterId) !== connection || connection.meeting !== meeting) return;
+    if (
+      !admission ||
+      admission.roomId !== meeting.roomId ||
+      admission.loungePropertyId !== meeting.loungePropertyId
+    ) {
+      this.leaveHouse(characterId);
+    } else {
+      meeting.endsAt = Math.min(meeting.endsAt, admission.endsAt);
+      if (meeting.endsAt <= this.now()) this.leaveHouse(characterId);
+    }
+  }
+
   recheckProperty(propertyId: string): void {
     for (const connection of this.connections.values()) {
       if (propertyIdOf(connection.realm) === propertyId) void this.validateProperty(connection);
@@ -530,9 +634,21 @@ export class WorldServer {
     if (connection === undefined) return false;
     if (connection.realm === 'city') return false;
 
+    const meeting = connection.meeting;
+    if (
+      meeting &&
+      this.moveRealm(connection, propertyRealm(meeting.loungePropertyId), INTERIOR_ENTRANCE)
+    ) {
+      connection.meeting = null;
+      return true;
+    }
+    // If the lounge filled up meanwhile, the reserved outdoor slot is always available.
     const back = connection.cityPosition;
     const left = this.moveRealm(connection, 'city', back);
-    if (left) connection.cityPosition = null;
+    if (left) {
+      connection.cityPosition = null;
+      connection.meeting = null;
+    }
     return left;
   }
 
@@ -543,7 +659,12 @@ export class WorldServer {
    * everybody standing on it — is thrown away on both sides, because none of
    * it is true any more.
    */
-  private moveRealm(connection: Connection, to: RealmId, at: TilePos | null): boolean {
+  private moveRealm(
+    connection: Connection,
+    to: RealmId,
+    at: TilePos | null,
+    bookingCapacity?: number,
+  ): boolean {
     const playerId = connection.playerId;
     if (playerId === null) return false;
 
@@ -554,7 +675,7 @@ export class WorldServer {
     const carried = carriedState(player);
     from.leave(playerId);
 
-    const target = this.realms.get(to);
+    const target = this.realms.get(to, bookingCapacity);
     const landing = at ?? spawnPoint(target.map);
     const arrived = target.join({ ...carried, x: landing.x, y: landing.y }, this.now());
 
@@ -575,8 +696,24 @@ export class WorldServer {
     const houseId = houseIdOf(to);
     this.send(connection, {
       t: 'realm',
-      realm: propertyIdOf(to) !== null ? 'property' : houseId === null ? 'city' : 'house',
+      realm:
+        bookingIdOf(to) !== null
+          ? 'booking'
+          : propertyIdOf(to) !== null
+            ? 'property'
+            : houseId === null
+              ? 'city'
+              : 'house',
       houseId,
+      ...(bookingIdOf(to) !== null && connection.meeting
+        ? {
+            booking: {
+              id: connection.meeting.bookingId,
+              roomId: LOUNGE_ROOMS.find((room) => room.id === connection.meeting!.roomId)!.id,
+              endsAt: connection.meeting.endsAt,
+            },
+          }
+        : {}),
       ...(propertyIdOf(to) === null ? {} : { propertyId: propertyIdOf(to) }),
       world: {
         width: target.map.width,
@@ -600,9 +737,16 @@ export class WorldServer {
 
   private onTick(): void {
     const nowMs = this.now();
+    for (const connection of this.connections.values()) {
+      if (connection.meeting && connection.meeting.endsAt <= nowMs && connection.playerId !== null)
+        this.leaveHouse(connection.playerId);
+    }
     if (nowMs >= this.nextPropertyCheck) {
       this.nextPropertyCheck = nowMs + 5000;
-      for (const connection of this.connections.values()) void this.validateProperty(connection);
+      for (const connection of this.connections.values()) {
+        void this.validateProperty(connection);
+        void this.validateBooking(connection);
+      }
     }
     // The city, and the inside of every house somebody is standing in.
     for (const world of this.realms.all()) world.advance(nowMs);

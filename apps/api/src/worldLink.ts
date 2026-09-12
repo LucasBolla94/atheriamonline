@@ -15,6 +15,8 @@ import type { Redis } from 'ioredis';
 import { WORLD_COMMAND_CHANNEL, type WorldCommand } from '@atheriam/protocol';
 
 export interface WorldLink {
+  enterBooking(characterId: string, bookingId: string): Promise<void>;
+  recheckBooking(bookingId: string): Promise<void>;
   enterProperty(characterId: string, propertyId: string): Promise<void>;
   recheckProperty(propertyId: string): Promise<void>;
   appearance(characterId: string, appearance: number): Promise<void>;
@@ -42,6 +44,9 @@ export function redisWorldLink(redis: Redis, onError?: (error: unknown) => void)
   }
 
   return {
+    enterBooking: (characterId, bookingId) =>
+      publish({ t: 'enter-booking', characterId, bookingId }),
+    recheckBooking: (bookingId) => publish({ t: 'recheck-booking', bookingId }),
     enterProperty: (characterId, propertyId) =>
       publish({ t: 'enter-property', characterId, propertyId }),
     recheckProperty: (propertyId) => publish({ t: 'recheck-property', propertyId }),
@@ -59,6 +64,8 @@ export function redisWorldLink(redis: Redis, onError?: (error: unknown) => void)
 /** A link that goes nowhere, for tests and for running the API on its own. */
 export function silentWorldLink(): WorldLink {
   return {
+    enterBooking: async () => Promise.resolve(),
+    recheckBooking: async () => Promise.resolve(),
     enterProperty: async () => Promise.resolve(),
     recheckProperty: async () => Promise.resolve(),
     appearance: async () => Promise.resolve(),

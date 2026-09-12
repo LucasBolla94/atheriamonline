@@ -60,7 +60,7 @@ export interface ConnectionHandlers {
   onNotice?: (about: 'trade') => void;
   /** The player is somewhere else now: the city, or inside a house. */
   onRealm?: (
-    realm: 'city' | 'house' | 'property',
+    realm: 'city' | 'house' | 'property' | 'booking',
     houseId: string | null,
     propertyId?: string | null,
   ) => void;
@@ -103,11 +103,12 @@ export class WorldConnection {
   world: WorldInfo | null = null;
 
   /** Where the player is: the city, or the inside of one house. */
-  realm: 'city' | 'house' | 'property' = 'city';
+  realm: 'city' | 'house' | 'property' | 'booking' = 'city';
 
   /** Whose house they are in, when they are in one. */
   houseId: string | null = null;
   propertyId: string | null = null;
+  booking: { id: string; roomId: string; endsAt: number } | null = null;
 
   /** Goes up whenever the player moves between the city and a house. */
   realmRevision = 0;
@@ -310,6 +311,7 @@ export class WorldConnection {
         this.realm = message.realm;
         this.houseId = message.houseId;
         this.propertyId = message.propertyId ?? null;
+        this.booking = message.booking ?? null;
         this.world = message.world;
         this.chunks.clear();
         this.nearby.clear();

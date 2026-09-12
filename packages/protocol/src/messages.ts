@@ -29,8 +29,9 @@ import { CHUNK_SIZE_TILES, MAX_CHAT_LENGTH } from '@atheriam/shared';
  * 7: a player can be somewhere other than the city — inside a house — and is
  *    told when that changes.
  * 8: public and commercial properties have separate interior realms.
+ * 9: time-limited private meeting realms.
  */
-export const PROTOCOL_VERSION = 8;
+export const PROTOCOL_VERSION = 9;
 
 /** The eight directions a player may step in. */
 export const directionSchema = z.enum(['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw']);
@@ -296,10 +297,17 @@ export const noticeSchema = z.object({
  */
 export const realmSchema = z.object({
   t: z.literal('realm'),
-  realm: z.enum(['city', 'house', 'property']),
+  realm: z.enum(['city', 'house', 'property', 'booking']),
   /** Whose house, when it is a house. The browser asks the API what is in it. */
   houseId: z.string().min(1).max(64).nullable(),
   propertyId: z.string().uuid().nullable().optional(),
+  booking: z
+    .object({
+      id: z.string().uuid(),
+      roomId: z.enum(['studio', 'terrace', 'boardroom']),
+      endsAt: z.number().int().positive(),
+    })
+    .optional(),
   world: worldInfoSchema,
   spawn: tilePosSchema,
 });

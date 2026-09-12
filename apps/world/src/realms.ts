@@ -16,7 +16,7 @@ import { GameMap } from './map.js';
 import { World } from './world.js';
 
 /** The name of a realm: the city, or one house. */
-export type RealmId = 'city' | `house:${string}` | `property:${string}`;
+export type RealmId = 'city' | `house:${string}` | `property:${string}` | `booking:${string}`;
 
 export function houseRealm(houseId: string): RealmId {
   return `house:${houseId}`;
@@ -37,6 +37,13 @@ export function propertyIdOf(realm: RealmId): string | null {
   return realm.startsWith('property:') ? realm.slice('property:'.length) : null;
 }
 
+export function bookingRealm(id: string): RealmId {
+  return `booking:${id}`;
+}
+export function bookingIdOf(realm: RealmId): string | null {
+  return realm.startsWith('booking:') ? realm.slice('booking:'.length) : null;
+}
+
 export class Realms {
   /** The city. It always exists, whether or not anybody is in it. */
   readonly city: World;
@@ -52,14 +59,17 @@ export class Realms {
    * Houses hold few people, so they are given a small limit of their own: a
    * house with two hundred people in it is not a house.
    */
-  get(realm: RealmId): World {
+  get(realm: RealmId, bookingCapacity?: number): World {
     if (realm === 'city') return this.city;
 
     const existing = this.houses.get(realm);
     if (existing !== undefined) return existing;
 
-    const made = new World(realm.startsWith('property:') ? propertyMap : houseMap, {
-      maxPlayers: realm.startsWith('property:') ? 40 : 20,
+    const booking = bookingIdOf(realm) !== null;
+    if (booking && (!Number.isInteger(bookingCapacity) || bookingCapacity! < 1))
+      throw new Error('A meeting realm needs an authorized capacity');
+    const made = new World(booking || realm.startsWith('property:') ? propertyMap : houseMap, {
+      maxPlayers: booking ? bookingCapacity! : realm.startsWith('property:') ? 40 : 20,
     });
     this.houses.set(realm, made);
     return made;

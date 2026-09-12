@@ -1047,3 +1047,225 @@ describe('quiet social sessions', () => {
     expect((await client.waitFor('bye')).reason).toBe('idle');
   });
 });
+
+describe('private lounge meetings over real sockets', () => {
+  const lounge = '20000000-0000-4000-8000-000000000001';
+  const elsewhere = '20000000-0000-4000-8000-000000000002';
+  const booking = '30000000-0000-4000-8000-000000000001';
+  const otherBooking = '30000000-0000-4000-8000-000000000002';
+  let server: WorldServer;
+  let tickets: FakeTickets;
+  let world: World;
+  let nowMs: number;
+  let endsAt: number;
+  let admission: NonNullable<import('./server.js').WorldServerOptions['bookingAdmission']>;
+  const clients: TestClient[] = [];
+
+  function permit(id: string) {
+    return { bookingId: id, roomId: 'studio', capacity: 8, endsAt, loungePropertyId: lounge };
+  }
+  beforeEach(async () => {
+    tickets = new FakeTickets();
+    nowMs = Date.now();
+    endsAt = nowMs + 30_000;
+    admission = async (_character, id) => permit(id);
+    world = new World(openField, { maxPlayers: 50 });
+    server = new WorldServer({
+      host: '127.0.0.1',
+      port: 0,
+      world,
+      now: () => nowMs,
+      resolveTicket: tickets.spend,
+      savePosition: tickets.save,
+      canEnterProperty: async () => true,
+      bookingAdmission: (characterId, id, time) => admission(characterId, id, time),
+    });
+    server.start();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  });
+  afterEach(async () => {
+    clients.forEach((client) => client.close());
+    clients.length = 0;
+    await server.stop();
+  });
+  async function join(id: string, property: string | null = lounge): Promise<TestClient> {
+    const client = await TestClient.connect(server.port);
+    clients.push(client);
+    client.send({ t: 'join', ticket: tickets.issue(character(id, id, 12, 14)) });
+    await client.waitFor('snapshot');
+    if (property) {
+      expect(await server.enterProperty(id, property)).toBe(true);
+      await client.waitFor('realm');
+    }
+    client.clear();
+    return client;
+  }
+  async function enter(id: string, reservation = booking): Promise<TestClient> {
+    const client = await join(id);
+    expect(await server.enterBooking(id, reservation)).toBe(true);
+    await client.waitFor('realm');
+    client.clear();
+    return client;
+  }
+
+  it('enters only through the lounge and preserves the outdoor return position', async () => {
+    const client = await join('host', null);
+    expect(await server.enterBooking('host', booking)).toBe(false);
+    await server.enterProperty('host', elsewhere);
+    expect(await server.enterBooking('host', booking)).toBe(false);
+    server.leaveHouse('host');
+    await server.enterProperty('host', lounge);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    client.clear();
+    expect(await server.enterBooking('host', booking)).toBe(true);
+    expect(await client.waitFor('realm')).toMatchObject({
+      realm: 'booking',
+      booking: { id: booking, roomId: 'studio', endsAt },
+      houseId: null,
+      world: { width: 20, height: 16 },
+    });
+    client.clear();
+    expect(server.leaveHouse('host')).toBe(true);
+    expect(await client.waitFor('realm')).toMatchObject({ realm: 'property', propertyId: lounge });
+    client.clear();
+    expect(server.leaveHouse('host')).toBe(true);
+    expect(await client.waitFor('realm')).toMatchObject({ realm: 'city', spawn: { x: 12, y: 14 } });
+  });
+
+  it('refuses missing permission, failed reads, mismatched reservations and expired admission', async () => {
+    const client = await join('visitor');
+    admission = async () => null;
+    expect(await server.enterBooking('visitor', booking)).toBe(false);
+    admission = async () => {
+      throw new Error('DB down');
+    };
+    expect(await server.enterBooking('visitor', booking)).toBe(false);
+    admission = async () => permit(otherBooking);
+    expect(await server.enterBooking('visitor', booking)).toBe(false);
+    admission = async () => ({ ...permit(booking), capacity: 100 });
+    expect(await server.enterBooking('visitor', booking)).toBe(false);
+    admission = async () => ({ ...permit(booking), endsAt: nowMs });
+    expect(await server.enterBooking('visitor', booking)).toBe(false);
+    expect(client.latest('realm')).toBeUndefined();
+  });
+
+  it('enforces eight places including the host when admissions race', async () => {
+    await Promise.all(Array.from({ length: 9 }, (_, index) => join(`guest${index}`)));
+    const results = await Promise.all(
+      Array.from({ length: 9 }, (_, index) => server.enterBooking(`guest${index}`, booking)),
+    );
+    expect(results.filter(Boolean)).toHaveLength(8);
+    const rejected = results.indexOf(false);
+    expect(server.leaveHouse(`guest${rejected}`)).toBe(true);
+    expect(world.playerCount).toBe(1); // Rejected visitor remained in the lounge.
+  });
+
+  it.each([
+    { roomId: 'terrace', capacity: 12 },
+    { roomId: 'boardroom', capacity: 16 },
+  ])('uses the actual $capacity-place capacity for $roomId', async ({ roomId, capacity }) => {
+    admission = async (_character, id) => ({ ...permit(id), roomId, capacity });
+    await Promise.all(Array.from({ length: capacity + 1 }, (_, index) => join(`guest${index}`)));
+    const results = await Promise.all(
+      Array.from({ length: capacity + 1 }, (_, index) =>
+        server.enterBooking(`guest${index}`, booking),
+      ),
+    );
+    expect(results.filter(Boolean)).toHaveLength(capacity);
+  });
+
+  it('keeps speech inside a reservation, away from other bookings and the lounge', async () => {
+    const host = await enter('host');
+    const guest = await enter('guest');
+    const other = await enter('other', otherBooking);
+    const publicGuest = await join('public');
+    host.send({ t: 'say', seq: 1, text: 'Our meeting' });
+    expect((await guest.waitFor('chat')).text).toBe('Our meeting');
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(other.latest('chat')).toBeUndefined();
+    expect(publicGuest.latest('chat')).toBeUndefined();
+  });
+
+  it('revokes one guest immediately while the host remains inside', async () => {
+    const host = await enter('host');
+    const guest = await enter('guest');
+    admission = async (id, reservation) => (id === 'guest' ? null : permit(reservation));
+    server.recheckBooking(booking);
+    expect(await guest.waitFor('realm')).toMatchObject({ realm: 'property', propertyId: lounge });
+    expect(host.latest('realm')).toBeUndefined();
+  });
+
+  it('rechecks without Redis nudges and fails closed when the database is unavailable', async () => {
+    const guest = await enter('guest');
+    admission = async () => {
+      throw new Error('DB down');
+    };
+    nowMs += 6000;
+    expect(await guest.waitFor('realm')).toMatchObject({ realm: 'property', propertyId: lounge });
+  });
+
+  it('expires locally at the exact deadline even while authorization is stalled', async () => {
+    const guest = await enter('guest');
+    admission = () => new Promise(() => {});
+    server.recheckBooking(booking);
+    nowMs = endsAt;
+    expect(await guest.waitFor('realm', 1000)).toMatchObject({
+      realm: 'property',
+      propertyId: lounge,
+    });
+  });
+
+  it('bounds a stalled authorization check before the booking deadline', async () => {
+    const guest = await enter('guest');
+    admission = () => new Promise(() => {});
+    server.recheckBooking(booking);
+    expect(await guest.waitFor('realm', 2800)).toMatchObject({
+      realm: 'property',
+      propertyId: lounge,
+    });
+  });
+
+  it('returns to the city if all forty lounge places are occupied at expiry', async () => {
+    const guest = await enter('guest');
+    await Promise.all(Array.from({ length: 40 }, (_, index) => join(`public${index}`)));
+    nowMs = endsAt;
+    expect(await guest.waitFor('realm')).toMatchObject({ realm: 'city', spawn: { x: 12, y: 14 } });
+    expect(world.playerCount).toBe(1);
+  });
+
+  it('does not admit a disconnected player after a delayed authorization response', async () => {
+    const guest = await join('guest');
+    let resolve!: (value: ReturnType<typeof permit>) => void;
+    admission = () =>
+      new Promise((done) => {
+        resolve = done;
+      });
+    const entering = server.enterBooking('guest', booking);
+    guest.close();
+    await new Promise((done) => setTimeout(done, 100));
+    resolve(permit(booking));
+    expect(await entering).toBe(false);
+    expect(server.occupiedHouses).toBe(0);
+  });
+
+  it('ignores a stale revocation response after leaving and re-entering', async () => {
+    const guest = await enter('guest');
+    let resolve!: (value: null) => void;
+    admission = () =>
+      new Promise((done) => {
+        resolve = done;
+      });
+    server.recheckBooking(booking);
+    server.leaveHouse('guest');
+    await guest.waitFor('realm');
+    admission = async (_id, reservation) => permit(reservation);
+    expect(await server.enterBooking('guest', booking)).toBe(true);
+    await new Promise((done) => setTimeout(done, 30));
+    guest.clear();
+    resolve(null);
+    await new Promise((done) => setTimeout(done, 150));
+    expect(guest.latest('realm')).toBeUndefined();
+    expect(server.leaveHouse('guest')).toBe(true);
+    expect(await guest.waitFor('realm')).toMatchObject({ realm: 'property', propertyId: lounge });
+  });
+});

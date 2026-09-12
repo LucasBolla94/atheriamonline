@@ -242,3 +242,30 @@ lint and all 289 unit tests passed. D-069 records interval and deadline semantic
 This is a data foundation. HTTP routes, actual meeting realms, enforced live
 capacity/expiry, the booking interface and multi-player browser verification are
 still required. No booking UI or production booking feature is claimed yet.
+
+## Live meeting room milestone (2026-09-12)
+
+Each reservation now gets its own live realm. Entry is checked again by the world
+server and requires standing inside Central Lounge. The three actual capacities
+are enforced, including concurrent arrivals. Guests return to the lounge when
+they leave, lose permission or reach the deadline. A full lounge sends them back
+to their saved outdoor position. Chat remains inside the reservation.
+
+The local end timestamp is checked each simulation tick, independently of any
+pending database request. Permissions are rechecked every five seconds and after
+a live nudge; failed or stalled reads close access, with a two-second timeout.
+Responses from an earlier visit cannot evict a later visit. Empty meeting realms
+are discarded. Protocol v9 carries meeting identity/end time, and the browser
+clears the previous environment and drops the meeting metadata on departure.
+
+Typecheck, lint and all 303 unit tests passed. Thirteen new real-socket scenarios
+cover the lounge-only door, invalid admission, all three capacities, racing
+arrivals, isolated chat, revocation, database failure/stall, local expiry, a full
+lounge, disconnection during entry and a stale revocation response. A client
+regression covers meeting metadata and environment clearing. All 165 integration
+tests and the production build also passed. See D-070.
+
+The HTTP booking routes, agenda/invitation interface, expiry warning and ordinary
+multi-player browser flow are still pending. The world now understands meeting
+commands, but the public product does not yet expose booking controls. No live
+deployment has been made, and the overall contemporary release remains open.

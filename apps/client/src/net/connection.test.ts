@@ -73,6 +73,46 @@ describe('WorldConnection', () => {
     connection.handleMessage(encode(WELCOME));
   }
 
+  it('clears the previous environment and remembers the meeting deadline only while inside', () => {
+    join();
+    connection.handleMessage(encode(chunk(0, 0)));
+    connection.handleMessage(encode(snapshot(2, 2)));
+    const booking = {
+      id: '30000000-0000-4000-8000-000000000001',
+      roomId: 'studio' as const,
+      endsAt: 2_000_000_000_000,
+    };
+    const room = { width: 20, height: 16, chunkSize: 32 };
+    connection.handleMessage(
+      encode({
+        t: 'realm',
+        realm: 'booking',
+        houseId: null,
+        booking,
+        world: room,
+        spawn: { x: 10, y: 14 },
+      }),
+    );
+    expect(connection.realm).toBe('booking');
+    expect(connection.booking).toEqual(booking);
+    expect(connection.propertyId).toBeNull();
+    expect(connection.chunks.size).toBe(0);
+    expect(connection.you).toBeNull();
+    connection.handleMessage(
+      encode({
+        t: 'realm',
+        realm: 'property',
+        houseId: null,
+        propertyId: '20000000-0000-4000-8000-000000000001',
+        world: room,
+        spawn: { x: 10, y: 14 },
+      }),
+    );
+    expect(connection.booking).toBeNull();
+    expect(connection.realm).toBe('property');
+    expect(connection.realmRevision).toBe(2);
+  });
+
   it('starts idle and sends nothing', () => {
     expect(connection.currentState).toBe('idle');
     expect(socket.sent).toEqual([]);

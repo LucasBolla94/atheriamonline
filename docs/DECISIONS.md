@@ -871,3 +871,20 @@ a second booking. Public availability contains only room/time intervals. Titles
 are visible only to the host and invitees, and guest names only to the host.
 Admission returns a server-issued end timestamp and room capacity. Realtime room
 work must enforce that deadline locally even if the database becomes unavailable.
+
+
+## D-070 — Every reservation has a separate live room and a hard exit
+
+Meeting realms use the reservation UUID, keeping consecutive bookings and their
+conversations separate even when they use the same named room. Entry is allowed
+only from Central Lounge after a fresh database admission check. Room capacity
+comes from the shared room definitions (8, 12 or 16, including the host).
+The world checks the stored end time each tick, without waiting for the database.
+Permission is also rechecked every five seconds and on a live revocation nudge;
+a failed or stalled check closes access, with a two-second lookup deadline.
+A stale reply cannot remove someone who has already left and re-entered.
+Leaving, cancellation and expiry return a guest to Central Lounge. If its forty
+places are full, the guest returns to their saved outdoor position instead.
+The existing global connection limit reserves that outdoor place. Protocol v9
+carries the reservation identity and end timestamp to the browser. The API routes
+and booking UI are a following milestone; this does not publish reservations yet.

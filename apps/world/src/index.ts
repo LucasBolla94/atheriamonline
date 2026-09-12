@@ -9,10 +9,24 @@
  * the character up.
  */
 import { Redis } from 'ioredis';
-import { eq } from 'drizzle-orm';
-import { CHAT_RADIUS_TILES, TICK_HZ, VIEW_RADIUS_TILES, type Direction } from '@atheriam/shared';
+import { and, eq } from 'drizzle-orm';
+import {
+  CHAT_RADIUS_TILES,
+  STARTER_CITY,
+  TICK_HZ,
+  VIEW_RADIUS_TILES,
+  type Direction,
+} from '@atheriam/shared';
 import { PROTOCOL_VERSION, WORLD_COMMAND_CHANNEL, decodeWorldCommand } from '@atheriam/protocol';
-import { accounts, blocks, characters, connect, properties, mayEnterProperty } from '@atheriam/db';
+import {
+  accounts,
+  blocks,
+  characters,
+  connect,
+  properties,
+  mayEnterProperty,
+  bookingAdmission,
+} from '@atheriam/db';
 import { starterDistrict } from './map.js';
 import { World, type JoiningCharacter } from './world.js';
 import { WorldServer } from './server.js';
@@ -113,6 +127,24 @@ const server = new WorldServer({
   world,
   resolveTicket,
   savePosition,
+  bookingAdmission: async (characterId, bookingId, nowMs) => {
+    const admission = await bookingAdmission(database.db, characterId, bookingId, nowMs);
+    if (!admission) return null;
+    const lounge = (
+      await database.db
+        .select({ id: properties.id })
+        .from(properties)
+        .where(
+          and(
+            eq(properties.cityId, STARTER_CITY.id),
+            eq(properties.buildingId, 'central-lounge'),
+            eq(properties.municipal, true),
+          ),
+        )
+        .limit(1)
+    )[0];
+    return lounge ? { ...admission, loungePropertyId: lounge.id } : null;
+  },
   canEnterProperty: async (characterId, propertyId) => {
     const property = (
       await database.db.select().from(properties).where(eq(properties.id, propertyId)).limit(1)
@@ -153,6 +185,12 @@ commands.on('message', (_channel, raw) => {
       return;
     case 'notify':
       server.notify(command.characterId, command.about);
+      return;
+    case 'enter-booking':
+      void server.enterBooking(command.characterId, command.bookingId);
+      return;
+    case 'recheck-booking':
+      server.recheckBooking(command.bookingId);
       return;
     case 'enter-property':
       void server.enterProperty(command.characterId, command.propertyId);
