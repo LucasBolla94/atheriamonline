@@ -592,3 +592,39 @@ export const shopSales = pgTable(
     uniqueIndex('shop_sales_buyer_request_key').on(table.buyerId, table.requestKey),
   ],
 );
+
+/** Reservations are intervals [start, end); neighbouring meetings may touch. */
+export const loungeBookings = pgTable(
+  'lounge_bookings',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    hostId: uuid('host_id')
+      .notNull()
+      .references(() => characters.id, { onDelete: 'restrict' }),
+    roomId: text('room_id').notNull(),
+    title: text('title').notNull(),
+    startsAt: timestamp('starts_at', { withTimezone: true }).notNull(),
+    endsAt: timestamp('ends_at', { withTimezone: true }).notNull(),
+    requestedStart: timestamp('requested_start', { withTimezone: true }),
+    requestKey: text('request_key').notNull(),
+    cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('lounge_bookings_host_request_key').on(table.hostId, table.requestKey),
+    index('lounge_bookings_room_time_idx').on(table.roomId, table.startsAt, table.endsAt),
+  ],
+);
+export const loungeInvitations = pgTable(
+  'lounge_invitations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    bookingId: uuid('booking_id')
+      .notNull()
+      .references(() => loungeBookings.id, { onDelete: 'cascade' }),
+    characterId: uuid('character_id')
+      .notNull()
+      .references(() => characters.id, { onDelete: 'cascade' }),
+  },
+  (table) => [uniqueIndex('lounge_invitations_pair_key').on(table.bookingId, table.characterId)],
+);

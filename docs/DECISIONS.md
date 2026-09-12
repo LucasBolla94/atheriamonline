@@ -860,3 +860,14 @@ creates a new offer, so an existing buyer confirmation cannot silently accept a
 different price. Listing and purchase retry keys are bound to their original
 intent. One open listing per item and one receipt per sold listing are enforced
 by database indexes. V1.0 charges no sale fee; the seller receives the full price.
+
+## D-069 — Reservations use half-open intervals and durable retries
+
+Lounge reservations occupy [start, end), so one meeting may begin exactly when
+another ends. Host locks enforce the two-booking limit across different rooms;
+room locks serialize conflicting reservations. Reserve-now stores the original
+request separately from its resolved start time so a delayed retry cannot create
+a second booking. Public availability contains only room/time intervals. Titles
+are visible only to the host and invitees, and guest names only to the host.
+Admission returns a server-issued end timestamp and room capacity. Realtime room
+work must enforce that deadline locally even if the database becomes unavailable.

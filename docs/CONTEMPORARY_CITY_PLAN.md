@@ -223,3 +223,22 @@ Still required for the full release: reservable lounge rooms/invitations/expiry,
 public venue furnishing and entrance walkthrough, contemporary resident art and
 social animations, final complete browser/visual regression and backed-up live
 deployment. This milestone has not been deployed and does not complete the goal.
+
+## Lounge reservation data milestone (2026-09-12)
+
+Migration 0009 stores reservations and invitations. Reservation creation serializes
+host limits and room conflicts, supports 30/60-minute meetings up to seven days
+ahead, and binds retries including reserve-now requests. Cancelling releases the
+interval; only the host can manage invitations/cancellation. Public availability
+omits meeting titles and participant identities. Invitees see their own meetings
+without the host's guest list. Shared admission checks reject early, expired,
+cancelled and uninvited entry and return the room capacity plus hard end time.
+
+All eight focused reservation integration tests passed, including concurrent
+same-room requests, concurrent per-host limits, touching/overlapping intervals,
+retry/cancellation, privacy and exact start/end admission boundaries. Typecheck,
+lint and all 289 unit tests passed. D-069 records interval and deadline semantics.
+
+This is a data foundation. HTTP routes, actual meeting realms, enforced live
+capacity/expiry, the booking interface and multi-player browser verification are
+still required. No booking UI or production booking feature is claimed yet.

@@ -9,3 +9,4 @@ export * from './client.js';
 /** Bumped by hand when a migration changes the shape of the database. */
 export const SCHEMA_VERSION = 1;
 export * from './propertyAccess.js';
+export * from './bookingAccess.js';
