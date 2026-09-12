@@ -19,3 +19,12 @@ The generated PNGs are retained with their provenance; do not relabel them as ha
 For future external assets, record file, author, original source URL, exact licence/usage terms and date before import. Commercial use and modification must be permitted. Keep required attribution discoverable from the game. Unknown and NonCommercial licences remain excluded. Paid packs must not be redistributed as stock source assets unless their terms explicitly permit that.
 
 Reproduction commands and the final prompt set are in [ART_PROMPTS.md](ART_PROMPTS.md). Player-facing provenance is available at `/credits.html` from the login screen.
+
+## Contemporary city hero — 2026-09-12
+
+- File: `apps/client/public/art/central-hero.png`
+- Author/source: original project artwork generated with OpenAI's built-in image
+  tool; no external source image. Source URL: not applicable (project-created).
+- Usage: project-generated promotional illustration; no third-party asset licence.
+- Prompt and production notes: `docs/design/CONTEMPORARY_ART_PROMPTS.md`.
+- This illustration is marketing artwork, not an actual gameplay screenshot.
