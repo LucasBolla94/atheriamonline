@@ -518,3 +518,19 @@ projects: **14 passed in 2.1 minutes**, including the unchanged square approach
 assertions and all previously failing cases. This is a full regression followed
 by a targeted correction/recheck, not a claim that the first run was all green.
 Production publication and live checks remain pending.
+
+### Live-check preparation
+
+The live browser checks now use the public landing page and /play/ entry,
+contemporary portraits, and an ordinary city-guide/reserve/enter/cancel flow.
+There are nine scenarios on each device project. The new reservation check
+cancels its own booking in cleanup if an assertion fails. These checks have not
+yet run against the unpublished release.
+
+Smoke account cleanup selects only matching six-digit fixture name/email pairs
+and excludes commercial owners. It removes those hosts' free reservations in
+the same transaction before deleting their accounts. Verification against an
+isolated database with the current schema proved that the fixture and its
+booking are removed, while an ordinary resident and booking, a mismatched
+name/email pair and a commercial owner remain. The verification database was
+removed afterwards. Shell syntax, source lint and typecheck passed.

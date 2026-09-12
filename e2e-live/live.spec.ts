@@ -28,7 +28,7 @@ async function createAccountAndEnter(page: Page): Promise<string> {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const name = throwawayName();
 
-    await page.goto('/');
+    await page.goto('/play/');
     await page.getByRole('tab', { name: 'Create an account' }).click();
     await page.getByLabel('Email address').fill(`${name.toLowerCase()}@example.com`);
     await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
@@ -61,13 +61,76 @@ test('the site is served over HTTPS and asks people in', async ({ page }) => {
   const response = await page.goto('/');
   expect(response?.status()).toBe(200);
   expect(page.url()).toMatch(/^https:/);
-  await expect(page.getByRole('heading', { name: 'Atheriam' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /A little city/ })).toBeVisible();
 });
 
 test('the API answers through the proxy', async ({ request }) => {
   const response = await request.get('/api/health');
   expect(response.status()).toBe(200);
   expect(await response.json()).toEqual({ ok: true, service: 'api' });
+});
+
+test('the published city guide and reserved lounge room work together', async ({ page }) => {
+  await createAccountAndEnter(page);
+  await page.getByRole('button', { name: 'City guide', exact: true }).click();
+  const cards = page.locator('.city-guide__card');
+  await expect(cards).toHaveCount(15);
+  await expect(cards.filter({ hasText: 'City-owned' })).toHaveCount(5);
+  const lounge = cards.filter({
+    has: page.getByRole('heading', { name: 'Central Lounge', exact: true }),
+  });
+  await lounge.getByRole('button', { name: 'Enter environment', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Central Lounge', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Meeting rooms', exact: true }).click();
+  const response = await page.request.get('/api/lounge');
+  expect(response.ok()).toBe(true);
+  const schedule = (await response.json()) as {
+    now: string;
+    rooms: { id: string; name: string }[];
+    occupied: { roomId: string; startsAt: string; endsAt: string }[];
+  };
+  const now = Date.parse(schedule.now);
+  const room = schedule.rooms.find(
+    (candidate) =>
+      !schedule.occupied.some(
+        (slot) =>
+          slot.roomId === candidate.id &&
+          Date.parse(slot.endsAt) > now &&
+          Date.parse(slot.startsAt) < now + 30 * 60_000,
+      ),
+  );
+  expect(room, 'A room must be available for the live reservation check').toBeDefined();
+  const title = `Smoke meeting ${Date.now()}`;
+  let bookingId: string | null = null;
+  try {
+    await page.getByRole('button', { name: 'Reserve a room', exact: true }).click();
+    await page.getByLabel('Meeting name', { exact: true }).fill(title);
+    await page.getByRole('combobox', { name: 'Room', exact: true }).selectOption(room!.id);
+    const created = page.waitForResponse(
+      (reply) =>
+        new URL(reply.url()).pathname === '/api/lounge/bookings' &&
+        reply.request().method() === 'POST',
+    );
+    await page.locator('form').getByRole('button', { name: 'Reserve a room', exact: true }).click();
+    const result = await created;
+    expect(result.ok()).toBe(true);
+    bookingId = (await result.json()).id as string;
+    await page.getByRole('button', { name: title, exact: true }).click();
+    await page.getByRole('button', { name: 'Enter meeting', exact: true }).click();
+    await expect(page.locator('.hud')).toContainText(room!.name);
+    await expect(page.locator('.meeting-status')).toContainText('Ends at');
+    await page.getByRole('button', { name: 'Meeting rooms', exact: true }).click();
+    await page.getByRole('button', { name: title, exact: true }).click();
+    await page.getByRole('button', { name: 'Cancel meeting', exact: true }).click();
+    await page.getByRole('button', { name: 'Confirm cancellation', exact: true }).click();
+    await expect(page.getByRole('dialog', { name: 'Central Lounge', exact: true })).toBeVisible();
+    bookingId = null;
+  } finally {
+    if (bookingId)
+      await page.request.post(`/api/lounge/bookings/${bookingId}/cancel`, {
+        headers: { origin: new URL(page.url()).origin },
+      });
+  }
 });
 
 test('somebody can make an account and walk into the city', async ({ page }) => {
@@ -157,19 +220,25 @@ test('the certificate covers www too, and sends people to the short name', async
 test('the published pixel-art look persists and works on touch', async ({ page }, info) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
-  await page.goto('/');
+  await page.goto('/play/');
   await page
     .locator('.welcome-art__image')
     .evaluate((image) => (image as HTMLImageElement).decode());
   await page.screenshot({ path: `test-results/live-${info.project.name}-login.png` });
   const name = await createAccountAndEnter(page);
   await page.getByRole('button', { name: 'Your look' }).click();
-  await page.getByRole('button', { name: 'Heather violet' }).click();
+  await page.getByRole('button', { name: 'Warm terracotta' }).click();
   await page.getByRole('button', { name: 'Wear this look' }).click();
-  await expect(page.locator('.resident-card img')).toHaveAttribute('src', '/art/portrait-4.png');
+  await expect(page.locator('.resident-card img')).toHaveAttribute(
+    'src',
+    '/art/portrait-modern-4.png',
+  );
   await page.reload();
   await expect(page.locator('.hud')).toContainText(name);
-  await expect(page.locator('.resident-card img')).toHaveAttribute('src', '/art/portrait-4.png');
+  await expect(page.locator('.resident-card img')).toHaveAttribute(
+    'src',
+    '/art/portrait-modern-4.png',
+  );
   if (info.project.name === 'mobile-landscape') {
     await page.setViewportSize({ width: 393, height: 851 });
     await expect
