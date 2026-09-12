@@ -427,6 +427,8 @@ function toView(player: PlayerState): PlayerView {
     facing: player.facing,
     appearance: player.appearance,
     ...(player.pose === 'stand' ? {} : { pose: player.pose, poseSince: player.poseSince }),
-    ...(player.seat ? { seat: { x: player.seat.x, y: player.seat.y } } : {}),
+    ...(player.seat
+      ? { seat: { x: player.seat.x, y: player.seat.y, offsetX: player.seat.offsetX } }
+      : {}),
   };
 }

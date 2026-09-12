@@ -1692,3 +1692,25 @@ button:active:not(:disabled) {
     flex-shrink: 0;
   }
 }
+
+.resident-actions {
+  pointer-events: auto;
+  min-width: var(--touch-size);
+  min-height: var(--touch-size);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.resident-actions:focus-visible {
+  outline: 2px solid var(--color-accent);
+}
+
+.resident-actions__label {
+  display: block;
+  font-family: var(--font-family-ui);
+  font-size: var(--font-size-sm);
+  color: var(--color-accent);
+}

@@ -73,6 +73,25 @@ describe('WorldConnection', () => {
     connection.handleMessage(encode(WELCOME));
   }
 
+  it('sends social intents and replaces an observed pose when the server clears it', () => {
+    join();
+    connection.social('sit', '68:81');
+    expect(socket.parsed().at(-1)).toMatchObject({ t: 'social', action: 'sit', seatId: '68:81' });
+    const base = snapshot(2, 2);
+    if (base.t !== 'snapshot') throw new Error('Expected snapshot fixture');
+    const other = { id: 'p2', name: 'Neighbour', x: 68, y: 82, facing: 's' as const };
+    connection.handleMessage(
+      encode({
+        ...base,
+        players: [{ ...other, pose: 'sit', poseSince: 1000, seat: { x: 68, y: 81 } }],
+      }),
+    );
+    expect(connection.others[0]?.seat).toEqual({ x: 68, y: 81 });
+    connection.handleMessage(encode({ ...base, players: [other] }));
+    expect(connection.others[0]?.pose).toBeUndefined();
+    expect(connection.others[0]?.seat).toBeUndefined();
+  });
+
   it('clears the previous environment and remembers the meeting deadline only while inside', () => {
     join();
     connection.handleMessage(encode(chunk(0, 0)));

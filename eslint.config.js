@@ -8,6 +8,7 @@ export default tseslint.config(
     ignores: [
       '**/node_modules/**',
       '**/dist/**',
+      '.e2e-client/**',
       '**/build/**',
       '**/coverage/**',
       '**/*.tsbuildinfo',

@@ -8,6 +8,19 @@
  */
 export const strings = {
   appName: 'Atheriam',
+  social: {
+    title: 'Your actions',
+    open: 'Actions',
+    help: 'Say hello, or take a seat beside your neighbours.',
+    wave: 'Wave',
+    sit: 'Sit nearby',
+    stand: 'Stand up',
+    seated: 'Seated',
+    waving: 'Waving',
+    noSeat: 'Walk beside a public bench, sofa or chair to take a seat.',
+    refused: 'That seat is unavailable. Move beside a free seat and try again.',
+    slow: 'Give your current action a moment before trying again.',
+  },
   lounge: {
     title: 'Meeting rooms',
     description:
@@ -226,12 +239,12 @@ export const strings = {
     town: 'Atheriam town',
     online: 'Live world',
     lookNames: [
-      'River blue',
-      'Autumn coral',
-      'Market gold',
-      'Forest green',
-      'Heather violet',
-      'Evening blue',
+      'City teal',
+      'Sunset coral',
+      'Studio lilac',
+      'Morning gold',
+      'Warm terracotta',
+      'Park sage',
     ],
     look: 'Your look',
     chooseLook: 'Choose your look',

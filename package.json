@@ -2,7 +2,7 @@
   "name": "atheriam",
   "version": "0.0.0",
   "private": true,
-  "description": "Atheriam \u2014 a browser multiplayer social world set in an original medieval kingdom-city.",
+  "description": "Atheriam \u2014 a browser multiplayer social world set in an original contemporary social city.",
   "license": "UNLICENSED",
   "type": "module",
   "engines": {
@@ -11,7 +11,7 @@
   "packageManager": "pnpm@9.15.4",
   "scripts": {
     "dev": "pnpm -r --parallel dev",
-    "build": "pnpm -r build",
+    "build": "pnpm -r --workspace-concurrency=1 build",
     "typecheck": "tsc --build --force && pnpm --filter @atheriam/client typecheck",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

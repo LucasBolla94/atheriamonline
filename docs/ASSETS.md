@@ -70,3 +70,21 @@ screen, replacing the medieval promotional image there.
   created for Atheriam. It creates six transparent 64 × 64 frames of a stone
   fountain with turquoise water. No external image or asset pack is used.
 - The client shares this atlas across streamed chunks and animates it at 8 fps.
+
+## Contemporary residents and social poses — 2026-09-12
+
+- Sources: `resident-modern-source.png`, `resident-modern-ponytail-source.png`,
+  `resident-modern-curly-source.png` in `apps/client/public/art`.
+- Author/tool: OpenAI imagegen, generated specifically for Atheriam from original
+  prompts. No external art pack or commercial game reference; not CC0 stock art.
+- Prompts and preparation: [MODERN_RESIDENT_PROMPTS.md](design/MODERN_RESIDENT_PROMPTS.md).
+- Runtime: `resident-modern-0.png` through `resident-modern-5.png`, 192 × 288;
+  matching `portrait-modern-0.png` through `portrait-modern-5.png`, 32 × 48.
+- Each atlas has four six-frame walk rows, six wave frames and six seated idle
+  frames. Three source identities receive one curated alternate clothing palette
+  each. Skin/hair identity comes from the original generated sources.
+- `scripts/bake-modern-residents.mjs` packages complete silhouettes, removes the
+  uniform magenta key, uses nearest-neighbour scaling and checks frame bounds.
+  The accepted generated sources stay unchanged on disk. Rejected checkerboard
+  outputs are not runtime assets. Earlier medieval source/runtime images remain
+  preserved as historical assets and are no longer selected by the contemporary client loader.

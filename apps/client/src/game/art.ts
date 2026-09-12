@@ -197,10 +197,10 @@ export async function bakeArt(): Promise<GameArt> {
 export function prepareArt(): Promise<GameArt> {
   pending ??= (async () => {
     const loaded = await Promise.all(
-      Array.from({ length: 6 }, (_, i) => load(`/art/resident-${i}.png`)),
+      Array.from({ length: 6 }, (_, i) => load(`/art/resident-modern-${i}.png`)),
     );
     const residents = loaded.map((image) => {
-      const out = canvas(192, 192);
+      const out = canvas(192, 288);
       out.getContext('2d')!.drawImage(image, 0, 0);
       return out;
     });
@@ -212,7 +212,7 @@ export function prepareArt(): Promise<GameArt> {
       props,
       venueProps: await loadVenueProps(),
       buildings: await loadBuildings(),
-      portraits: Array.from({ length: 6 }, (_, i) => `/art/portrait-${i}.png`),
+      portraits: Array.from({ length: 6 }, (_, i) => `/art/portrait-modern-${i}.png`),
       icons: Object.fromEntries(PROP_NAMES.map((name) => [name, `/art/${name}.png`])),
     };
   })().catch((error: unknown) => {

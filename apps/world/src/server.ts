@@ -904,7 +904,7 @@ export class WorldServer {
  * answered without comparing whole objects ten times a second.
  */
 function signatureOf(player: PlayerView): string {
-  return `${player.x},${player.y},${player.facing},${player.appearance ?? 0},${player.pose ?? 'stand'},${player.poseSince ?? 0},${player.seat?.x ?? ''},${player.seat?.y ?? ''}`;
+  return `${player.x},${player.y},${player.facing},${player.appearance ?? 0},${player.pose ?? 'stand'},${player.poseSince ?? 0},${player.seat?.x ?? ''},${player.seat?.y ?? ''},${player.seat?.offsetX ?? 0}`;
 }
 
 /**

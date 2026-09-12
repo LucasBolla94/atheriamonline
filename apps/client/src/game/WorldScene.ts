@@ -63,10 +63,14 @@ const KEY_DIRECTIONS: ReadonlyArray<readonly [string, Direction]> = [
 interface Avatar {
   readonly container: Phaser.GameObjects.Container;
   readonly sprite: Phaser.GameObjects.Sprite;
+  readonly shadow: Phaser.GameObjects.Ellipse;
   readonly label: Phaser.GameObjects.Text;
   facing: string;
   look: number;
   walkTime: number;
+  pose: PlayerView['pose'];
+  poseSince: number;
+  poseTime: number;
   targetPx: { x: number; y: number };
   /** The speech bubble above this character, while they have one. */
   bubble: Phaser.GameObjects.Container | null;
@@ -169,7 +173,7 @@ export class WorldScene extends Phaser.Scene {
           const key = `resident:${i}`;
           if (!this.textures.exists(key)) {
             const texture = this.textures.addCanvas(key, canvas)!;
-            for (let frame = 0; frame < 24; frame++)
+            for (let frame = 0; frame < 36; frame++)
               texture.add(frame, 0, (frame % 6) * 32, Math.floor(frame / 6) * 48, 32, 48);
           }
         });
@@ -619,8 +623,10 @@ export class WorldScene extends Phaser.Scene {
 
   private updateAvatar(view: PlayerView, isSelf: boolean): void {
     const targetPx = {
-      x: view.x * TILE_SIZE_PX + TILE_SIZE_PX / 2,
-      y: view.y * TILE_SIZE_PX + TILE_SIZE_PX / 2,
+      x: (view.seat?.x ?? view.x) * TILE_SIZE_PX + TILE_SIZE_PX / 2 + (view.seat?.offsetX ?? 0),
+      y: view.seat
+        ? (view.seat.y + 1) * TILE_SIZE_PX - 12
+        : view.y * TILE_SIZE_PX + TILE_SIZE_PX / 2,
     };
 
     const look = view.appearance ?? 0;
@@ -628,6 +634,10 @@ export class WorldScene extends Phaser.Scene {
     if (existing !== undefined) {
       existing.targetPx = targetPx;
       existing.facing = view.facing;
+      if (existing.pose !== view.pose || existing.poseSince !== (view.poseSince ?? 0))
+        existing.poseTime = 0;
+      existing.pose = view.pose;
+      existing.poseSince = view.poseSince ?? 0;
       if (existing.look !== look) {
         existing.look = look;
         existing.sprite.setTexture(`resident:${look}`, 1);
@@ -653,10 +663,14 @@ export class WorldScene extends Phaser.Scene {
     this.avatars.set(view.id, {
       container,
       sprite,
+      shadow,
       label,
       facing: view.facing,
       look,
       walkTime: 0,
+      pose: view.pose,
+      poseSince: view.poseSince ?? 0,
+      poseTime: 0,
       targetPx,
       bubble: null,
       bubbleUntilMs: 0,
@@ -792,8 +806,20 @@ export class WorldScene extends Phaser.Scene {
           : avatar.facing === 'w'
             ? 1
             : 2;
-      avatar.sprite.setFrame(direction * 6 + (moving ? Math.floor(avatar.walkTime / 100) % 6 : 1));
-      container.setDepth(100 + container.y);
+      avatar.poseTime += deltaMs;
+      const frame =
+        avatar.pose === 'sit'
+          ? 30 + (this.reducedMotion ? 0 : Math.floor(avatar.poseTime / 500) % 6)
+          : avatar.pose === 'wave'
+            ? 24 + (this.reducedMotion ? 2 : Math.min(5, Math.floor(avatar.poseTime / 300)))
+            : moving
+              ? direction * 6 + (Math.floor(avatar.walkTime / 100) % 6)
+              : direction === 0
+                ? 24
+                : direction * 6 + 1;
+      avatar.sprite.setFrame(frame);
+      avatar.shadow.setVisible(avatar.pose !== 'sit');
+      container.setDepth(100 + container.y + (avatar.pose === 'sit' ? 13 : 0));
       avatar.label.setPosition(Math.round(container.x), Math.round(container.y - 51));
       avatar.bubble?.setPosition(Math.round(container.x), Math.round(container.y - 78));
     }
@@ -841,6 +867,7 @@ export class WorldScene extends Phaser.Scene {
       for (const props of this.props.values())
         for (const prop of props) {
           const covers =
+            prop.depth > self.container.depth &&
             Math.abs(prop.x - self.container.x) < prop.displayWidth * 0.4 &&
             self.container.y < prop.y &&
             self.container.y > prop.y - prop.displayHeight;

@@ -375,3 +375,68 @@ Desktop and mobile arrival/approach captures were reviewed and retained under
 `docs/design/contemporary`. The mobile close approach shows both fountain and
 resident within the short landscape viewport.
 The production build and final lint check also passed for this milestone.
+
+### Social state and contemporary residents — work in progress, 2026-09-12
+
+Server foundation commit `2a110c4` is published on the feature branch. Waves,
+public seat occupancy, cooldowns and clearing on movement/departure are world
+state, with snapshot coverage even when nobody moves. Protocol v11 carries the
+pose. There are 325 passing unit tests, including eight new social rule checks,
+a real-socket wave/expiry check and client pose replacement coverage. The later
+seat alignment update also passed the focused 45-test social/venue/client group
+and typecheck. Final complete release checks remain pending.
+
+The client now contains six contemporary looks with directional walk, wave and
+seated idle frames, matching portraits, and an Actions control. The individual
+browser scenario successfully waved, sat and stood up. Its visual inspection
+found the seated body below the bench surface; render anchors were subsequently
+adjusted and bench slots moved inward from the armrests. The player's safe
+standing tile stays unchanged. Final seated captures are still being reviewed.
+
+The first browser pass caught missing pointer interaction on the portrait Actions
+button; that was fixed with explicit pointer events and a minimum touch target.
+Two-client visual tests are still being stabilized on this headless host. An
+interrupted invocation was confirmed stopped and its orphan test services were
+removed. Later traces showed completed non-navigation clicks waiting on a
+navigation signal. The social tests now retain normal hit-target/actionability
+checks and wait for the actual server pose, without the click's navigation wait
+(see [Playwright click options](https://playwright.dev/docs/api/class-locator#locator-click)).
+No passing two-browser result is claimed yet. This milestone is not deployed.
+
+
+### Contemporary resident client milestone — 2026-09-12
+
+Six original modern appearances now render four directional walking cycles,
+waves and seated idle poses, with matching saved portraits. The portrait Actions
+button exposes server-authoritative wave/sit/stand controls on desktop and touch.
+Seat anchors place neighbours inside bench armrests, hide ground shadows while
+seated and keep the bench visible. Magenta edge blends found in the first mobile
+capture were removed in the deterministic atlas packaging step; original sources
+remain unchanged. Final character chooser and mobile portrait captures were
+visually reviewed and retained under `docs/design/contemporary`.
+
+Typecheck, lint and all 332 unit tests passed, including seven renderer capability
+cases. The game keeps hardware WebGL and uses native Canvas on known software
+renderers or when WebGL is unavailable (D-075). Both individual and two-resident
+social scenarios passed on desktop and mobile, covering wave observation/expiry,
+two occupied seats, standing/releasing and reload. The final atlas revision also
+passed all four social cases against the production client bundle.
+
+The browser harness now builds and serves an isolated production client under
+`.e2e-client`, with test-only API/world addresses. Deployment output is untouched.
+Appearance change, peer observation, reload persistence and mobile portrait/tablet
+controls passed on mobile in the grouped run. Desktop's reload exceeded the
+15-second observation deadline in that run; the unchanged desktop scenario then
+passed in isolation (47.5 seconds). Earlier dev-client runs also exceeded entry
+deadlines. This host's intermittent loading delays remain recorded; neither a
+clean full regression nor real-phone frame-rate performance is claimed.
+
+Remaining release work includes explicit booking time/reconnect checks, client
+protocol upgrade handling, full integration/browser regression, final build,
+backup, deployment and live verification. Nothing here has been deployed.
+
+The complete production build subsequently passed. Workspace builds now run in
+sequence on this 4 GB host. An earlier concurrent build was killed with exit 137
+while lint was incorrectly parsing the generated browser-test bundle. The isolated
+output is now excluded from source lint/format checks, just like ordinary dist
+output; source lint passed again.

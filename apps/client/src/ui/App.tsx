@@ -1,5 +1,6 @@
 import { LoungePanel } from './LoungePanel.js';
-import { LOUNGE_ROOMS } from '@atheriam/shared';
+import { SocialPanel } from './SocialPanel.js';
+import { LOUNGE_ROOMS, CITY_SEATS, venueSeats } from '@atheriam/shared';
 import { ShopPanel } from './ShopPanel.js';
 import { CityPanel } from './CityPanel.js';
 /**
@@ -113,6 +114,7 @@ export function App(): JSX.Element {
     if (result.ok) setProperties(result.data.properties);
     else setCityError(result.message);
   }, []);
+  const [socialOpen, setSocialOpen] = useState(false);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [appearanceBusy, setAppearanceBusy] = useState(false);
   const [appearanceError, setAppearanceError] = useState<string | null>(null);
@@ -185,6 +187,7 @@ export function App(): JSX.Element {
         if (about === 'trade') refreshTradeRef.current?.();
       },
       onRealm: (which, houseId, propertyId) => {
+        setSocialOpen(false);
         setMeeting(connectionRef.current?.booking ?? null);
         setLoungeOpen(false);
         loungeReadVersion.current += 1;
@@ -215,6 +218,8 @@ export function App(): JSX.Element {
           sceneryRef.current.revision += 1;
         }
       },
+      onSocialReject: (reason) =>
+        setChatNotice(reason === 'too-fast' ? strings.social.slow : strings.social.refused),
       onReject: (reason) => {
         // Most refusals are ordinary and the next snapshot corrects them. The
         // two about talking are the exception: the player needs to know why
@@ -223,6 +228,7 @@ export function App(): JSX.Element {
         else if (reason === 'too-chatty') setChatNotice(strings.chat.tooChatty);
       },
       onClosed: (reason) => {
+        setSocialOpen(false);
         setMeeting(null);
         setLoungeOpen(false);
         setSchedule(null);
@@ -819,11 +825,30 @@ export function App(): JSX.Element {
     if (playing) void refreshCity();
   }, [playing, refreshCity]);
 
+  const socialSeats =
+    connectionRef.current?.realm === 'city'
+      ? CITY_SEATS
+      : venueSeats(connectionRef.current?.venueId ?? null);
+  const nearbySeat = you
+    ? socialSeats.find(
+        (seat) =>
+          Math.abs(seat.x - you.x) + Math.abs(seat.y - you.y) === 1 &&
+          !(connectionRef.current?.others ?? []).some(
+            (other) => other.id !== you.id && other.seat?.x === seat.x && other.seat?.y === seat.y,
+          ),
+      )
+    : undefined;
+
   return (
     <>
       {playing && <div className="stage" ref={stageRef} />}
       {playing && you !== null && (
         <Hud
+          onSocial={() => {
+            connectionRef.current?.stop();
+            setSocialOpen(true);
+          }}
+          {...(you.pose ? { pose: you.pose } : {})}
           name={you.name}
           appearance={you.appearance ?? 0}
           onCity={() => {
@@ -873,6 +898,18 @@ export function App(): JSX.Element {
         />
       )}
       {playing && touch && <TouchControls onStep={(dir) => connectionRef.current?.step(dir)} />}
+      {playing && socialOpen && you !== null && (
+        <SocialPanel
+          seated={you.pose === 'sit'}
+          canSit={Boolean(nearbySeat)}
+          onClose={() => setSocialOpen(false)}
+          onAction={(action) => {
+            setChatNotice(null);
+            connectionRef.current?.social(action, action === 'sit' ? nearbySeat?.id : undefined);
+            setSocialOpen(false);
+          }}
+        />
+      )}
       {playing && appearanceOpen && you !== null && (
         <AppearancePanel
           current={you.appearance ?? 0}

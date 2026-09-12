@@ -64,6 +64,7 @@ export interface ConnectionHandlers {
     houseId: string | null,
     propertyId?: string | null,
   ) => void;
+  onSocialReject?: (reason: RejectReason) => void;
   onReject?: (reason: RejectReason) => void;
   onClosed?: (reason: string) => void;
 }
@@ -78,6 +79,7 @@ export type ConnectionState = 'idle' | 'connecting' | 'joining' | 'playing' | 'c
 export const MAX_INTENTS_PER_SECOND = 15;
 
 export class WorldConnection {
+  private socialSequence: number | null = null;
   private socket: SocketLike | null = null;
   private readonly handlers: ConnectionHandlers;
   private readonly now: () => number;
@@ -241,6 +243,16 @@ export class WorldConnection {
     this.sendIntent({ t: 'say', seq: this.nextSeq(), text: trimmed });
   }
 
+  social(action: 'wave' | 'sit' | 'stand', seatId?: string): void {
+    this.socialSequence = this.nextSeq();
+    this.sendIntent({
+      t: 'social',
+      seq: this.socialSequence,
+      action,
+      ...(seatId ? { seatId } : {}),
+    });
+  }
+
   /** Close the connection on purpose. */
   disconnect(): void {
     this.socket?.close();
@@ -284,6 +296,7 @@ export class WorldConnection {
       case 'reject': {
         // Not an error worth showing the player. The next snapshot is the
         // truth, and the character simply snaps to it.
+        if (message.seq === this.socialSequence) this.handlers.onSocialReject?.(message.reason);
         this.handlers.onReject?.(message.reason);
         return;
       }

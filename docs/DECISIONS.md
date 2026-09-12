@@ -935,3 +935,42 @@ Six 64-pixel frames share one texture, playing at eight frames per second; only
 water highlights and droplets change. Phaser owns playback and destroys the
 sprite with its streamed chunk. There are no per-frame canvas redraws or network
 messages for decorative water. The fountain retains its existing solid footprint.
+
+## D-074 — Social poses are world state; seats retain a safe return tile
+
+A wave lasts 1.8 seconds on the server clock. New waves and sitting requests have
+an independent two-second cooldown; standing up is always allowed. Starting a
+social action stops the current route. The pose participates in snapshot change
+detection so neighbours see both its start and end without anyone moving.
+
+Each public bench/sofa has two named seats and each office chair has one. City
+and venue seats derive from shared prop footprints. The server accepts sitting
+only from an orthogonally adjacent walkable tile and only when the selected seat
+is free in that realm. It retains that safe standing tile; the client draws the
+seated body at the server-confirmed seat. Standing, valid movement, leaving or
+disconnecting releases the place. No client-supplied position becomes authority.
+Public furniture remains scenery, separate from inventory and player-owned items.
+The current front-facing furniture uses south-facing social poses. Private
+player-placed furniture is not part of this fixed public seating catalogue.
+
+Protocol v11 carries pose, start time and the optional seat position. Wave and
+seated idle frames are part of the contemporary resident atlas. Reduced-motion
+settings use a static social pose. The portrait's visible Actions control opens
+wave/sit/stand choices on desktop and mobile. The six saved appearance indices
+remain stable while their contemporary artwork and display names are replaced.
+
+
+## D-075 — Use native Canvas when WebGL runs in software
+
+The game keeps WebGL on hardware renderers. A small, local startup probe selects
+Phaser Canvas when WebGL is unavailable or identifies SwiftShader, llvmpipe or
+softpipe. No renderer information is sent to a server; privacy-hidden identities
+keep the normal WebGL choice. The temporary probe is released, and cleanup
+failures must never prevent entry. Both paths retain the same world, artwork,
+input, animations and target frame rate.
+
+This host identifies its renderer as ANGLE SwiftShader despite accepting
+failIfMajorPerformanceCaveat. Two-resident social browser coverage passes with
+the native Canvas fallback. That establishes functionality in this environment,
+not measured hardware-phone performance. Full visual and regression checks are
+still required before release.

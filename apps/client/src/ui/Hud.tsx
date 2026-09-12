@@ -10,6 +10,8 @@ import { strings } from './strings.js';
 export interface HudProps {
   readonly name: string;
   readonly appearance: number;
+  readonly onSocial: () => void;
+  readonly pose?: 'wave' | 'sit';
   readonly onAppearance: () => void;
   readonly onCity: () => void;
   readonly x: number;
@@ -31,6 +33,8 @@ export function Hud({
   name,
   appearance,
   onAppearance,
+  onSocial,
+  pose,
   onCity,
   x,
   y,
@@ -47,10 +51,25 @@ export function Hud({
   return (
     <div className="hud">
       <div className="resident-card">
-        <Portrait look={appearance} />
+        <button
+          type="button"
+          className="resident-actions"
+          aria-label={strings.social.title}
+          title={strings.social.title}
+          onClick={onSocial}
+        >
+          <Portrait look={appearance} />
+          <span className="resident-actions__label">{strings.social.open}</span>
+        </button>
         <div>
           <strong>{name}</strong>
-          <span className="hud__muted">{strings.hud.playersNearby(nearbyCount)}</span>
+          <span className="hud__muted">
+            {pose === 'sit'
+              ? strings.social.seated
+              : pose === 'wave'
+                ? strings.social.waving
+                : strings.hud.playersNearby(nearbyCount)}
+          </span>
         </div>
         <span className="online-dot" />
       </div>

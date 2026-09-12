@@ -56,7 +56,8 @@ export default defineConfig({
       stderr: 'pipe',
     },
     {
-      command: 'pnpm --filter @atheriam/client dev',
+      command: 'pnpm exec tsx e2e/serve-client.ts',
+      timeout: 120_000,
       port: E2E_CLIENT_PORT,
       env,
       reuseExistingServer: false,

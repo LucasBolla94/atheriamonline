@@ -5,6 +5,7 @@
  * player actually enters the world, and destroyed cleanly when they leave.
  */
 import Phaser from 'phaser';
+import { preferCanvasRenderer } from './renderer.js';
 import type { WorldInfo } from '@atheriam/protocol';
 import { colorTokens } from '../tokens/tokens.js';
 import type { WorldConnection } from '../net/connection.js';
@@ -20,7 +21,7 @@ export interface CreateGameOptions {
 
 export function createGame(options: CreateGameOptions): Phaser.Game {
   const game = new Phaser.Game({
-    type: Phaser.AUTO,
+    type: preferCanvasRenderer() ? Phaser.CANVAS : Phaser.AUTO,
     parent: options.parent,
     backgroundColor: colorTokens.backdrop,
     pixelArt: true,

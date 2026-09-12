@@ -195,7 +195,7 @@ export const playerViewSchema = z.object({
   appearance: z.number().int().min(0).max(5).optional(),
   pose: z.enum(['wave', 'sit']).optional(),
   poseSince: z.number().int().nonnegative().optional(),
-  seat: tilePosSchema.optional(),
+  seat: tilePosSchema.extend({ offsetX: z.number().int().min(-8).max(8).optional() }).optional(),
 });
 
 export type PlayerView = z.infer<typeof playerViewSchema>;
