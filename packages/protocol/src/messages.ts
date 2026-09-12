@@ -13,7 +13,7 @@
  * Every message is validated with zod before it is trusted, on both sides.
  */
 import { z } from 'zod';
-import { CHUNK_SIZE_TILES, MAX_CHAT_LENGTH } from '@atheriam/shared';
+import { CHUNK_SIZE_TILES, MAX_CHAT_LENGTH, VENUE_IDS } from '@atheriam/shared';
 
 /**
  * Bumped whenever a message shape changes in a way old clients cannot read.
@@ -30,8 +30,9 @@ import { CHUNK_SIZE_TILES, MAX_CHAT_LENGTH } from '@atheriam/shared';
  *    told when that changes.
  * 8: public and commercial properties have separate interior realms.
  * 9: time-limited private meeting realms.
+ * 10: furnished public venue layouts, shared with collision maps.
  */
-export const PROTOCOL_VERSION = 9;
+export const PROTOCOL_VERSION = 10;
 
 /** The eight directions a player may step in. */
 export const directionSchema = z.enum(['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw']);
@@ -301,6 +302,7 @@ export const realmSchema = z.object({
   /** Whose house, when it is a house. The browser asks the API what is in it. */
   houseId: z.string().min(1).max(64).nullable(),
   propertyId: z.string().uuid().nullable().optional(),
+  venueId: z.enum(VENUE_IDS).nullable().optional(),
   booking: z
     .object({
       id: z.string().uuid(),

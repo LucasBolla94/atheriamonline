@@ -11,7 +11,7 @@
  * is not here: furniture belongs to the API, and the browser asks it. The world
  * server only needs to know where the walls are.
  */
-import { HOUSE_ROWS, INTERIOR_ROWS } from '@atheriam/shared';
+import { HOUSE_ROWS, INTERIOR_ROWS, PUBLIC_VENUES, type VenueId } from '@atheriam/shared';
 import { GameMap } from './map.js';
 import { World } from './world.js';
 
@@ -59,7 +59,7 @@ export class Realms {
    * Houses hold few people, so they are given a small limit of their own: a
    * house with two hundred people in it is not a house.
    */
-  get(realm: RealmId, bookingCapacity?: number): World {
+  get(realm: RealmId, bookingCapacity?: number, venueId: VenueId | null = null): World {
     if (realm === 'city') return this.city;
 
     const existing = this.houses.get(realm);
@@ -68,7 +68,12 @@ export class Realms {
     const booking = bookingIdOf(realm) !== null;
     if (booking && (!Number.isInteger(bookingCapacity) || bookingCapacity! < 1))
       throw new Error('A meeting realm needs an authorized capacity');
-    const made = new World(booking || realm.startsWith('property:') ? propertyMap : houseMap, {
+    const map = venueId
+      ? new GameMap(PUBLIC_VENUES[venueId].rows)
+      : booking || realm.startsWith('property:')
+        ? propertyMap
+        : houseMap;
+    const made = new World(map, {
       maxPlayers: booking ? bookingCapacity! : realm.startsWith('property:') ? 40 : 20,
     });
     this.houses.set(realm, made);

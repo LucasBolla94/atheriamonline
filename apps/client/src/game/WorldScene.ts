@@ -16,6 +16,8 @@
 import Phaser from 'phaser';
 import {
   CITY_BUILDINGS,
+  VENUE_PROP_NAMES,
+  publicVenue,
   STARTER_CITY,
   MIN_STEP_INTERVAL_MS,
   TILE_SIZE_PX,
@@ -175,6 +177,12 @@ export class WorldScene extends Phaser.Scene {
             texture.add(name, 0, (i % 4) * 128, Math.floor(i / 4) * 128, 128, 128),
           );
         }
+        if (!this.textures.exists('venue-props')) {
+          const texture = this.textures.addCanvas('venue-props', art.venueProps)!;
+          VENUE_PROP_NAMES.forEach((name, i) =>
+            texture.add(name, 0, (i % 4) * 128, Math.floor(i / 4) * 192, 128, 192),
+          );
+        }
         if (!this.textures.exists('buildings')) {
           const texture = this.textures.addCanvas('buildings', art.buildings)!;
           BUILDING_NAMES.forEach((name, i) =>
@@ -307,19 +315,12 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private interiorTile(char: string): string {
-    if (this.connection.realm !== 'property') return char;
-    if (char === 'd')
-      return this.scenery.floorStyle === 'stone'
-        ? 'S'
-        : this.scenery.floorStyle === 'tile'
-          ? 'L'
-          : 'd';
-    if (char === '#')
-      return this.scenery.wallStyle === 'teal'
-        ? 'E'
-        : this.scenery.wallStyle === 'rose'
-          ? 'R'
-          : 'C';
+    if (this.connection.realm !== 'property' && this.connection.realm !== 'booking') return char;
+    const venue = publicVenue(this.connection.venueId);
+    const floor = venue?.floor ?? this.scenery.floorStyle;
+    const wall = venue?.wall ?? this.scenery.wallStyle;
+    if (char === 'd' || char === 'o') return floor === 'stone' ? 'S' : floor === 'tile' ? 'L' : 'd';
+    if (char === '#') return wall === 'teal' ? 'E' : wall === 'rose' ? 'R' : 'C';
     return char;
   }
 
@@ -386,6 +387,21 @@ export class WorldScene extends Phaser.Scene {
         props.push(image);
       }
     }
+    const venue = publicVenue(this.connection.venueId);
+    if (venue)
+      for (const item of venue.props) {
+        if (Math.floor(item.x / 32) !== chunk.cx || Math.floor(item.y / 32) !== chunk.cy) continue;
+        const x = (item.x + item.width / 2) * 32;
+        const y = (item.y + item.height) * 32;
+        const width = item.width * 32;
+        props.push(
+          this.add
+            .image(x, y, 'venue-props', item.art)
+            .setOrigin(0.5, 188 / 192)
+            .setDisplaySize(width, (width * 192) / 128)
+            .setDepth(100 + y),
+        );
+      }
     this.props.set(chunkKeyOf(chunk), props);
     return layer;
   }
@@ -422,6 +438,10 @@ export class WorldScene extends Phaser.Scene {
       // of a house land on tile 20,9 — outside a room that is fourteen wide.
       camera.removeBounds();
       camera.centerOn(worldWidth / 2, worldHeight / 2);
+    } else if (this.connection.venueId !== null) {
+      // Short landscape screens need room below the doorway: clamping to the
+      // room's bottom edge puts the resident behind the chat and action dock.
+      camera.removeBounds();
     } else {
       camera.setBounds(0, 0, worldWidth, worldHeight);
     }

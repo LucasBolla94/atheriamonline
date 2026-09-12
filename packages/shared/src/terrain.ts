@@ -13,6 +13,7 @@
 
 /** Every character a map row may contain. */
 export type TerrainChar =
+  | 'o' // permanent public furniture
   | '.' // grass
   | ',' // road
   | 'p' // pavement, the stone of the squares
@@ -36,6 +37,7 @@ export interface Terrain {
 }
 
 const KINDS: readonly Terrain[] = [
+  { char: 'o', name: 'public furniture', walkable: false },
   { char: '.', name: 'grass', walkable: true },
   { char: ',', name: 'road', walkable: true },
   { char: 'p', name: 'pavement', walkable: true },

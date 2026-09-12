@@ -901,3 +901,22 @@ for entry availability and the five-minute expiry notice. Entering is complete
 only after the world socket confirms the reservation realm. Hosts can manage
 invitations and cancel from inside their meeting too. Cancellation asks for a
 second click; the server then returns all occupants to the lounge.
+
+## D-072 — Public scenery and collision use the same venue layout
+
+The five public buildings and three meeting rooms have shared fixed layouts.
+Every prop has a footprint in tiles; the same definition creates the world's
+blocked furniture cells and the client's original sprite placement. These are
+city fixtures, separate from item instances, escrow and player decoration.
+The entrance aisle stays clear and all walkable tiles remain connected. A room's
+visible seat count matches its booking capacity; sitting interaction follows in
+the social animation milestone. Protocol v10 identifies the venue so both sides
+choose the same layout, including the return from a meeting to its lounge.
+Commercial properties and personal houses retain their existing editable plans.
+On short screens, these new public interiors allow the camera to follow past the
+room edge so the resident stays visible above the chat and action dock. Desktop
+rooms which fit on screen still use the existing centred overview.
+
+Before release, verify reload/version handling for already-open clients as well
+as deploying matching API/world/client builds. A version number alone is not
+proof that an old browser will reload after new layout rules are introduced.

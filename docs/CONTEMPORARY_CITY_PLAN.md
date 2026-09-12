@@ -8,11 +8,11 @@ buildings. Preserve all existing accounts and possessions.
 
 - [x] Record the new product requirements and publish a feature branch retaining
   the complete existing history.
-- [ ] Shared city/building definitions, 160 × 160 layout, walkable plaza, park,
+- [x] Shared city/building definitions, 160 × 160 layout, walkable plaza, park,
   lake and correct entrances; reachability and exact inventory tests.
 - [x] Persistent cities/properties, atomic Crown purchases, ownership and
   business configuration; concurrency, idempotency and conservation tests.
-- [ ] Public and business interiors, environment editing, directory and item
+- [x] Public and business interiors, environment editing, directory and item
   listings/sales; authoritative permissions and inventory conservation.
 - [ ] Lounge bookings/invitations, expiry and removal, isolated chat, capacity
   and booking conflicts; integration and multi-player browser tests.
@@ -310,3 +310,46 @@ The browser suite still needs explicit future-time/expiry-warning/deadline and
 reconnect scenarios as part of the final release regression. Public furnishings,
 social animations, remaining visual work and backed-up live deployment are also
 pending. This milestone has not been deployed and does not complete the goal.
+
+## Furnished public venues milestone (2026-09-12)
+
+An original twelve-object pixel furniture atlas now furnishes all five public
+buildings and the three meeting rooms. Central Lounge has a cafe counter and sofa
+areas; Creative Hub has workstations; City Hall has a reception/waiting area;
+Market Hall has counters; Events Hall has a lectern and audience benches. Studio,
+Terrace and Boardroom have distinct furniture arrangements and visible seating
+for 8, 12 and 16 people respectively. Actual sitting is still a following feature.
+
+Shared venue definitions supply both furniture footprints and rendered scenery.
+Furniture blocks movement, all floor areas connect to the entrance, and the
+arrival/exit aisle is clear. Public fixtures are separate from player inventory
+and cannot be taken or sold. Commercial and personal room editing stays intact.
+Protocol v10 carries the venue identity, including the return from a meeting.
+Original source, atlas, packaging script and prompt are recorded in ASSETS.md;
+the public credits page now describes the contemporary setting correctly.
+
+All 314 unit tests passed. New coverage checks all eight layouts, complete floor
+reachability, matching visible seating/capacity, streamed furniture collision,
+and correct lounge/meeting/return metadata. The full 171 integration tests passed.
+The five physical public door approaches, entrances and exits passed on desktop
+and mobile. The desktop test reported passed and retained a passed result, though
+its command wrapper ended with signal 143 after cleanup; no test servers remained.
+The subsequent combined mobile public-door and two-resident lounge suite exited
+successfully with two passes in 2.4 minutes.
+
+A new browser walkthrough reserves, enters, walks inside and cancels each of the
+three meeting rooms. Its final desktop and mobile run passed (two cases, 1.1
+minutes total). It holds movement input until an authoritative position change,
+as the game's keyboard controls sample held keys. A visual review found that
+clamping short-screen interior cameras to the south wall hid the avatar behind
+chat. New public venue cameras now follow the resident without that clamp; final
+meeting captures show the full resident clear of chat and the dock. Desktop
+continues to centre rooms which fit on screen. Captures of all eight desktop
+layouts and the three final mobile meeting views are retained for review.
+
+Remaining work includes outdoor plaza furnishings/fountain, contemporary
+resident art and synchronized sitting/waving; explicit booking future-time,
+expiry-warning/deadline and reconnect browser cases; full regression/performance
+and client-version reload checks; and backed-up deployment/live verification.
+The standalone production build passed after a command-wrapper interruption.
+The release is still in progress and this milestone has not been deployed.

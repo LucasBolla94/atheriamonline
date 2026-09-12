@@ -1011,6 +1011,7 @@ export function App(): JSX.Element {
           house={house}
           {...(interior ? { title: interior.name } : {})}
           accessInGuide={interior !== null}
+          municipal={interior?.municipal ?? false}
           {...(interior &&
           properties.some(
             (property) => property.id === interior.id && property.address?.id === 'central-lounge',

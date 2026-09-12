@@ -158,6 +158,8 @@ export const strings = {
     footer: 'An original social world. Made for people, places and possibilities.',
   },
   city: {
+    publicInterior:
+      'A shared space, furnished by the city. Make yourself at home and meet the people around you.',
     open: 'City guide',
     title: 'Atheriam Central',
     subtitle: 'Find your place in the neighbourhood.',

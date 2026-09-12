@@ -12,6 +12,7 @@ import { Redis } from 'ioredis';
 import { and, eq } from 'drizzle-orm';
 import {
   CHAT_RADIUS_TILES,
+  isVenueId,
   STARTER_CITY,
   TICK_HZ,
   VIEW_RADIUS_TILES,
@@ -127,6 +128,12 @@ const server = new WorldServer({
   world,
   resolveTicket,
   savePosition,
+  propertyVenue: async (propertyId) => {
+    const property = (
+      await database.db.select().from(properties).where(eq(properties.id, propertyId)).limit(1)
+    )[0];
+    return property?.municipal && isVenueId(property.buildingId) ? property.buildingId : null;
+  },
   bookingAdmission: async (characterId, bookingId, nowMs) => {
     const admission = await bookingAdmission(database.db, characterId, bookingId, nowMs);
     if (!admission) return null;

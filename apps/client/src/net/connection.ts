@@ -108,6 +108,7 @@ export class WorldConnection {
   /** Whose house they are in, when they are in one. */
   houseId: string | null = null;
   propertyId: string | null = null;
+  venueId: string | null = null;
   booking: { id: string; roomId: string; endsAt: number } | null = null;
 
   /** Goes up whenever the player moves between the city and a house. */
@@ -312,6 +313,7 @@ export class WorldConnection {
         this.houseId = message.houseId;
         this.propertyId = message.propertyId ?? null;
         this.booking = message.booking ?? null;
+        this.venueId = message.venueId ?? null;
         this.world = message.world;
         this.chunks.clear();
         this.nearby.clear();

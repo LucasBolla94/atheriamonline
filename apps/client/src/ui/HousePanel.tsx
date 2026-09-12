@@ -13,6 +13,7 @@ export interface HousePanelProps {
   readonly house: HouseView;
   readonly title?: string;
   readonly accessInGuide?: boolean;
+  readonly municipal?: boolean;
   readonly inventory: readonly InventoryItem[];
   readonly picked: InventoryItem | null;
   readonly busy: boolean;
@@ -35,6 +36,7 @@ export function HousePanel({
   house,
   title,
   accessInGuide = false,
+  municipal = false,
   inventory,
   picked,
   busy,
@@ -158,7 +160,8 @@ export function HousePanel({
           </>
         )}
 
-        <h3 className="pouch__heading">{strings.house.standingHere}</h3>
+        {municipal && <p>{strings.city.publicInterior}</p>}
+        {!municipal && <h3 className="pouch__heading">{strings.house.standingHere}</h3>}
         <ul className="pouch__list">
           {house.contents.map((item) => (
             <li key={item.id} className="pouch__item">
@@ -187,7 +190,9 @@ export function HousePanel({
               )}
             </li>
           ))}
-          {house.contents.length === 0 && <li className="pouch__muted">{strings.house.bare}</li>}
+          {!municipal && house.contents.length === 0 && (
+            <li className="pouch__muted">{strings.house.bare}</li>
+          )}
         </ul>
 
         {notice !== null && <p className="notice notice--quiet">{notice}</p>}

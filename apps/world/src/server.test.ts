@@ -1078,6 +1078,7 @@ describe('private lounge meetings over real sockets', () => {
       resolveTicket: tickets.spend,
       savePosition: tickets.save,
       canEnterProperty: async () => true,
+      propertyVenue: async (id) => (id === lounge ? 'central-lounge' : null),
       bookingAdmission: (characterId, id, time) => admission(characterId, id, time),
     });
     server.start();
@@ -1107,6 +1108,23 @@ describe('private lounge meetings over real sockets', () => {
     client.clear();
     return client;
   }
+
+  it('streams the same furnished layout used to reject movement into a cafe counter', async () => {
+    const client = await join('guest', null);
+    expect(await server.enterProperty('guest', lounge)).toBe(true);
+    expect(await client.waitFor('realm')).toMatchObject({ venueId: 'central-lounge' });
+    expect((await client.waitFor('chunk')).rows[3]?.[3]).toBe('o');
+    client.send({ t: 'walkTo', seq: 1, to: { x: 3, y: 3 } });
+    expect(await client.waitFor('reject')).toMatchObject({ seq: 1, reason: 'blocked' });
+    client.clear();
+    expect(await server.enterBooking('guest', booking)).toBe(true);
+    expect(await client.waitFor('realm')).toMatchObject({ venueId: 'studio' });
+    expect((await client.waitFor('chunk')).rows[5]?.[7]).toBe('o');
+    client.clear();
+    expect(server.leaveHouse('guest')).toBe(true);
+    expect(await client.waitFor('realm')).toMatchObject({ venueId: 'central-lounge' });
+    expect((await client.waitFor('chunk')).rows[3]?.[3]).toBe('o');
+  });
 
   it('enters only through the lounge and preserves the outdoor return position', async () => {
     const client = await join('host', null);

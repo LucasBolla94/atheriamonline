@@ -45,3 +45,19 @@ floors and cream, teal and rose interior wall finishes. These are renderer-only
 variants of the server's existing floor/wall tiles; they do not alter collision.
 The contemporary central-city illustration is now also used on the account-entry
 screen, replacing the medieval promotional image there.
+
+## Contemporary public furniture — 2026-09-12
+
+- Files: `apps/client/public/art/city-furniture-source.png` and `city-furniture.png`.
+- Author/source: original project sprite sheet generated with OpenAI's built-in
+  image tool, without external source images. Source URL: not applicable.
+- Usage: project-generated artwork; not stock art, CC0, or hand-drawn human art.
+- Twelve objects: plant, bench, sofa, coffee table, cafe counter, bookshelf,
+  meeting table, office chair, desk, noticeboard, planter and lectern.
+- Prompt and production notes: `docs/design/VENUE_ART_PROMPT.md`.
+- Packaging: `node scripts/bake-venue-art.mjs` retains the original alpha,
+  extracts complete silhouettes and scales with nearest-neighbour sampling into
+  twelve 128×192 frames. Connected silhouette extraction avoids clipping a table
+  which crossed the source sheet's nominal grid line into the chair cell.
+- Permanent public scenery is defined in `packages/shared/src/venues.ts` and is
+  separate from player-owned item instances. No inventory assets were replaced.

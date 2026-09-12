@@ -14,6 +14,7 @@ import {
   TICK_MS,
   chunkKey,
   type TilePos,
+  type VenueId,
 } from '@atheriam/shared';
 import {
   PROTOCOL_VERSION,
@@ -94,7 +95,8 @@ interface Connection {
    */
   cityPosition: TilePos | null;
   alive: boolean;
-  meeting: MeetingAdmission | null;
+  meeting: (MeetingAdmission & { returnVenueId: VenueId | null }) | null;
+  venueId: VenueId | null;
 }
 
 /**
@@ -105,6 +107,7 @@ interface Connection {
  * a database connection of its own.
  */
 export interface WorldServerOptions {
+  readonly propertyVenue?: (propertyId: string) => Promise<VenueId | null>;
   readonly bookingAdmission?: (
     characterId: string,
     bookingId: string,
@@ -149,6 +152,7 @@ export class WorldServer {
   private readonly canEnterProperty: (characterId: string, propertyId: string) => Promise<boolean>;
   private readonly checkingProperties = new Set<Connection>();
   private readonly getBookingAdmission: NonNullable<WorldServerOptions['bookingAdmission']>;
+  private readonly propertyVenue: NonNullable<WorldServerOptions['propertyVenue']>;
   private readonly checkingBookings = new Set<Connection>();
   private nextPropertyCheck = 0;
   private tickTimer: NodeJS.Timeout | null = null;
@@ -156,6 +160,7 @@ export class WorldServer {
 
   constructor(options: WorldServerOptions) {
     this.realms = new Realms(options.world);
+    this.propertyVenue = options.propertyVenue ?? (async () => null);
     this.getBookingAdmission = options.bookingAdmission ?? (async () => null);
     this.canEnterProperty = options.canEnterProperty ?? (async () => false);
     this.now = options.now ?? (() => Date.now());
@@ -233,6 +238,7 @@ export class WorldServer {
       cityPosition: null,
       alive: true,
       meeting: null,
+      venueId: null,
     };
     this.connections.set(socket, connection);
 
@@ -502,8 +508,10 @@ export class WorldServer {
     const connection = this.byPlayer.get(characterId);
     if (connection === undefined || connection.realm !== 'city') return false;
     let allowed = false;
+    let venueId: VenueId | null = null;
     try {
       allowed = await this.canEnterProperty(characterId, propertyId);
+      if (allowed) venueId = await this.propertyVenue(propertyId);
     } catch {
       return false;
     }
@@ -512,7 +520,13 @@ export class WorldServer {
     const player = this.world.get(characterId);
     if (player === undefined) return false;
     connection.cityPosition = { x: player.x, y: player.y };
-    const entered = this.moveRealm(connection, propertyRealm(propertyId), INTERIOR_ENTRANCE);
+    const entered = this.moveRealm(
+      connection,
+      propertyRealm(propertyId),
+      INTERIOR_ENTRANCE,
+      undefined,
+      venueId,
+    );
     if (!entered) connection.cityPosition = null;
     return entered;
   }
@@ -531,12 +545,13 @@ export class WorldServer {
       admission.endsAt <= this.now()
     )
       return false;
-    connection.meeting = admission;
+    connection.meeting = { ...admission, returnVenueId: connection.venueId };
     const entered = this.moveRealm(
       connection,
       bookingRealm(bookingId),
       INTERIOR_ENTRANCE,
       admission.capacity,
+      LOUNGE_ROOMS.find((room) => room.id === admission.roomId)!.id,
     );
     if (!entered) connection.meeting = null;
     return entered;
@@ -637,7 +652,13 @@ export class WorldServer {
     const meeting = connection.meeting;
     if (
       meeting &&
-      this.moveRealm(connection, propertyRealm(meeting.loungePropertyId), INTERIOR_ENTRANCE)
+      this.moveRealm(
+        connection,
+        propertyRealm(meeting.loungePropertyId),
+        INTERIOR_ENTRANCE,
+        undefined,
+        meeting.returnVenueId,
+      )
     ) {
       connection.meeting = null;
       return true;
@@ -664,6 +685,7 @@ export class WorldServer {
     to: RealmId,
     at: TilePos | null,
     bookingCapacity?: number,
+    venueId: VenueId | null = null,
   ): boolean {
     const playerId = connection.playerId;
     if (playerId === null) return false;
@@ -675,7 +697,7 @@ export class WorldServer {
     const carried = carriedState(player);
     from.leave(playerId);
 
-    const target = this.realms.get(to, bookingCapacity);
+    const target = this.realms.get(to, bookingCapacity, venueId);
     const landing = at ?? spawnPoint(target.map);
     const arrived = target.join({ ...carried, x: landing.x, y: landing.y }, this.now());
 
@@ -688,6 +710,7 @@ export class WorldServer {
 
     const previous = connection.realm;
     connection.realm = to;
+    connection.venueId = venueId;
     connection.chunks.clear();
     connection.believes.clear();
     connection.lastSentRevision = -1;
@@ -696,6 +719,7 @@ export class WorldServer {
     const houseId = houseIdOf(to);
     this.send(connection, {
       t: 'realm',
+      venueId,
       realm:
         bookingIdOf(to) !== null
           ? 'booking'

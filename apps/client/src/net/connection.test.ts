@@ -87,6 +87,7 @@ describe('WorldConnection', () => {
       encode({
         t: 'realm',
         realm: 'booking',
+        venueId: 'studio',
         houseId: null,
         booking,
         world: room,
@@ -94,6 +95,7 @@ describe('WorldConnection', () => {
       }),
     );
     expect(connection.realm).toBe('booking');
+    expect(connection.venueId).toBe('studio');
     expect(connection.booking).toEqual(booking);
     expect(connection.propertyId).toBeNull();
     expect(connection.chunks.size).toBe(0);
@@ -109,6 +111,7 @@ describe('WorldConnection', () => {
       }),
     );
     expect(connection.booking).toBeNull();
+    expect(connection.venueId).toBeNull();
     expect(connection.realm).toBe('property');
     expect(connection.realmRevision).toBe(2);
   });
