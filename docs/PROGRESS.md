@@ -10,6 +10,26 @@ Last updated: 2026-09-12
 
 ## Current phase
 
+**Chat keyboard hotfix — published 2026-09-12, 23:37 UTC (`e107faf`).**
+WASD now types normally in fields. Enter opens/focuses chat; the next Enter sends
+nonempty text and folds it, restoring character controls. Empty Enter just
+closes; Escape closes without sending. Repeated Enter and IME confirmation are
+ignored. Focus is restored correctly when reopening the folded input. See D-080.
+
+The regression reproduced the old capture bug with real keys: `wasd WASD`
+became only a space. The ten existing chat browser cases passed. The two new
+desktop/mobile cases initially caught a test comparison mixing innerText with
+textContent; using innerText consistently fixed that assertion. Both then passed
+on the same built client, including typing/cursor editing, no movement while
+typing, message delivery, empty close, reopen, Escape and resumed WASD movement.
+Typecheck, lint, all 341 unit tests and the production client build passed.
+
+The frontend was backed up to
+`/var/backups/atheriam/chat-controls-20260912T233659Z.tar.gz`, published and checked
+against the build. Both focused **live** keyboard checks passed (15.6 seconds),
+and HTTPS health answers. The two smoke accounts were removed. No database
+migration or backend restart was needed. The earlier full release record follows.
+
 **Contemporary city release — PUBLISHED AND VERIFIED.** Live at
 https://atheriam.online, with game entry at https://atheriam.online/play/.
 The 160 × 160 city contains a central square, park, ten saleable commercial
