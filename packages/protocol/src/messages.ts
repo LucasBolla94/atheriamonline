@@ -31,8 +31,9 @@ import { CHUNK_SIZE_TILES, MAX_CHAT_LENGTH, VENUE_IDS } from '@atheriam/shared';
  * 8: public and commercial properties have separate interior realms.
  * 9: time-limited private meeting realms.
  * 10: furnished public venue layouts, shared with collision maps.
+ * 11: authoritative social poses and exclusive public seats.
  */
-export const PROTOCOL_VERSION = 10;
+export const PROTOCOL_VERSION = 11;
 
 /** The eight directions a player may step in. */
 export const directionSchema = z.enum(['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw']);
@@ -122,11 +123,19 @@ export const pingSchema = z.object({
   ts: z.number().int(),
 });
 
+export const socialIntentSchema = z.object({
+  t: z.literal('social'),
+  seq: sequenceSchema,
+  action: z.enum(['wave', 'sit', 'stand']),
+  seatId: z.string().max(40).optional(),
+});
+
 export const clientMessageSchema = z.discriminatedUnion('t', [
   joinIntentSchema,
   stepIntentSchema,
   walkToIntentSchema,
   stopIntentSchema,
+  socialIntentSchema,
   sayIntentSchema,
   pingSchema,
 ]);
@@ -184,6 +193,9 @@ export const playerViewSchema = z.object({
   y: tileCoordinateSchema,
   facing: directionSchema,
   appearance: z.number().int().min(0).max(5).optional(),
+  pose: z.enum(['wave', 'sit']).optional(),
+  poseSince: z.number().int().nonnegative().optional(),
+  seat: tilePosSchema.optional(),
 });
 
 export type PlayerView = z.infer<typeof playerViewSchema>;

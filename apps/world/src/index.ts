@@ -12,6 +12,7 @@ import { Redis } from 'ioredis';
 import { and, eq } from 'drizzle-orm';
 import {
   CHAT_RADIUS_TILES,
+  CITY_SEATS,
   isVenueId,
   STARTER_CITY,
   TICK_HZ,
@@ -42,7 +43,7 @@ if (!Number.isInteger(port) || port < 1 || port > 65_535) {
 
 const database = connect();
 const redis = new Redis(process.env['REDIS_URL'] ?? 'redis://localhost:6379');
-const world = new World(starterDistrict);
+const world = new World(starterDistrict, { seats: CITY_SEATS });
 
 /**
  * Spend a ticket and find the character it stands for.

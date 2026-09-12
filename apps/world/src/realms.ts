@@ -11,7 +11,13 @@
  * is not here: furniture belongs to the API, and the browser asks it. The world
  * server only needs to know where the walls are.
  */
-import { HOUSE_ROWS, INTERIOR_ROWS, PUBLIC_VENUES, type VenueId } from '@atheriam/shared';
+import {
+  HOUSE_ROWS,
+  INTERIOR_ROWS,
+  PUBLIC_VENUES,
+  venueSeats,
+  type VenueId,
+} from '@atheriam/shared';
 import { GameMap } from './map.js';
 import { World } from './world.js';
 
@@ -74,6 +80,7 @@ export class Realms {
         ? propertyMap
         : houseMap;
     const made = new World(map, {
+      seats: venueSeats(venueId),
       maxPlayers: booking ? bookingCapacity! : realm.startsWith('property:') ? 40 : 20,
     });
     this.houses.set(realm, made);

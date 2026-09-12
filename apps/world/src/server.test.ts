@@ -151,6 +151,24 @@ describe('the world server over a real socket', () => {
     return client;
   }
 
+  it('streams a social pose and its expiry even when neither neighbour moves', async () => {
+    const actor = await connect();
+    const observer = await connect();
+    actor.send({ t: 'join', ticket: tickets.issue(character('actor', 'Actor')) });
+    await actor.waitFor('snapshot');
+    observer.send({ t: 'join', ticket: tickets.issue(character('observer', 'Observer')) });
+    await observer.waitFor('snapshot');
+    observer.clear();
+    actor.send({ t: 'social', seq: 1, action: 'wave' });
+    const waving = await observer.waitFor('snapshot');
+    expect(waving.players.find((player) => player.id === 'actor')).toMatchObject({ pose: 'wave' });
+    observer.clear();
+    const standing = await observer.waitFor('snapshot', 2500);
+    const actorView = standing.players.find((player) => player.id === 'actor');
+    expect(actorView).toBeDefined();
+    expect(actorView?.pose).toBeUndefined();
+  });
+
   it('welcomes a player and streams them the ground under their feet', async () => {
     const client = await connect();
     client.send({ t: 'join', ticket: tickets.issue(character('c-aldric', 'Aldric')) });

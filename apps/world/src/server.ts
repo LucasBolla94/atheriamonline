@@ -343,11 +343,13 @@ export class WorldServer {
     }
 
     const rejection =
-      message.t === 'step'
-        ? this.worldOf(connection).handleStep(playerId, message.dir, nowMs)
-        : message.t === 'walkTo'
-          ? this.worldOf(connection).handleWalkTo(playerId, message.to)
-          : this.worldOf(connection).handleStop(playerId);
+      message.t === 'social'
+        ? this.worldOf(connection).handleSocial(playerId, message.action, message.seatId, nowMs)
+        : message.t === 'step'
+          ? this.worldOf(connection).handleStep(playerId, message.dir, nowMs)
+          : message.t === 'walkTo'
+            ? this.worldOf(connection).handleWalkTo(playerId, message.to)
+            : this.worldOf(connection).handleStop(playerId);
 
     if (rejection !== null) {
       this.send(connection, { t: 'reject', seq: message.seq, reason: rejection });
@@ -902,7 +904,7 @@ export class WorldServer {
  * answered without comparing whole objects ten times a second.
  */
 function signatureOf(player: PlayerView): string {
-  return `${player.x},${player.y},${player.facing},${player.appearance ?? 0}`;
+  return `${player.x},${player.y},${player.facing},${player.appearance ?? 0},${player.pose ?? 'stand'},${player.poseSince ?? 0},${player.seat?.x ?? ''},${player.seat?.y ?? ''}`;
 }
 
 /**

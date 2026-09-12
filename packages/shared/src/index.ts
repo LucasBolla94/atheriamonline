@@ -5,3 +5,4 @@ export * from './house.js';
 export * from './city.js';
 export * from './interior.js';
 export * from './venues.js';
+export * from './social.js';

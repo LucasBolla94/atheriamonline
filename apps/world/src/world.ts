@@ -21,6 +21,7 @@ import {
   tileDistance,
   type Direction,
   type TilePos,
+  type Seat,
 } from '@atheriam/shared';
 import type { PlayerView, RejectReason } from '@atheriam/protocol';
 import type { GameMap } from './map.js';
@@ -36,6 +37,10 @@ export interface PlayerState {
   y: number;
   facing: Direction;
   appearance: number;
+  pose: 'stand' | 'wave' | 'sit';
+  poseSince: number;
+  seat: Seat | null;
+  lastSocialAtMs: number;
   /** When this player last moved a tile, used to enforce the speed limit. */
   lastStepAtMs: number;
   /** Tiles still to walk, in order. Empty means standing still. */
@@ -84,6 +89,7 @@ export type SayResult =
 export interface WorldOptions {
   /** Refuse new players past this many. Protects memory and bandwidth. */
   readonly maxPlayers?: number;
+  readonly seats?: readonly Seat[];
 }
 
 const DEFAULT_MAX_PLAYERS = 200;
@@ -94,11 +100,13 @@ export class World {
   /** Lower-cased name -> id, so two players cannot share a name. */
   private readonly namesInUse = new Map<string, string>();
   private readonly maxPlayers: number;
+  private readonly seats: readonly Seat[];
   private currentTick = 0;
   private currentRevision = 0;
 
   constructor(map: GameMap, options: WorldOptions = {}) {
     this.map = map;
+    this.seats = options.seats ?? [];
     this.maxPlayers = options.maxPlayers ?? DEFAULT_MAX_PLAYERS;
   }
 
@@ -159,6 +167,10 @@ export class World {
       y: start.y,
       facing: character.facing,
       appearance: character.appearance ?? 0,
+      pose: 'stand',
+      poseSince: nowMs,
+      seat: null,
+      lastSocialAtMs: nowMs - 2000,
       // Dated in the past so a player may move as soon as they arrive.
       lastStepAtMs: nowMs - MIN_STEP_INTERVAL_MS,
       path: [],
@@ -231,8 +243,49 @@ export class World {
     const path = findPath(this.map, { x: player.x, y: player.y }, to);
     if (path === null) return 'no-path';
 
+    this.stand(player);
     player.path = path;
     return null;
+  }
+
+  handleSocial(
+    id: string,
+    action: 'wave' | 'sit' | 'stand',
+    seatId: string | undefined,
+    nowMs: number,
+  ): RejectReason | null {
+    const player = this.players.get(id);
+    if (!player) return 'not-joined';
+    if (action === 'stand') {
+      this.stand(player);
+      return null;
+    }
+    if (nowMs - player.lastSocialAtMs < 2000) return 'too-fast';
+    let seat: Seat | null = null;
+    if (action === 'sit') {
+      seat = this.seats.find((entry) => entry.id === seatId) ?? null;
+      if (!seat) return 'blocked';
+      if (Math.abs(player.x - seat.x) + Math.abs(player.y - seat.y) !== 1) return 'not-adjacent';
+      if (
+        [...this.players.values()].some((other) => other.id !== id && other.seat?.id === seat?.id)
+      )
+        return 'blocked';
+    }
+    player.path = [];
+    player.pose = action;
+    player.poseSince = nowMs;
+    player.lastSocialAtMs = nowMs;
+    player.seat = seat;
+    player.facing = 's';
+    this.currentRevision++;
+    return null;
+  }
+
+  private stand(player: PlayerState): void {
+    if (player.pose === 'stand') return;
+    player.pose = 'stand';
+    player.seat = null;
+    this.currentRevision++;
   }
 
   /**
@@ -313,6 +366,7 @@ export class World {
     const moved = new Set<string>();
 
     for (const player of this.players.values()) {
+      if (player.pose === 'wave' && nowMs - player.poseSince >= 1800) this.stand(player);
       const next = player.path[0];
       if (next === undefined) continue;
       if (nowMs - player.lastStepAtMs < MIN_STEP_INTERVAL_MS) continue;
@@ -354,6 +408,7 @@ export class World {
   }
 
   private place(player: PlayerState, to: TilePos, nowMs: number): void {
+    this.stand(player);
     const facing = directionBetween({ x: player.x, y: player.y }, to);
     if (facing !== null) player.facing = facing;
     player.x = to.x;
@@ -371,5 +426,7 @@ function toView(player: PlayerState): PlayerView {
     y: player.y,
     facing: player.facing,
     appearance: player.appearance,
+    ...(player.pose === 'stand' ? {} : { pose: player.pose, poseSince: player.poseSince }),
+    ...(player.seat ? { seat: { x: player.seat.x, y: player.seat.y } } : {}),
   };
 }
