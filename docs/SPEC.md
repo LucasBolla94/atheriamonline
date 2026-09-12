@@ -84,7 +84,7 @@ The economy must be auditable and must never lose or invent money.
 ### 3.4 An item exists in exactly one place
 
 - An item instance is in **one** of: a player's inventory, a house, or a trade
-  escrow. Never two at once.
+  escrow (for a trade or shop listing). Never two at once.
 - We **never copy an item** to move it. We move the owning reference inside one
   transaction.
 - Duplication bugs are treated as the most serious class of bug.
@@ -330,6 +330,15 @@ Owners name and describe their business, choose access, decorate its interior,
 and publish it in the directory. Visitors can enter public businesses and buy
 listed item instances through an atomic, idempotent sale. Items and money must
 remain conserved. Existing homes, inventory, balances and accounts are retained.
+
+Shop listings reserve a single existing inventory item in escrow. The owner
+sets an immutable positive price in Crowns; changing a price requires cancelling
+and relisting so a buyer's review cannot silently change. Cancelling returns the
+same item. Buying transfers the item and full advertised amount in one transaction,
+with no fee in V1.0. Listing creation and purchases have bound retry keys. Only
+visitors allowed through the business door can buy. A successful purchase retry
+still returns its receipt if access later changes. Sold listings cannot be bought
+again; listings and receipts persist for audit.
 
 The lounge includes public social space and three reservable private meeting
 rooms. Reservations are initially free, last 30 or 60 minutes, and may be made

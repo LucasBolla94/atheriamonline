@@ -537,3 +537,58 @@ export const propertyGuests = pgTable(
   },
   (table) => [uniqueIndex('property_guests_pair_key').on(table.propertyId, table.characterId)],
 );
+
+export const listingStatus = pgEnum('listing_status', ['open', 'sold', 'cancelled']);
+
+/** One real item held in sale escrow, with an immutable advertised price. */
+export const shopListings = pgTable(
+  'shop_listings',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    propertyId: uuid('property_id')
+      .notNull()
+      .references(() => properties.id, { onDelete: 'restrict' }),
+    sellerId: uuid('seller_id')
+      .notNull()
+      .references(() => characters.id, { onDelete: 'restrict' }),
+    itemId: uuid('item_id')
+      .notNull()
+      .references(() => itemInstances.id, { onDelete: 'restrict' }),
+    price: bigint('price', { mode: 'bigint' }).notNull(),
+    requestKey: text('request_key').notNull(),
+    status: listingStatus('status').notNull().default('open'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    closedAt: timestamp('closed_at', { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex('shop_listings_seller_request_key').on(table.sellerId, table.requestKey),
+    uniqueIndex('shop_listings_open_item_key')
+      .on(table.itemId)
+      .where(sql`${table.status} = 'open'`),
+    index('shop_listings_property_idx').on(table.propertyId, table.status),
+  ],
+);
+
+/** Durable receipts make retries safe, even after the shop closes its doors. */
+export const shopSales = pgTable(
+  'shop_sales',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    listingId: uuid('listing_id')
+      .notNull()
+      .references(() => shopListings.id, { onDelete: 'restrict' }),
+    buyerId: uuid('buyer_id')
+      .notNull()
+      .references(() => characters.id, { onDelete: 'restrict' }),
+    requestKey: text('request_key').notNull(),
+    transferId: uuid('transfer_id')
+      .notNull()
+      .references(() => transfers.id, { onDelete: 'restrict' }),
+    price: bigint('price', { mode: 'bigint' }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('shop_sales_listing_key').on(table.listingId),
+    uniqueIndex('shop_sales_buyer_request_key').on(table.buyerId, table.requestKey),
+  ],
+);

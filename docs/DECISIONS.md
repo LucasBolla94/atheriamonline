@@ -849,3 +849,14 @@ sockets that have not joined still have a deadline to provide their ticket.
 A real-socket regression advances beyond a minute without game intents and
 checks that the resident can still talk. This does not alter money, permissions
 or capacity limits.
+
+## D-068 — Business listings reserve the actual item
+
+An advertised item moves from the seller's inventory to escrow identified by
+its listing UUID. Trade escrow continues to use the trade UUID; trade operations
+only move items belonging to their own trade. No copies or second inventory
+references are created. The listing price is immutable: withdrawing and relisting
+creates a new offer, so an existing buyer confirmation cannot silently accept a
+different price. Listing and purchase retry keys are bound to their original
+intent. One open listing per item and one receipt per sold listing are enforced
+by database indexes. V1.0 charges no sale fee; the seller receives the full price.
