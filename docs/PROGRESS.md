@@ -10,7 +10,7 @@ Last updated: 2026-09-13
 
 ## Current phase
 
-**Fractional-zoom terrain seam fix — verification in progress.**
+**Fractional-zoom terrain seam fix — published 2026-09-13 (`c878a0f`).**
 An extruded terrain atlas prevents neighbouring-texture colour bleed. The
 Canvas ground renderer joins adjacent rectangles on shared screen-pixel edges
 to avoid fractional-rectangle antialiasing gaps. See D-082. Typecheck, lint and
@@ -18,7 +18,12 @@ to avoid fractional-rectangle antialiasing gaps. See D-082. Typecheck, lint and
 Canvas and WebGL across seven zoom levels and two camera positions, including
 four chunk boundaries. All 12 in-game browser checks passed across desktop
 and mobile profiles, including houses, five public venues and wide zoom.
-City and mobile lounge screenshots were inspected. Publication is pending.
+City and mobile lounge screenshots were inspected. The production client build
+passed and was published. All six focused live checks passed (46 seconds),
+covering wide zoom, chat controls and lounge reservations in both profiles.
+Six smoke accounts and two test reservations were removed. The client matches
+the build and HTTPS health answers. The previous client is backed up at
+`/var/backups/atheriam/terrain-seams-20260913T003511Z.tar.gz`.
 
 **Viewport terrain and movement improvement — published 2026-09-13, 00:15 UTC (`fae4053`).**
 Protocol v13 streams terrain for the actual camera, including zoom, window size

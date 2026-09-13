@@ -104,3 +104,9 @@ MultiPipeline texture coordinates and Canvas camera transforms was inspected.
 Typecheck, lint, 350 unit tests, both rendering regressions (28 combinations)
 and 12 in-game browser checks passed. The city and mobile lounge captures were
 visually reviewed. [City after the seam fix](design/map-performance/zoom-out-seams-fixed.png).
+
+Release `c878a0f` was published on 2026-09-13 after the production client build
+passed. All six focused live browser checks passed in 46 seconds. Six smoke
+accounts and two reservations were removed, deployed files match the build,
+and HTTPS health answers. The previous client is archived at
+`/var/backups/atheriam/terrain-seams-20260913T003511Z.tar.gz`.
