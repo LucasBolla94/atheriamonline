@@ -50,9 +50,18 @@ wide minimum-zoom regression failed on the previous bundle and passed on the
 new bundle: unknown sampled ground fell from 27.67% to 0%. The coverage test
 uses a 2560 × 1440 viewport and wheel input in both browser profiles; it does
 not measure a physical phone or pinch gestures. Other browser scenarios use
-their configured desktop and phone viewport sizes. The browser regression passed 55 cases, with one intentional keyboard-only
+their configured desktop and phone viewport sizes. The browser regression
+passed 55 cases, with one intentional keyboard-only
 mobile skip. It covered movement, chat, social controls, houses, public venues
-and protocol refresh. Production verification is pending.
+and protocol refresh. The complete production build passed and release
+`fae4053` was published on
+2026-09-13 at 00:15 UTC. All 22 live browser checks passed in two minutes,
+including wide zoom coverage, chat controls, touch actions, reservations and
+trade. The 20 smoke accounts and two test bookings were removed afterwards.
+A database dump and previous client archive were saved before publishing in
+`/var/backups/atheriam/map-view-20260913T000914Z/`; the dump archive table of
+contents was verified. The deployed client matches the build and HTTPS health
+answers. Temporary build/test swap was disabled and its file removed.
 
 - [Before](design/map-performance/zoom-out-before.png)
 - [After](design/map-performance/zoom-out-after.png)

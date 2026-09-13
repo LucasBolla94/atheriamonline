@@ -10,14 +10,19 @@ Last updated: 2026-09-13
 
 ## Current phase
 
-**Viewport terrain and movement improvement — release verification.**
+**Viewport terrain and movement improvement — published 2026-09-13, 00:15 UTC (`fae4053`).**
 Protocol v13 streams terrain for the actual camera, including zoom, window size
 and facade margins. Nearby chunks draw first, independent art loads concurrently,
 and movement easing/walk frames are consistent with elapsed time and travel.
 The reproduced wide-screen ground gap fell from 27.67% to 0% sampled unknown
 terrain. Typecheck, lint, 350 unit tests, 174 integration tests and 55 browser
 cases passed (one intentional mobile keyboard skip). See D-081 and
-[BROWSER_GAME_PERFORMANCE.md](BROWSER_GAME_PERFORMANCE.md). Publication pending.
+[BROWSER_GAME_PERFORMANCE.md](BROWSER_GAME_PERFORMANCE.md). The full production
+build passed, API/world/client were published together, and all 22 live browser
+cases passed, including the wide zoom regression in both profiles. The 20 smoke
+accounts and their two reservations were removed; HTTPS health and published
+client/build equality were checked. Pre-release database and client backups are
+in `/var/backups/atheriam/map-view-20260913T000914Z/`.
 
 **Chat keyboard hotfix — published 2026-09-12, 23:37 UTC (`e107faf`).**
 WASD now types normally in fields. Enter opens/focuses chat; the next Enter sends
