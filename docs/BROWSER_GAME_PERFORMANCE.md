@@ -75,3 +75,32 @@ Consider a small interpolation buffer only if measured network jitter warrants
 its extra delay. Workers, terrain render textures and resolution caps need
 profiling first; a blanket change can increase memory or reduce image quality.
 No frame-rate or player-capacity promise is derived from VPS RAM alone.
+
+## Follow-up: fractional-zoom seams — 2026-09-13
+
+The owner then reported thin lines. This is distinct from missing streamed
+chunks: a blended edge is not the exact unknown-ground colour counted by the
+first regression. An isolated fixture using the installed Phaser 3.90 renderer,
+a solid green tile, blue atlas neighbours and a magenta background reproduced
+33,012 incorrect pixels in Canvas and 4,000 in WebGL at zoom 0.9 on an 800 × 600
+canvas. At zoom 1 both were clean. These are synthetic diagnostic counts, not
+measurements of the area affected in the actual city.
+
+Repeating the tile's edge texels in a one-pixel atlas border removed the WebGL
+colour bleed. Canvas additionally needs adjacent destination rectangles to meet
+on the same rounded screen coordinate, because its fractional image boundaries
+blend with the background even when image smoothing is off. The terrain-only
+renderer does this without changing zoom, sprite placement or world positions.
+The same six initial zoom cases then had zero incorrect pixels in both modes.
+See D-082. The automated regression extends this to seven zooms, two camera
+positions and four chunk layers; run it with
+`pnpm exec playwright test --config playwright.rendering.config.ts`.
+
+The fixture explicitly exercises WebGL through software GL, bypassing the game's
+normal software-GPU fallback. It proves rendering output for these cases, not
+hardware performance. The production engine source for TilemapLayer renderers,
+MultiPipeline texture coordinates and Canvas camera transforms was inspected.
+
+Typecheck, lint, 350 unit tests, both rendering regressions (28 combinations)
+and 12 in-game browser checks passed. The city and mobile lounge captures were
+visually reviewed. [City after the seam fix](design/map-performance/zoom-out-seams-fixed.png).

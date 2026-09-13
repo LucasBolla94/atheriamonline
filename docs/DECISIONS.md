@@ -1059,3 +1059,22 @@ per page. Exponential visual easing is independent of frame rate and walking
 frames follow displayed distance. These changes do not predict or change the
 server's positions, movement interval or collisions. Device performance remains
 a measurement task, not an assumed consequence of these changes.
+
+## D-082 — Protect atlas edges and join Canvas terrain at shared screen pixels
+
+The owner reported thin lines after terrain streaming was repaired. An isolated
+Phaser 3.90 rendering test exposed two independent effects at fractional zoom:
+WebGL sampled the adjacent atlas tile, while Canvas antialiased each tile's
+fractional rectangle against the background. Disabling image smoothing alone
+was already in place and did not prevent these effects.
+
+The shared terrain atlas now repeats each tile's outer texels in a one-pixel
+border, with matching tileset margin and spacing. The native Canvas ground
+renderer rounds both shared screen edges, never each width independently. It
+retains camera clipping, culling, alpha and per-chunk layers. This renderer is
+for the game's unrotated, unflipped terrain; rotated camera/layer rendering
+falls back to Phaser. WebGL keeps Phaser's renderer. Zoom, sprites, collision,
+streaming and server positions are unchanged. No per-chunk texture allocation
+or engine upgrade is introduced. A browser regression checks every pixel in
+solid terrain across four chunks, two fractional camera positions, seven zooms
+and both Canvas and WebGL (software GL here, not physical-device performance).

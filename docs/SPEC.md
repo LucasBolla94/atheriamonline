@@ -265,6 +265,8 @@ the inspiration wording in section 2 without allowing copied assets.
 Residents have a saved choice of curated appearances, visible to everyone.
 Walk cycles use four drawn directions for the existing eight-direction movement.
 Art does not change movement authority, collision, money or item ownership.
+Terrain tiles have extruded texture borders and join at shared screen-pixel
+edges in the Canvas renderer, preventing seams at fractional zoom.
 Terrain is rendered from a shared detailed pixel atlas; upright objects and
 characters are ordered by their ground position. Menus, chat and touch movement
 must remain usable on mobile, including during viewport resizing.

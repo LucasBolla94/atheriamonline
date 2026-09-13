@@ -10,6 +10,16 @@ Last updated: 2026-09-13
 
 ## Current phase
 
+**Fractional-zoom terrain seam fix — verification in progress.**
+An extruded terrain atlas prevents neighbouring-texture colour bleed. The
+Canvas ground renderer joins adjacent rectangles on shared screen-pixel edges
+to avoid fractional-rectangle antialiasing gaps. See D-082. Typecheck, lint and
+350 unit tests passed. A dedicated real-engine browser regression passed both
+Canvas and WebGL across seven zoom levels and two camera positions, including
+four chunk boundaries. All 12 in-game browser checks passed across desktop
+and mobile profiles, including houses, five public venues and wide zoom.
+City and mobile lounge screenshots were inspected. Publication is pending.
+
 **Viewport terrain and movement improvement — published 2026-09-13, 00:15 UTC (`fae4053`).**
 Protocol v13 streams terrain for the actual camera, including zoom, window size
 and facade margins. Nearby chunks draw first, independent art loads concurrently,

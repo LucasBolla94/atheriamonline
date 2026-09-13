@@ -1,3 +1,5 @@
+import { extrudeTerrainAtlas } from './terrainRendering.js';
+
 /** Original code-native 32px terrain atlas. Shared textures, no per-chunk canvases. */
 const CHARS = [
   '.',
@@ -133,5 +135,5 @@ export function terrainAtlas(): HTMLCanvasElement {
       c.restore();
     }
   });
-  return result;
+  return extrudeTerrainAtlas(result);
 }

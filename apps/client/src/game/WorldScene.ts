@@ -29,6 +29,11 @@ import { colorTokens, fontFamilyTokens, fontSizeTokens, spaceTokens } from '../t
 import type { HeldChunk, WorldConnection } from '../net/connection.js';
 import { prepareArt, PROP_NAMES, BUILDING_NAMES } from './art.js';
 import { fountainAtlas } from './fountainArt.js';
+import {
+  installGroundCanvasRenderer,
+  TERRAIN_MARGIN,
+  TERRAIN_SPACING,
+} from './terrainRendering.js';
 import { terrainAtlas, terrainIndex } from './terrainArt.js';
 import { strings } from '../ui/strings.js';
 import { movementBlend, terrainViewForCamera } from './presentation.js';
@@ -214,7 +219,14 @@ export class WorldScene extends Phaser.Scene {
           width: 32,
           height: 32,
         });
-        this.tileset = this.groundMap.addTilesetImage('terrain', 'terrain', 32, 32)!;
+        this.tileset = this.groundMap.addTilesetImage(
+          'terrain',
+          'terrain',
+          32,
+          32,
+          TERRAIN_MARGIN,
+          TERRAIN_SPACING,
+        )!;
         this.setUpCamera();
         this.setUpKeyboard();
         this.setUpPointer();
@@ -390,6 +402,7 @@ export class WorldScene extends Phaser.Scene {
       ),
     );
     layer.putTilesAt(tiles, 0, 0);
+    installGroundCanvasRenderer(layer);
     layer.setDepth(0);
     const props: Phaser.GameObjects.Image[] = [];
     const add = (name: string, x: number, y: number, w: number, h: number) => {
