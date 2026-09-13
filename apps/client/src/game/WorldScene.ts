@@ -31,9 +31,7 @@ import { prepareArt, PROP_NAMES, BUILDING_NAMES } from './art.js';
 import { fountainAtlas } from './fountainArt.js';
 import { terrainAtlas, terrainIndex } from './terrainArt.js';
 import { strings } from '../ui/strings.js';
-
-/** How quickly a character catches up with where the server says it is. */
-const MOVE_LERP_PER_MS = 0.012;
+import { movementBlend, terrainViewForCamera } from './presentation.js';
 
 /** Below this distance in pixels we simply snap, to avoid endless creeping. */
 const SNAP_DISTANCE_PX = 0.5;
@@ -67,7 +65,7 @@ interface Avatar {
   readonly label: Phaser.GameObjects.Text;
   facing: string;
   look: number;
-  walkTime: number;
+  walkDistance: number;
   pose: PlayerView['pose'];
   poseSince: number;
   poseTime: number;
@@ -144,6 +142,9 @@ export class WorldScene extends Phaser.Scene {
   private shownChatRevision = 0;
   private keys = new Map<Direction, Phaser.Input.Keyboard.Key[]>();
   private lastStepSentAtMs = 0;
+  private viewportFrames = 0;
+  private lastViewportAt = -Infinity;
+  private lastViewportKey = '';
 
   constructor() {
     super(WorldScene.KEY);
@@ -238,6 +239,20 @@ export class WorldScene extends Phaser.Scene {
     this.syncAvatars();
     this.syncBubbles(time);
     this.easeAvatars(delta);
+    this.syncViewport(time);
+  }
+
+  private syncViewport(time: number): void {
+    // Let the camera follow/bounds settle in the renderer before reading worldView.
+    if (++this.viewportFrames < 3 || time - this.lastViewportAt < 300) return;
+    const resident = this.connection.you;
+    if (!resident) return;
+    const view = terrainViewForCamera(this.cameras.main.worldView, resident, this.world);
+    const key = `${view.radiusX}:${view.radiusY}`;
+    if (key === this.lastViewportKey) return;
+    this.lastViewportAt = time;
+    this.lastViewportKey = key;
+    this.connection.terrainView(view.radiusX, view.radiusY);
   }
 
   /**
@@ -249,6 +264,9 @@ export class WorldScene extends Phaser.Scene {
   private syncRealm(): void {
     if (this.connection.realmRevision === this.drawnRealmRevision) return;
     this.drawnRealmRevision = this.connection.realmRevision;
+    this.viewportFrames = 0;
+    this.lastViewportAt = -Infinity;
+    this.lastViewportKey = '';
 
     const world = this.connection.world;
     if (world !== null) this.world = world;
@@ -298,10 +316,21 @@ export class WorldScene extends Phaser.Scene {
     if (this.connection.chunkRevision !== this.drawnChunkRevision) {
       this.drawnChunkRevision = this.connection.chunkRevision;
 
+      for (let i = this.pendingChunks.length - 1; i >= 0; i--)
+        if (!this.connection.chunks.has(chunkKeyOf(this.pendingChunks[i]!)))
+          this.pendingChunks.splice(i, 1);
+
       for (const [key, chunk] of this.connection.chunks) {
         if (this.chunkImages.has(key)) continue;
         if (this.pendingChunks.some((queued) => chunkKeyOf(queued) === key)) continue;
         this.pendingChunks.push(chunk);
+      }
+
+      const resident = this.connection.you;
+      if (resident) {
+        const distance = (chunk: HeldChunk) =>
+          (chunk.cx * 32 + 16 - resident.x) ** 2 + (chunk.cy * 32 + 16 - resident.y) ** 2;
+        this.pendingChunks.sort((a, b) => distance(a) - distance(b));
       }
 
       for (const [key, image] of this.chunkImages) {
@@ -523,8 +552,8 @@ export class WorldScene extends Phaser.Scene {
       });
     });
 
-    // Pinch to zoom on a phone, wheel to zoom on a desktop. Both are clamped,
-    // so nobody can zoom far enough out to see the whole city at once.
+    // Pinch to zoom on a phone, wheel to zoom on a desktop. Both share the
+    // supported zoom range; terrain coverage follows the resulting camera view.
     this.input.addPointer(1);
     this.input.on(
       Phaser.Input.Events.POINTER_MOVE,
@@ -669,7 +698,7 @@ export class WorldScene extends Phaser.Scene {
       label,
       facing: view.facing,
       look,
-      walkTime: 0,
+      walkDistance: 0,
       pose: view.pose,
       poseSince: view.poseSince ?? 0,
       poseTime: 0,
@@ -788,7 +817,7 @@ export class WorldScene extends Phaser.Scene {
    * last snapshot said; this just stops it teleporting ten times a second.
    */
   private easeAvatars(deltaMs: number): void {
-    const t = this.reducedMotion ? 1 : Math.min(1, MOVE_LERP_PER_MS * deltaMs);
+    const t = this.reducedMotion ? 1 : movementBlend(deltaMs);
     for (const avatar of this.avatars.values()) {
       const { container, targetPx } = avatar;
       const dx = targetPx.x - container.x,
@@ -796,10 +825,12 @@ export class WorldScene extends Phaser.Scene {
       const moving = Math.abs(dx) >= SNAP_DISTANCE_PX || Math.abs(dy) >= SNAP_DISTANCE_PX;
       if (moving) {
         container.setPosition(container.x + dx * t, container.y + dy * t);
-        avatar.walkTime += deltaMs;
+        // Advance the walk cycle by displayed travel, not time spent creeping
+        // towards a stopped snapshot. Six frames cover roughly three tiles.
+        avatar.walkDistance += Math.hypot(dx * t, dy * t);
       } else {
         container.setPosition(targetPx.x, targetPx.y);
-        avatar.walkTime = 0;
+        avatar.walkDistance = 0;
       }
       const direction = avatar.facing.startsWith('n')
         ? 3
@@ -815,7 +846,7 @@ export class WorldScene extends Phaser.Scene {
           : avatar.pose === 'wave'
             ? 24 + (this.reducedMotion ? 2 : Math.min(5, Math.floor(avatar.poseTime / 300)))
             : moving
-              ? direction * 6 + (Math.floor(avatar.walkTime / 100) % 6)
+              ? direction * 6 + (Math.floor(avatar.walkDistance / 16) % 6)
               : direction === 0
                 ? 24
                 : direction * 6 + 1;

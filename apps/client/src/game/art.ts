@@ -196,22 +196,26 @@ export async function bakeArt(): Promise<GameArt> {
 
 export function prepareArt(): Promise<GameArt> {
   pending ??= (async () => {
-    const loaded = await Promise.all(
-      Array.from({ length: 6 }, (_, i) => load(`/art/resident-modern-${i}.png`)),
-    );
+    // These sheets are independent. Start them together rather than waiting
+    // through four network/decode stages before the first map can be drawn.
+    const [loaded, town, venueProps, buildings] = await Promise.all([
+      Promise.all(Array.from({ length: 6 }, (_, i) => load(`/art/resident-modern-${i}.png`))),
+      load('/art/town.png'),
+      loadVenueProps(),
+      loadBuildings(),
+    ]);
     const residents = loaded.map((image) => {
       const out = canvas(192, 288);
       out.getContext('2d')!.drawImage(image, 0, 0);
       return out;
     });
-    const town = await load('/art/town.png');
     const props = canvas(512, 384);
     props.getContext('2d')!.drawImage(town, 0, 0);
     return {
       residents,
       props,
-      venueProps: await loadVenueProps(),
-      buildings: await loadBuildings(),
+      venueProps,
+      buildings,
       portraits: Array.from({ length: 6 }, (_, i) => `/art/portrait-modern-${i}.png`),
       icons: Object.fromEntries(PROP_NAMES.map((name) => [name, `/art/${name}.png`])),
     };

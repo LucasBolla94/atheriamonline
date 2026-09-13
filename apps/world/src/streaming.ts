@@ -1,14 +1,10 @@
 /**
  * Which pieces of the map a player is allowed to have.
  *
- * A player is sent the chunks their view touches and nothing else. Two things
- * come out of that, and both matter:
- *
- *  - bandwidth stays flat as the city grows, because the number of chunks a
- *    player holds depends on how far they can see, never on how big the world
- *    is;
- *  - a modified client cannot read the map it has not been given, so the city
- *    cannot be scraped by standing in the square.
+ * Terrain covers the bounded camera extent around the authoritative resident.
+ * It is separate from player visibility and chat range. Wide screens may see
+ * more public city terrain; private realms always use their own map.
+ * Chunks nearest the resident are sent first to improve initial presentation.
  *
  * There is no socket and no state in this file, so every rule in it can be
  * tested by calling a function.
@@ -17,6 +13,7 @@ import {
   CHUNK_SIZE_TILES,
   VIEW_MARGIN_TILES,
   VIEW_RADIUS_TILES,
+  MAX_TERRAIN_VIEW_TILES,
   chunkKey,
   chunkOf,
   type ChunkPos,
@@ -38,9 +35,22 @@ export const CHUNK_VIEW_TILES = VIEW_RADIUS_TILES + VIEW_MARGIN_TILES;
  * Chunks that fall outside the map are left out rather than sent as stone:
  * the client already treats what it has not been given as solid.
  */
-export function chunksInView(map: GameMap, centre: TilePos): ChunkPos[] {
-  const topLeft = chunkOf({ x: centre.x - CHUNK_VIEW_TILES, y: centre.y - CHUNK_VIEW_TILES });
-  const bottomRight = chunkOf({ x: centre.x + CHUNK_VIEW_TILES, y: centre.y + CHUNK_VIEW_TILES });
+export interface TerrainView {
+  radiusX: number;
+  radiusY: number;
+}
+
+export function chunksInView(map: GameMap, centre: TilePos, view?: TerrainView): ChunkPos[] {
+  const radiusX = Math.max(
+    CHUNK_VIEW_TILES,
+    Math.min(MAX_TERRAIN_VIEW_TILES, view?.radiusX ?? CHUNK_VIEW_TILES),
+  );
+  const radiusY = Math.max(
+    CHUNK_VIEW_TILES,
+    Math.min(MAX_TERRAIN_VIEW_TILES, view?.radiusY ?? CHUNK_VIEW_TILES),
+  );
+  const topLeft = chunkOf({ x: centre.x - radiusX, y: centre.y - radiusY });
+  const bottomRight = chunkOf({ x: centre.x + radiusX, y: centre.y + radiusY });
 
   const chunks: ChunkPos[] = [];
   for (let cy = topLeft.cy; cy <= bottomRight.cy; cy += 1) {
@@ -49,7 +59,10 @@ export function chunksInView(map: GameMap, centre: TilePos): ChunkPos[] {
       if (map.hasChunk(chunk)) chunks.push(chunk);
     }
   }
-  return chunks;
+  const distance = (chunk: ChunkPos) =>
+    (chunk.cx * CHUNK_SIZE_TILES + CHUNK_SIZE_TILES / 2 - centre.x) ** 2 +
+    (chunk.cy * CHUNK_SIZE_TILES + CHUNK_SIZE_TILES / 2 - centre.y) ** 2;
+  return chunks.sort((a, b) => distance(a) - distance(b));
 }
 
 /** What changed between the chunks a client holds and the ones it should hold. */

@@ -382,6 +382,33 @@ describe('streaming the map over a real socket', () => {
       .map((message) => `${message.cx}:${message.cy}`);
   }
 
+  it('refreshes terrain for a stationary camera without revealing distant residents', async () => {
+    const client = await joinAt('c-viewer', 'Viewer', 16, 16);
+    await joinAt('c-distant', 'Distant', 112, 112);
+    expect(chunksReceived(client)).not.toContain('3:3');
+    client.send({ t: 'terrainView', seq: 1, radiusX: 128, radiusY: 128 });
+    await expect.poll(() => chunksReceived(client)).toContain('3:3');
+    const snapshots = client.received.filter((m) => m.t === 'snapshot');
+    expect(snapshots.flatMap((m) => m.players).some((p) => p.id === 'c-distant')).toBe(false);
+    client.clear();
+    client.send({ t: 'terrainView', seq: 2, radiusX: 28, radiusY: 28 });
+    await expect
+      .poll(() =>
+        client.received.filter((m) => m.t === 'chunkDrop').some((m) => m.cx === 3 && m.cy === 3),
+      )
+      .toBe(true);
+  });
+
+  it('cannot use a large terrain request to read the city from inside a house', async () => {
+    const client = await joinAt('c-indoor', 'Indoor', 16, 16);
+    client.clear();
+    expect(server.enterHouse('c-indoor', 'house-view-test')).toBe(true);
+    await client.waitFor('realm');
+    client.send({ t: 'terrainView', seq: 1, radiusX: 256, radiusY: 256 });
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(chunksReceived(client)).toEqual(['0:0']);
+  });
+
   it('sends a player the ground around them and not the whole city', async () => {
     const client = await joinAt('c-aldric', 'Aldric', 16, 16);
     const chunks = chunksReceived(client);

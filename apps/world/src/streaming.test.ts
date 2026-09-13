@@ -9,6 +9,19 @@ const wide = new GameMap(
 );
 
 describe('chunksInView', () => {
+  it('extends terrain for a wide camera, centred on the authoritative resident', () => {
+    const chunks = chunksInView(starterDistrict, { x: 80, y: 85 }, { radiusX: 80, radiusY: 60 });
+    expect(chunks.map(chunkKey)).toContain('0:2');
+    expect(chunks.map(chunkKey)).toContain('4:2');
+    expect(chunks[0]).toEqual({ cx: 2, cy: 2 });
+    expect(new Set(chunks.map(chunkKey)).size).toBe(chunks.length);
+  });
+
+  it('caps camera coverage even if a caller bypasses protocol validation', () => {
+    const huge = new GameMap(Array.from({ length: 1024 }, () => '.'.repeat(1024)));
+    const chunks = chunksInView(huge, { x: 512, y: 512 }, { radiusX: 1e9, radiusY: 1e9 });
+    expect(chunks).toHaveLength(17 * 17);
+  });
   it('gives a player the chunk they are standing in', () => {
     const chunks = chunksInView(wide, { x: 40, y: 40 });
     expect(chunks.map(chunkKey)).toContain('1:1');

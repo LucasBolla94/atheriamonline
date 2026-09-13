@@ -4,11 +4,20 @@ This file says **where the project is right now** and **what happens next**.
 We work on **one phase at a time**. A phase is only "done" when every box in it
 is ticked and `pnpm typecheck`, `pnpm lint` and `pnpm test` all pass.
 
-Last updated: 2026-09-12
+Last updated: 2026-09-13
 
 ---
 
 ## Current phase
+
+**Viewport terrain and movement improvement — release verification.**
+Protocol v13 streams terrain for the actual camera, including zoom, window size
+and facade margins. Nearby chunks draw first, independent art loads concurrently,
+and movement easing/walk frames are consistent with elapsed time and travel.
+The reproduced wide-screen ground gap fell from 27.67% to 0% sampled unknown
+terrain. Typecheck, lint, 350 unit tests, 174 integration tests and 55 browser
+cases passed (one intentional mobile keyboard skip). See D-081 and
+[BROWSER_GAME_PERFORMANCE.md](BROWSER_GAME_PERFORMANCE.md). Publication pending.
 
 **Chat keyboard hotfix — published 2026-09-12, 23:37 UTC (`e107faf`).**
 WASD now types normally in fields. Enter opens/focuses chat; the next Enter sends

@@ -3,6 +3,12 @@ import { decodeClientMessage, decodeServerMessage, encode, MAX_MESSAGE_BYTES } f
 import { displayNameSchema } from './messages.js';
 
 describe('decodeClientMessage', () => {
+  it('accepts bounded terrain coverage without accepting an arbitrary centre', () => {
+    const view = { t: 'terrainView', seq: 1, radiusX: 80, radiusY: 60 };
+    expect(decodeClientMessage(JSON.stringify(view)).ok).toBe(true);
+    for (const extra of [{ radiusX: 257 }, { radiusY: -1 }, { radiusX: 1.5 }, { x: 120, y: 120 }])
+      expect(decodeClientMessage(JSON.stringify({ ...view, ...extra })).ok).toBe(false);
+  });
   it('accepts a well formed step intent', () => {
     const result = decodeClientMessage(encode({ t: 'step', seq: 1, dir: 'n' }));
     expect(result.ok).toBe(true);

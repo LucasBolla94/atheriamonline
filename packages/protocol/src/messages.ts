@@ -13,7 +13,12 @@
  * Every message is validated with zod before it is trusted, on both sides.
  */
 import { z } from 'zod';
-import { CHUNK_SIZE_TILES, MAX_CHAT_LENGTH, VENUE_IDS } from '@atheriam/shared';
+import {
+  CHUNK_SIZE_TILES,
+  MAX_CHAT_LENGTH,
+  MAX_TERRAIN_VIEW_TILES,
+  VENUE_IDS,
+} from '@atheriam/shared';
 
 /**
  * Bumped whenever a message shape changes in a way old clients cannot read.
@@ -33,8 +38,9 @@ import { CHUNK_SIZE_TILES, MAX_CHAT_LENGTH, VENUE_IDS } from '@atheriam/shared';
  * 10: furnished public venue layouts, shared with collision maps.
  * 11: authoritative social poses and exclusive public seats.
  * 12: versioned admission and an explicit refresh hint for outdated clients.
+ * 13: bounded viewport-aware terrain streaming.
  */
-export const PROTOCOL_VERSION = 12;
+export const PROTOCOL_VERSION = 13;
 
 /** The eight directions a player may step in. */
 export const directionSchema = z.enum(['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw']);
@@ -108,6 +114,16 @@ export const stopIntentSchema = z.object({
   seq: sequenceSchema,
 });
 
+/** The server supplies terrain around its own player position, never a supplied centre. */
+export const terrainViewIntentSchema = z
+  .object({
+    t: z.literal('terrainView'),
+    seq: sequenceSchema,
+    radiusX: z.number().int().min(1).max(MAX_TERRAIN_VIEW_TILES),
+    radiusY: z.number().int().min(1).max(MAX_TERRAIN_VIEW_TILES),
+  })
+  .strict();
+
 /**
  * Say something out loud to the people standing near you.
  *
@@ -138,6 +154,7 @@ export const clientMessageSchema = z.discriminatedUnion('t', [
   stepIntentSchema,
   walkToIntentSchema,
   stopIntentSchema,
+  terrainViewIntentSchema,
   socialIntentSchema,
   sayIntentSchema,
   pingSchema,

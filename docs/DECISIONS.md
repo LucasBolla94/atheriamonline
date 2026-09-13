@@ -1041,3 +1041,21 @@ retaining the draft. Focus is applied after a folded input becomes visible.
 Repeated Enter keydowns and IME confirmation do not toggle or send. One shared
 browser check drives real typing, cursor editing, stationary typing, delivery,
 empty close, reopening and restored WASD movement locally and on the live site.
+
+## D-081 — Stream terrain for the camera and separate it from social visibility
+
+A 2560 × 1440 browser at minimum zoom reproduced missing strips across 27.67%
+of sampled ground pixels. The fixed 28-tile terrain radius could not cover the
+camera. Protocol v13 lets a client describe bounded horizontal/vertical extents;
+the server retains the authoritative centre and current realm. Player and chat
+visibility remain independent. Requests are coalesced, nearby chunks are sent
+and drawn first, and facade margins include anchors beyond the visible ground.
+Camera bounds are included because the resident need not remain at its centre.
+The existing zoom range is preserved. See BROWSER_GAME_PERFORMANCE.md for sources,
+limits, screenshots and verification.
+
+Independent required artwork loads concurrently while retaining one preparation
+per page. Exponential visual easing is independent of frame rate and walking
+frames follow displayed distance. These changes do not predict or change the
+server's positions, movement interval or collisions. Device performance remains
+a measurement task, not an assumed consequence of these changes.

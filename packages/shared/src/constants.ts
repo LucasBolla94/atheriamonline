@@ -33,6 +33,9 @@ export const VIEW_RADIUS_TILES = 24;
  */
 export const VIEW_MARGIN_TILES = 4;
 
+/** Terrain only: bounded camera coverage, independent of player/chat visibility. */
+export const MAX_TERRAIN_VIEW_TILES = 256;
+
 /**
  * The fastest a player may take a step, in milliseconds. The server rejects
  * movement intents that arrive sooner than this.

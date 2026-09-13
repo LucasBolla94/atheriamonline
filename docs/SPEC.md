@@ -279,6 +279,12 @@ must remain usable on mobile, including during viewport resizing.
   zoom within fixed limits.
 - The client must stay playable at **60 fps** on a mid-range phone, and must
   never block the main thread for more than 16 ms in normal play.
+- Terrain streaming covers the actual camera viewport at supported zoom levels,
+  with additional margin for tall facades. View requests are bounded, coalesced
+  and centred on the authoritative resident in their current realm. They never
+  enlarge chat range or reveal residents in other realms. Visible chunks are
+  prioritised during incremental drawing. Visual movement interpolation is
+  frame-rate independent; walk animation follows displayed travel distance.
 - All UI text is in English and lives in a single strings file so it can be
   translated later.
 

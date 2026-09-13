@@ -223,6 +223,10 @@ export class WorldConnection {
     this.sendIntent({ t: 'step', seq: this.nextSeq(), dir: direction });
   }
 
+  terrainView(radiusX: number, radiusY: number): void {
+    this.sendIntent({ t: 'terrainView', seq: this.nextSeq(), radiusX, radiusY });
+  }
+
   /** "I want to be standing there." The server works out the route. */
   walkTo(target: TilePos): void {
     this.sendIntent({ t: 'walkTo', seq: this.nextSeq(), to: target });

@@ -35,7 +35,7 @@ import {
   propertyRealm,
   type RealmId,
 } from './realms.js';
-import { chunksInView, diffChunks } from './streaming.js';
+import { chunksInView, diffChunks, type TerrainView } from './streaming.js';
 import type { JoiningCharacter, PlayerState, World } from './world.js';
 
 /**
@@ -87,6 +87,9 @@ interface Connection {
    * simply sent it again rather than left with a hole in the world.
    */
   readonly chunks: Set<string>;
+  terrainView: TerrainView | undefined;
+  pendingTerrainView: TerrainView | null;
+  lastTerrainViewAtMs: number;
   /** Where this player is: the city, or the inside of one house. */
   realm: RealmId;
   /**
@@ -234,6 +237,9 @@ export class WorldServer {
       lastSentRevision: -1,
       believes: new Map<string, string>(),
       chunks: new Set<string>(),
+      terrainView: undefined,
+      pendingTerrainView: null,
+      lastTerrainViewAtMs: -Infinity,
       realm: 'city',
       cityPosition: null,
       alive: true,
@@ -343,6 +349,13 @@ export class WorldServer {
 
     if (message.t === 'say') {
       this.handleSay(connection, playerId, message.seq, message.text, nowMs);
+      return;
+    }
+
+    if (message.t === 'terrainView') {
+      // Keep only the newest request; a zoom gesture cannot cause a burst of
+      // expensive terrain rebuilds. No movement, player visibility or realm changes.
+      connection.pendingTerrainView = { radiusX: message.radiusX, radiusY: message.radiusY };
       return;
     }
 
@@ -783,6 +796,12 @@ export class WorldServer {
 
     for (const connection of this.connections.values()) {
       if (connection.playerId === null) continue;
+      if (connection.pendingTerrainView && nowMs - connection.lastTerrainViewAtMs >= 250) {
+        connection.terrainView = connection.pendingTerrainView;
+        connection.pendingTerrainView = null;
+        connection.lastTerrainViewAtMs = nowMs;
+        connection.lastSentRevision = -1;
+      }
       // Refresh a client whenever the world it is in has changed since the
       // last snapshot it was sent. That covers a player moving, but also
       // somebody joining or leaving, which no movement would have caught.
@@ -873,7 +892,7 @@ export class WorldServer {
    */
   private syncChunks(connection: Connection, centre: { x: number; y: number }): void {
     const map = this.worldOf(connection).map;
-    const wanted = chunksInView(map, centre);
+    const wanted = chunksInView(map, centre, connection.terrainView);
     const { toSend, toDrop } = diffChunks(connection.chunks, wanted);
 
     for (const chunk of toDrop) {
